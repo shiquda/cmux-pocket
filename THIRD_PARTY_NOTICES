@@ -1,0 +1,19 @@
+# Third-party notices
+
+## Maple Mono NF
+
+The Android application bundles `MapleMono-NF-Regular.ttf`, a Nerd Font variant of Maple Mono.
+
+- Maple Mono project: https://github.com/subframe7536/maple-font
+- Copyright: 2022 The Maple Mono Project Authors
+- License: SIL Open Font License 1.1
+- License text: `LICENSES/MapleMono-OFL-1.1.txt`
+
+The font is distributed separately from the cmux Pocket code license. Its inclusion does not place the font under the GNU Affero General Public License.
+
+## Nerd Fonts glyphs
+
+The bundled `NF` font variant includes glyphs produced by the Nerd Fonts patching project.
+
+- Nerd Fonts project: https://github.com/ryanoasis/nerd-fonts
+- Project license information: https://github.com/ryanoasis/nerd-fonts/blob/master/LICENSE
