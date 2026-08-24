@@ -16,6 +16,12 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::sleep;
 
+const CMUX_BINARY_CANDIDATES: [&str; 3] = [
+    "/Applications/cmux.app/Contents/Resources/bin/cmux",
+    "/opt/homebrew/bin/cmux",
+    "/usr/local/bin/cmux",
+];
+
 #[derive(Debug, Serialize)]
 pub struct SetupData {
     pub endpoint: String,
@@ -37,10 +43,7 @@ fn discover_cmux_binary(config: &GatewayConfig) -> (PathBuf, bool) {
         }
     }
 
-    // Common standard macOS locations
-    let candidates = ["/opt/homebrew/bin/cmux", "/usr/local/bin/cmux"];
-
-    for candidate in &candidates {
+    for candidate in CMUX_BINARY_CANDIDATES {
         let p = PathBuf::from(candidate);
         if p.exists() {
             return (p, true);
@@ -208,4 +211,17 @@ pub async fn handle_setup(
 
     print_success(&data, &prose, json_mode);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CMUX_BINARY_CANDIDATES;
+
+    #[test]
+    fn discovers_cmux_app_bundled_cli_for_launchd() {
+        assert_eq!(
+            CMUX_BINARY_CANDIDATES[0],
+            "/Applications/cmux.app/Contents/Resources/bin/cmux"
+        );
+    }
 }
