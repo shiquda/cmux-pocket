@@ -52,6 +52,8 @@ class CmuxWebSocketClient(
 
     private val _workspaceEvents = MutableSharedFlow<JsonObject>(extraBufferCapacity = 16)
     val workspaceEvents: SharedFlow<JsonObject> = _workspaceEvents.asSharedFlow()
+    private val _agentCompletionEvents = MutableSharedFlow<JsonObject>(extraBufferCapacity = 32)
+    val agentCompletionEvents: SharedFlow<JsonObject> = _agentCompletionEvents.asSharedFlow()
 
     private data class InboundMessage(
         val text: String,
@@ -95,6 +97,7 @@ class CmuxWebSocketClient(
     }
 
     override fun onOpen(webSocket: WebSocket, response: Response) {
+        if (this.webSocket !== webSocket) return
         Log.i(tag, "onOpen: WebSocket connection open. Sending auth frame...")
         _statusFlow.value = ConnectionStatus.AUTHENTICATING
         val authReq = AuthRequest(type = "auth", token = authToken, clientId = "android-${UUID.randomUUID()}")
@@ -103,11 +106,13 @@ class CmuxWebSocketClient(
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
+        if (this.webSocket !== webSocket) return
         val receivedNanos = System.nanoTime()
         runBlocking {
             inboundChannel.send(InboundMessage(text, receivedNanos))
         }
     }
+
 
     private suspend fun processInboundMessage(text: String, receivedNanos: Long) {
         try {
@@ -158,6 +163,8 @@ class CmuxWebSocketClient(
                         decodedNanos = decodedNanos
                     )
                     _renderGridEvents.emit(envelope)
+                } else if (eventName == "agent.session.completed" && eventData != null) {
+                    _agentCompletionEvents.emit(eventData.jsonObject)
                 } else if ((eventName == "workspace.tree" || eventName == "mobile.sync.delta") && eventData != null) {
                     _workspaceEvents.emit(eventData.jsonObject)
                 }
@@ -182,6 +189,7 @@ class CmuxWebSocketClient(
     }
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+        if (this.webSocket !== webSocket) return
         Log.e(tag, "onFailure: WebSocket error", t)
         _statusFlow.value = ConnectionStatus.ERROR
         pendingRequests.forEach { (_, deferred) ->
@@ -191,6 +199,7 @@ class CmuxWebSocketClient(
     }
 
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+        if (this.webSocket !== webSocket) return
         Log.i(tag, "onClosed: code=$code, reason=$reason")
         _statusFlow.value = ConnectionStatus.DISCONNECTED
     }

@@ -2,6 +2,7 @@ package app.cmuxpocket.ui
 
 import app.cmuxpocket.engine.*
 import app.cmuxpocket.protocol.SurfaceInfo
+import app.cmuxpocket.protocol.AgentSessionCompleted
 import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.protocol.WorkspaceListResponse
 import app.cmuxpocket.protocol.WorkspaceSelection
@@ -12,6 +13,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -42,6 +44,8 @@ class TerminalViewModel : ViewModel() {
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
     private val _workspaces = MutableStateFlow<List<WorkspaceInfo>>(emptyList())
+    private val _agentSessionCompletions = MutableSharedFlow<AgentSessionCompleted>(extraBufferCapacity = 32)
+    val agentSessionCompletions: SharedFlow<AgentSessionCompleted> = _agentSessionCompletions.asSharedFlow()
     val workspaces: StateFlow<List<WorkspaceInfo>> = _workspaces.asStateFlow()
 
     private val _selectedWorkspaceKey = MutableStateFlow<String?>(null)
@@ -72,6 +76,18 @@ class TerminalViewModel : ViewModel() {
     private var pendingScrollLines = 0.0
     private val awaitingReplaySurfaces = ConcurrentHashMap<String, Boolean>()
     private var connectionGeneration: Long = 0
+    private data class ConnectionTarget(
+        val host: String,
+        val port: Int,
+        val token: String
+    )
+
+    private var lastConnectionTarget: ConnectionTarget? = null
+    private var reconnectJob: Job? = null
+    private var reconnectAttempt = 0
+    private var manualDisconnect = true
+    private var pendingNotificationWorkspaceId: String? = null
+    private var pendingNotificationSurfaceId: String? = null
 
     init {
         // 1. Collect RenderGrid delta/full frames, validate consistency and route
@@ -130,6 +146,18 @@ class TerminalViewModel : ViewModel() {
             }
         }
 
+        viewModelScope.launch {
+            wsClient.agentCompletionEvents.collect { data ->
+                runCatching {
+                    json.decodeFromJsonElement(AgentSessionCompleted.serializer(), data)
+                }.onSuccess { completion ->
+                    _agentSessionCompletions.emit(completion)
+                }.onFailure { error ->
+                    Log.w(tag, "Ignoring malformed agent completion event", error)
+                }
+            }
+        }
+
         // 2. Watch connection status & advance lifecycle phases
         viewModelScope.launch {
             wsClient.statusFlow.collect { status ->
@@ -143,6 +171,9 @@ class TerminalViewModel : ViewModel() {
                         _statusMessage.value = "Authenticating..."
                     }
                     ConnectionStatus.CONNECTED -> {
+                        reconnectAttempt = 0
+                        reconnectJob?.cancel()
+                        reconnectJob = null
                         _syncPhase.value = AppSyncPhase.SYNCING
                         _statusMessage.value = "Syncing workspaces..."
                         connectionGeneration++
@@ -152,15 +183,17 @@ class TerminalViewModel : ViewModel() {
                     }
                     ConnectionStatus.ERROR -> {
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
-                        _statusMessage.value = "Connection Error"
+                        _statusMessage.value = "Connection error"
                         awaitingReplaySurfaces.clear()
                         mutationTracker.clear()
+                        scheduleReconnect()
                     }
                     ConnectionStatus.DISCONNECTED -> {
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
                         _statusMessage.value = "Disconnected"
                         awaitingReplaySurfaces.clear()
                         mutationTracker.clear()
+                        scheduleReconnect()
                     }
                 }
             }
@@ -200,9 +233,47 @@ class TerminalViewModel : ViewModel() {
     }
 
     fun connect(host: String = "127.0.0.1", port: Int = 8088, token: String = "") {
-        val url = ConnectionEndpoint.websocketUrl(host, port)
-        _statusMessage.value = "Connecting to gateway..."
-        wsClient.connect(url, token)
+        manualDisconnect = true
+        reconnectJob?.cancel()
+        reconnectJob = null
+        wsClient.disconnect()
+        lastConnectionTarget = ConnectionTarget(host, port, token)
+        reconnectAttempt = 0
+        manualDisconnect = false
+        connectTarget(lastConnectionTarget!!)
+    }
+
+    private fun connectTarget(target: ConnectionTarget) {
+        try {
+            val url = ConnectionEndpoint.websocketUrl(target.host, target.port)
+            _statusMessage.value = "Connecting to gateway..."
+            wsClient.connect(url, target.token)
+        } catch (e: IllegalArgumentException) {
+            _syncPhase.value = AppSyncPhase.DISCONNECTED
+            _statusMessage.value = e.message ?: "Invalid connection endpoint"
+            manualDisconnect = true
+        }
+    }
+
+    private fun scheduleReconnect() {
+        val target = lastConnectionTarget ?: return
+        if (manualDisconnect || reconnectJob?.isActive == true) return
+        if (reconnectAttempt >= ReconnectPolicy.maxAttempts) {
+            _statusMessage.value = "Reconnect paused; tap Reconnect to retry"
+            return
+        }
+
+        val attempt = reconnectAttempt++
+        val delayMs = ReconnectPolicy.delayMillis(attempt)
+        _statusMessage.value = "Disconnected. Retrying in ${delayMs / 1_000}s..."
+        reconnectJob = viewModelScope.launch {
+            delay(delayMs)
+            if (!manualDisconnect && lastConnectionTarget == target) {
+                _statusMessage.value = "Retrying connection (${attempt + 1}/${ReconnectPolicy.maxAttempts})..."
+                connectTarget(target)
+            }
+            reconnectJob = null
+        }
     }
 
     fun scrollTerminal(deltaLines: Double) {
@@ -230,6 +301,11 @@ class TerminalViewModel : ViewModel() {
     }
 
     fun disconnect() {
+        manualDisconnect = true
+        lastConnectionTarget = null
+        reconnectAttempt = 0
+        reconnectJob?.cancel()
+        reconnectJob = null
         wsClient.disconnect()
         awaitingReplaySurfaces.clear()
         mutationTracker.clear()
@@ -262,7 +338,7 @@ class TerminalViewModel : ViewModel() {
         currentBootstrapJob?.cancel()
         currentBootstrapJob = viewModelScope.launch {
             try {
-                wsClient.subscribeEvents(listOf("terminal.render_grid", "mobile.sync.delta", "workspace.tree"))
+                wsClient.subscribeEvents(listOf("terminal.render_grid", "mobile.sync.delta", "workspace.tree", "agent.session.completed"))
                 val wsElement = wsClient.callRpc("mobile.workspace.list")
                 if (generation == connectionGeneration) {
                     val listResp = json.decodeFromJsonElement(WorkspaceListResponse.serializer(), wsElement)
@@ -298,6 +374,7 @@ class TerminalViewModel : ViewModel() {
         )
         _selectedWorkspaceKey.value = newWorkspaceKey
         _selectedSurfaceId.value = newSurfaceId
+        applyPendingNotificationNavigation()
 
         // When enabled, sync focus to gateway whenever selection changes (including null -> new and old -> null/new)
         if (syncReconciledFocus && prevSurfaceId != newSurfaceId) {
@@ -330,6 +407,24 @@ class TerminalViewModel : ViewModel() {
      * User-initiated surface selection (dispatches remote focus & single-flight replay).
      */
     fun selectSurface(surfaceId: String?) {
+        userSelectSurface(surfaceId)
+    }
+
+    fun navigateToSurface(workspaceId: String?, surfaceId: String) {
+        pendingNotificationWorkspaceId = workspaceId
+        pendingNotificationSurfaceId = surfaceId
+        applyPendingNotificationNavigation()
+    }
+
+    private fun applyPendingNotificationNavigation() {
+        val surfaceId = pendingNotificationSurfaceId ?: return
+        val workspace = _workspaces.value.firstOrNull { ws ->
+            (pendingNotificationWorkspaceId == null || ws.id == pendingNotificationWorkspaceId || ws.stableKey == pendingNotificationWorkspaceId) &&
+                ws.surfaces.any { it.id == surfaceId }
+        } ?: return
+        pendingNotificationWorkspaceId = null
+        pendingNotificationSurfaceId = null
+        _selectedWorkspaceKey.value = workspace.stableKey
         userSelectSurface(surfaceId)
     }
 

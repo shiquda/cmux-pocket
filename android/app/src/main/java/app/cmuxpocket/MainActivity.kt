@@ -5,6 +5,16 @@ import app.cmuxpocket.transport.ConnectionStatus
 import app.cmuxpocket.ui.*
 import android.content.res.Configuration
 import android.os.Bundle
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,12 +31,49 @@ import androidx.compose.ui.unit.dp
 class MainActivity : ComponentActivity() {
 
     private val viewModel: TerminalViewModel by viewModels()
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AgentCompletionNotifications.createChannel(this)
+        requestNotificationPermissionIfNeeded()
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                viewModel.agentSessionCompletions.collect { completion ->
+                    AgentCompletionNotifications.show(this@MainActivity, completion)
+                }
+            }
+        }
+        handleNotificationIntent(intent)
         setContent {
             CmuxAppRoot(viewModel = viewModel)
         }
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        val surfaceId = intent?.getStringExtra(AgentCompletionNotifications.extraSurfaceId) ?: return
+        viewModel.navigateToSurface(
+            intent.getStringExtra(AgentCompletionNotifications.extraWorkspaceId),
+            surfaceId
+        )
+        intent.removeExtra(AgentCompletionNotifications.extraSurfaceId)
+        intent.removeExtra(AgentCompletionNotifications.extraWorkspaceId)
     }
 }
 

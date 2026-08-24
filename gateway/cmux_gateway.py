@@ -32,6 +32,45 @@ DEFAULT_WS_HOST = "127.0.0.1"
 DEFAULT_WS_PORT = 8088
 DEFAULT_SOCKET_PATH = "/tmp/cmux.sock"
 
+def parse_agent_completion_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Normalize cmux agent turn completion events for mobile clients."""
+    if event.get("type") != "event":
+        return None
+
+    payload = event.get("payload") or {}
+    if not isinstance(payload, dict):
+        return None
+    agent = event.get("agent") or payload.get("agent") or {}
+    if not isinstance(agent, dict):
+        agent = {}
+    hook_name = str(payload.get("hook_event_name") or "").lower()
+    event_name = str(event.get("name") or "")
+    category = str(agent.get("category") or payload.get("category") or "").lower()
+    is_completion = (
+        (event_name.startswith("agent.hook.") and hook_name in {"stop", "sessionend"})
+        or category == "turn-complete"
+    )
+    if not is_completion:
+        return None
+
+    surface_id = event.get("surface_id") or payload.get("surface_id")
+    if not surface_id:
+        return None
+    return {
+        "event_id": event.get("id"),
+        "workspace_id": event.get("workspace_id") or payload.get("workspace_id"),
+        "surface_id": surface_id,
+        "agent_kind": agent.get("kind") or payload.get("_source"),
+        "category": "turn-complete",
+    }
+
+def notification_record_is_completion(record: str, notification_id: str) -> bool:
+    """Match cmux's compact list-notifications record without forwarding text."""
+    fields = record.rstrip("\n").split("|")
+    if len(fields) < 8 or fields[0].split(":", 1)[-1] != notification_id:
+        return False
+    return fields[6].strip().casefold() in {"complete", "completed", "done"}
+
 def is_loopback_bind_host(host: str) -> bool:
     normalized = host.strip().strip("[]")
     if normalized.lower() == "localhost":
@@ -1597,6 +1636,8 @@ class CmuxWebSocketGateway:
         self._screen_poller_task: Optional[asyncio.Task] = None
         self._tree_poller_task: Optional[asyncio.Task] = None
         self._poller_task: Optional[asyncio.Task] = None
+        self._agent_event_task: Optional[asyncio.Task] = None
+        self._agent_event_ids: Set[str] = set()
 
     def verify_token(self, token: str) -> bool:
         return token == self.auth_token
@@ -1676,6 +1717,84 @@ class CmuxWebSocketGateway:
             except Exception as e:
                 logger.debug(f"Tree poller tick error: {e}")
 
+    @staticmethod
+    def _notification_record(notification_id: str) -> Optional[str]:
+        try:
+            output = subprocess.run(
+                ["cmux", "list-notifications"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            ).stdout
+            return next((line for line in output.splitlines() if notification_id in line), None)
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    async def _live_agent_event_poller(self):
+        """Forward cmux agent turn completions to subscribed mobile clients."""
+        while True:
+            process = None
+            try:
+                if not shutil.which("cmux") or not isinstance(self.backend, LiveCmuxBackend):
+                    await asyncio.sleep(5.0)
+                    continue
+
+                process = await asyncio.create_subprocess_exec(
+                    "cmux", "events",
+                    "--category", "agent",
+                    "--category", "notification",
+                    "--reconnect",
+                    "--no-heartbeat",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                assert process.stdout is not None
+                while True:
+                    line = await process.stdout.readline()
+                    if not line:
+                        break
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    completion = parse_agent_completion_event(event)
+                    if not completion and event.get("name") == "notification.created":
+                        payload = event.get("payload") or {}
+                        notification_id = payload.get("notification_id")
+                        surface_id = event.get("surface_id") or payload.get("surface_id")
+                        if notification_id and surface_id:
+                            record = await asyncio.to_thread(self._notification_record, notification_id)
+                            if record and notification_record_is_completion(record, notification_id):
+                                completion = {
+                                    "event_id": event.get("id") or notification_id,
+                                    "workspace_id": event.get("workspace_id") or payload.get("workspace_id"),
+                                    "surface_id": surface_id,
+                                    "agent_kind": None,
+                                    "category": "turn-complete",
+                                }
+                    if not completion:
+                        continue
+                    event_id = completion.get("event_id")
+                    if event_id and event_id in self._agent_event_ids:
+                        continue
+                    if event_id:
+                        self._agent_event_ids.add(event_id)
+                        if len(self._agent_event_ids) > 2048:
+                            self._agent_event_ids = set(list(self._agent_event_ids)[-1024:])
+                    await self.broadcast_event("agent.session.completed", completion)
+            except asyncio.CancelledError:
+                if process and process.returncode is None:
+                    process.terminate()
+                    await process.wait()
+                break
+            except Exception as e:
+                logger.debug(f"Agent event poller error: {e}")
+            finally:
+                if process and process.returncode is None:
+                    process.terminate()
+                    await process.wait()
+            await asyncio.sleep(2.0)
+
     async def _handle_connection(self, websocket, path=None):
         client = CmuxGatewayClientSession(websocket, self)
         self.clients.add(client)
@@ -1702,6 +1821,8 @@ class CmuxWebSocketGateway:
         self._tree_poller_task = asyncio.create_task(self._live_tree_poller())
         self._poller_task = self._screen_poller_task
         logger.info(f"cmux WebSocket Gateway v2 listening on ws://{self.host}:{self.port}")
+        if isinstance(self.backend, LiveCmuxBackend):
+            self._agent_event_task = asyncio.create_task(self._live_agent_event_poller())
 
     async def stop(self):
         if self._screen_poller_task:
@@ -1715,6 +1836,9 @@ class CmuxWebSocketGateway:
             self.server.close()
             await self.server.wait_closed()
             logger.info("Gateway server stopped.")
+        if self._agent_event_task:
+            self._agent_event_task.cancel()
+            await asyncio.gather(self._agent_event_task, return_exceptions=True)
 
 
 async def main():

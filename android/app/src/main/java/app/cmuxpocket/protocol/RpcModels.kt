@@ -82,6 +82,15 @@ data class SurfaceInfo(
 }
 
 @Serializable
+data class AgentSessionCompleted(
+    @SerialName("event_id") val eventId: String? = null,
+    @SerialName("workspace_id") val workspaceId: String? = null,
+    @SerialName("surface_id") val surfaceId: String,
+    @SerialName("agent_kind") val agentKind: String? = null,
+    @SerialName("category") val category: String = "turn-complete"
+)
+
+@Serializable
 data class SurfaceCreateParam(
     @SerialName("type") val type: String = "terminal",
     @SerialName("title") val title: String? = null
