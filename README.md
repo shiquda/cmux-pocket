@@ -4,7 +4,9 @@ cmux Pocket is an independent Android terminal companion: it connects your phone
 
 > This is an independent community project. It is not affiliated with cmux and is not endorsed by the cmux project or its maintainers. The name "cmux" appears only to describe the software it is compatible with.
 
-This repository ships source code only. No prebuilt APK is provided.
+This repository ships source code. Signed prebuilt APKs are published as GitHub Release assets when a release tag completes the protected signing workflow.
+
+> **Signing notice:** The initial `v0.1.0` cloud APK uses the existing local Android debug keystore for update continuity. This is not a production or app-store signing identity; replace it with a dedicated release keystore before wider distribution.
 
 ## Features
 

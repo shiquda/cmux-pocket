@@ -1,0 +1,134 @@
+name: Build signed APK release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and publish signed APK
+    runs-on: ubuntu-24.04
+    environment: release-signing
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Decode the protected signing keystore
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PATH: ${{ runner.temp }}/cmux-pocket-release.keystore
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+
+      - name: Build release APK
+        working-directory: android
+        env:
+          ORG_GRADLE_PROJECT_releaseStoreFile: ${{ runner.temp }}/cmux-pocket-release.keystore
+          ORG_GRADLE_PROJECT_releaseStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_releaseKeyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_releaseKeyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./gradlew testDebugUnitTest assembleRelease
+
+      - name: Verify APK identity and signature
+        id: verify
+        working-directory: android
+        env:
+          APK_PATH: app/build/outputs/apk/release/app-release.apk
+        run: |
+          set -euo pipefail
+          CERT_TOOL="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          BADGING_TOOL="$ANDROID_HOME/build-tools/35.0.0/aapt2"
+          test -f "$APK_PATH"
+          "$CERT_TOOL" verify --verbose --print-certs "$APK_PATH"
+          python3 - "$APK_PATH" "$CERT_TOOL" "$BADGING_TOOL" "$GITHUB_OUTPUT" <<'PY'
+          import hashlib
+          import pathlib
+          import re
+          import subprocess
+          import sys
+
+          apk_path, cert_tool, badging_tool, output_path = sys.argv[1:]
+          cert_output = subprocess.check_output(
+              [cert_tool, "verify", "--print-certs", apk_path],
+              text=True,
+          )
+          cert_match = re.search(
+              r"Signer #1 certificate SHA-256 digest: ([0-9A-Fa-f:]+)",
+              cert_output,
+          )
+          if cert_match is None:
+              raise SystemExit("APK certificate fingerprint was not found")
+
+          badging = subprocess.check_output(
+              [badging_tool, "dump", "badging", apk_path],
+              text=True,
+          )
+          package_match = re.search(
+              r"^package: name='([^']+)' versionCode:'([^']+)' versionName:'([^']+)'",
+              badging,
+              re.MULTILINE,
+          )
+          if package_match is None:
+              raise SystemExit("APK package metadata was not found")
+          package_name, version_code, version_name = package_match.groups()
+          if package_name != "app.cmuxpocket":
+              raise SystemExit(f"Unexpected application ID: {package_name}")
+          if version_code != "1":
+              raise SystemExit(f"Unexpected versionCode: {version_code}")
+          if version_name != "0.1.0":
+              raise SystemExit(f"Unexpected versionName: {version_name}")
+
+          digest = hashlib.sha256(pathlib.Path(apk_path).read_bytes()).hexdigest()
+          with open(output_path, "a", encoding="utf-8") as output:
+              output.write(f"certificate_fingerprint={cert_match.group(1)}\n")
+              output.write(f"apk_sha256={digest}\n")
+              output.write(f"version_name={version_name}\n")
+          print(f"applicationId={package_name}")
+          print(f"versionCode={version_code}")
+          print(f"versionName={version_name}")
+          print(f"certificateSHA256={cert_match.group(1)}")
+          print(f"apkSHA256={digest}")
+          PY
+
+      - name: Publish GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CERTIFICATE_FINGERPRINT: ${{ steps.verify.outputs.certificate_fingerprint }}
+          APK_SHA256: ${{ steps.verify.outputs.apk_sha256 }}
+        working-directory: android
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "version_name=0.1.0" \
+            "certificate_sha256=$CERTIFICATE_FINGERPRINT" \
+            "apk_sha256=$APK_SHA256" \
+            > release-metadata.txt
+          gh release create "$GITHUB_REF_NAME" \
+            app/build/outputs/apk/release/app-release.apk#cmux-pocket-${GITHUB_REF_NAME}.apk \
+            release-metadata.txt#release-metadata.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "cmux Pocket $GITHUB_REF_NAME" \
+            --generate-notes
+
+      - name: Remove temporary signing material
+        if: ${{ always() }}
+        run: rm -f "${RUNNER_TEMP}/cmux-pocket-release.keystore"
