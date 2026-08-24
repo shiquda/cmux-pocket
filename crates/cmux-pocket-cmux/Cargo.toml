@@ -1,0 +1,20 @@
+[package]
+name = "cmux-pocket-cmux"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "cmux backend abstraction, live CLI subprocess adapter, mock adapter, and events stream"
+
+[dependencies]
+cmux-pocket-protocol = { path = "../cmux-pocket-protocol" }
+tokio = { version = "1.38", features = ["process", "sync", "time", "io-util", "macros", "rt"] }
+async-trait = "0.1"
+parking_lot = "0.12"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1.38", features = ["full", "test-util", "rt-multi-thread"] }

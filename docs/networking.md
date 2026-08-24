@@ -12,7 +12,7 @@ cmux Pocket connects to the Gateway through a WebSocket. The Gateway remains loo
 
 `ws://` is rejected for non-loopback hosts. The Gateway refuses non-loopback bind addresses, so do not try to expose it by changing `CMUX_GATEWAY_HOST`.
 
-## 1. Start cmux and the Gateway
+## 1. Install cmux Pocket and start the Gateway
 
 On macOS, install and start cmux, then verify:
 
@@ -20,17 +20,23 @@ On macOS, install and start cmux, then verify:
 cmux ping
 ```
 
-Create a token file readable only by your user and start the Gateway:
+Install the Rust CLI from the project tap and run the idempotent setup:
 
 ```bash
-mkdir -p "$HOME/.config/cmux-pocket"
-umask 077
-openssl rand -hex 32 > "$HOME/.config/cmux-pocket/gateway-token"
-CMUX_AUTH_TOKEN_FILE="$HOME/.config/cmux-pocket/gateway-token" \
-  uv run --with websockets python3 gateway/cmux_gateway.py
+brew install shiquda/cmux-pocket/cmux-pocket
+cmux-pocket setup
+cmux-pocket status
 ```
 
-The Gateway's local listener is normally:
+`cmux-pocket setup` creates the user-only config and token files, generates the macOS LaunchAgent, starts the loopback Gateway, and performs a local authenticated probe. It preserves an existing token and never prints the raw token. Use:
+
+```bash
+cmux-pocket config path
+cmux-pocket token path
+cmux-pocket doctor --deep
+```
+
+for local paths and diagnostics. The default local listener is:
 
 ```text
 ws://127.0.0.1:8088
@@ -39,6 +45,28 @@ ws://127.0.0.1:8088
 This local URL is the proxy or tunnel's upstream. It is not the URL to enter in the Android app for LAN or remote use.
 
 Keep the token private. Do not put it in shell history, screenshots, issue reports, committed files, or public tunnel configuration.
+
+### Gateway administration
+
+The CLI owns configuration, token lifecycle, diagnostics, logs, and the per-user LaunchAgent:
+
+```bash
+cmux-pocket config show
+cmux-pocket token show                 # fingerprint and permissions only
+cmux-pocket service status
+cmux-pocket gateway probe
+cmux-pocket logs --lines 100
+cmux-pocket service restart
+```
+
+Rotate only when required; rotation invalidates the old Android credential. Copy the new secret to Android without putting it in shell history or logs:
+
+```bash
+cmux-pocket token rotate
+pbcopy < "$(cmux-pocket token path)"
+```
+
+`cmux-pocket service uninstall` removes only the CLI-owned LaunchAgent. Homebrew installation and upgrades do not create tokens, start services, or mutate user configuration.
 
 ## 2. Choose a secure boundary
 
@@ -81,23 +109,20 @@ This example uses a **locally managed** Cloudflare Tunnel to publish the Gateway
 
 Prerequisites:
 
-- A Cloudflare account with a domain managed by Cloudflare.
+- `cmux-pocket` installed from the project Homebrew tap.
 - `cloudflared` installed on the Mac.
-- A Gateway token stored in a user-only file.
+- A Cloudflare account with a domain managed by Cloudflare.
 
 #### 1. Start the loopback Gateway
 
 Run this in one terminal on the Mac:
 
 ```bash
-mkdir -p "$HOME/.config/cmux-pocket"
-umask 077
-openssl rand -hex 32 > "$HOME/.config/cmux-pocket/gateway-token"
-CMUX_AUTH_TOKEN_FILE="$HOME/.config/cmux-pocket/gateway-token" \
-  uv run --with websockets python3 gateway/cmux_gateway.py
+cmux-pocket setup
+cmux-pocket status
 ```
 
-The Gateway must remain on `127.0.0.1:8088`. `cloudflared` will connect to this local origin; do not change the Gateway bind address to make it reachable from the network.
+The CLI creates the user-only token and config, installs the LaunchAgent, and starts the Gateway. The Gateway must remain on `127.0.0.1:8088`. `cloudflared` will connect to this local origin; do not change the Gateway bind address to make it reachable from the network.
 
 #### 2. Create the tunnel and DNS route
 
@@ -148,7 +173,7 @@ Then configure cmux Pocket with:
 Host or URL: cmux-gateway.example.com
 Port:        443
 Transport:   wss://
-Token:       contents of ~/.config/cmux-pocket/gateway-token
+Token:       the secret stored at the path printed by `cmux-pocket token path`
 ```
 
 The app should authenticate and display the current Workspaces and Tabs. Keep Cloudflare's hostname, tunnel credentials, Gateway token, and local configuration files private. Cloudflare may restart an edge connection; cmux Pocket's keepalive and bounded reconnect behavior handle normal WebSocket interruptions, but a reconnect can briefly interrupt the active session.
@@ -213,7 +238,7 @@ ADB reverse is intentionally not the normal LAN/remote setup. It depends on USB 
 
 | Symptom | Check |
 | --- | --- |
-| `MockCmuxBackend` appears in the Gateway log | Start cmux, verify `cmux ping`, then restart the Gateway. Mock mode is testing-only. |
+| cmux is unreachable | The Rust Gateway remains resident and reports a degraded backend. Start cmux, verify `cmux ping`, then run `cmux-pocket service restart` or `cmux-pocket gateway probe`. |
 | Authentication fails | Read the current token from the protected token file and update the app profile. Never log or publish the token. |
 | Non-loopback connection is rejected | Change the profile to a trusted `wss://` endpoint. Plaintext LAN `ws://` is unsupported. |
 | TLS handshake fails | Use a certificate trusted by Android and verify the proxy forwards WebSocket upgrades. |

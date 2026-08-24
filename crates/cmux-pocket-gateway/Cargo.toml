@@ -1,0 +1,25 @@
+[package]
+name = "cmux-pocket-gateway"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Tokio and tokio-tungstenite Gateway runtime for cmux-pocket"
+
+[dependencies]
+cmux-pocket-protocol = { path = "../cmux-pocket-protocol" }
+cmux-pocket-cmux = { path = "../cmux-pocket-cmux" }
+cmux-pocket-macos = { path = "../cmux-pocket-macos" }
+tokio = { version = "1.38", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = "0.1"
+uuid = { version = "1.8", features = ["v4"] }
+parking_lot = "0.12"
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1.38", features = ["full", "test-util"] }

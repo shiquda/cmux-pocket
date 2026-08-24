@@ -32,3 +32,8 @@ gateway-token
 __pycache__/
 *.pyc
 .venv/
+
+# Rust build outputs
+/target/
+**/target/
+crates/*/Cargo.lock

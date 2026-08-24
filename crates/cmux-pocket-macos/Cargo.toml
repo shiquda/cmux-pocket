@@ -1,0 +1,17 @@
+[package]
+name = "cmux-pocket-macos"
+version = "0.1.0"
+edition = "2021"
+authors = ["cmux-pocket authors"]
+license = "AGPL-3.0-or-later"
+description = "macOS lifecycle, paths, atomic config/token writes, and launchd management for cmux-pocket"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+thiserror = "2.0"
+sha2 = "0.10"
+getrandom = "0.2"
+
+[dev-dependencies]
+tempfile = "3.10"

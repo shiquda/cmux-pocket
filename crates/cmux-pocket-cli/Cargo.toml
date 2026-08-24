@@ -1,0 +1,37 @@
+[package]
+name = "cmux-pocket-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["cmux-pocket authors"]
+license = "AGPL-3.0-or-later"
+description = "User-facing CLI binary and launchd service manager for cmux-pocket"
+
+[[bin]]
+name = "cmux-pocket"
+path = "src/main.rs"
+
+[lib]
+name = "cmux_pocket_cli"
+path = "src/lib.rs"
+
+[dependencies]
+cmux-pocket-protocol = { path = "../cmux-pocket-protocol" }
+cmux-pocket-macos = { path = "../cmux-pocket-macos" }
+cmux-pocket-cmux = { path = "../cmux-pocket-cmux" }
+cmux-pocket-gateway = { path = "../cmux-pocket-gateway" }
+
+clap = { version = "4.5", features = ["derive", "env"] }
+tokio = { version = "1.38", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+uuid = { version = "1.8", features = ["v4"] }
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3.10"
