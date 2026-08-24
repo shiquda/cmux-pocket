@@ -82,10 +82,14 @@ jobs:
               [badging_tool, "dump", "badging", apk_path],
               text=True,
           )
+          package_line = next(
+              (line for line in badging.splitlines() if line.startswith("package:")),
+              "",
+          )
+          print(f"badgingPackageLine={package_line}")
           package_match = re.search(
-              r"^package: name='([^']+)' versionCode:'([^']+)' versionName:'([^']+)'",
-              badging,
-              re.MULTILINE,
+              r"name='([^']+)'.*?versionCode='([^']+)'.*?versionName='([^']+)'",
+              package_line,
           )
           if package_match is None:
               raise SystemExit("APK package metadata was not found")
