@@ -6,7 +6,7 @@ cmux Pocket is an independent Android companion for people who use [cmux](https:
 
 [Download the signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Networking and setup guide](docs/networking.md)
 
-![cmux Pocket running in portrait and landscape emulator layouts with synchronized workspaces and tabs](docs/assets/device-portrait-landscape.png)
+![cmux Pocket: Mac desktop showing cmux terminal alongside Android phone displaying the same workspace](docs/assets/hero.png)
 
 ## What it does
 
