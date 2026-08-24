@@ -38,6 +38,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ContextCompat.startForegroundService(
+            this,
+            Intent(this, ConnectionKeepAliveService::class.java)
+        )
         AgentCompletionNotifications.createChannel(this)
         requestNotificationPermissionIfNeeded()
         lifecycleScope.launch {

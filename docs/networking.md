@@ -74,6 +74,87 @@ A tunnel can provide the TLS boundary when the Mac cannot accept inbound LAN con
 
 Use the provider's standard public TLS port, normally `443`. Do not enter `8088` in the app unless the provider explicitly exposes that port publicly. Do not publish tunnel IDs, public domains, credentials, or local configuration files in this repository.
 
+
+### Concrete example: Cloudflare Tunnel
+
+This example uses a **locally managed** Cloudflare Tunnel to publish the Gateway through a Cloudflare-managed HTTPS hostname. Replace every value in angle brackets with your own value. The names, domain, tunnel ID, and paths below are placeholders; do not copy credentials or private hostnames into a public issue or screenshot.
+
+Prerequisites:
+
+- A Cloudflare account with a domain managed by Cloudflare.
+- `cloudflared` installed on the Mac.
+- A Gateway token stored in a user-only file.
+
+#### 1. Start the loopback Gateway
+
+Run this in one terminal on the Mac:
+
+```bash
+mkdir -p "$HOME/.config/cmux-pocket"
+umask 077
+openssl rand -hex 32 > "$HOME/.config/cmux-pocket/gateway-token"
+CMUX_AUTH_TOKEN_FILE="$HOME/.config/cmux-pocket/gateway-token" \
+  uv run --with websockets python3 gateway/cmux_gateway.py
+```
+
+The Gateway must remain on `127.0.0.1:8088`. `cloudflared` will connect to this local origin; do not change the Gateway bind address to make it reachable from the network.
+
+#### 2. Create the tunnel and DNS route
+
+Run the interactive login once, then create a named tunnel and route a hostname to it:
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create cmux-pocket-gateway
+cloudflared tunnel route dns cmux-pocket-gateway cmux-gateway.example.com
+```
+
+The `create` command writes a tunnel credentials file under `~/.cloudflared`. Keep that file private. The DNS route points the example hostname at the tunnel; it does not expose the Gateway until `cloudflared` is running.
+
+#### 3. Create a locally managed ingress configuration
+
+Save this as `~/.cloudflared/cmux-pocket-gateway.yml`, substituting the tunnel UUID and your own local account path:
+
+```yaml
+tunnel: <TUNNEL_UUID>
+credentials-file: /Users/<your-mac-user>/.cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  - hostname: cmux-gateway.example.com
+    service: http://127.0.0.1:8088
+  - service: http_status:404
+```
+
+The final catch-all rule is required. The public HTTPS/WSS hostname is terminated by Cloudflare and forwarded to the loopback HTTP/WebSocket origin. Cloudflare supports proxied WebSockets without additional tunnel configuration; if the WebSockets setting is disabled for the zone, enable it in **Network → WebSockets**.
+
+Validate the rules before starting the tunnel:
+
+```bash
+cloudflared --config "$HOME/.cloudflared/cmux-pocket-gateway.yml" tunnel ingress validate
+cloudflared --config "$HOME/.cloudflared/cmux-pocket-gateway.yml" tunnel ingress rule https://cmux-gateway.example.com
+```
+
+#### 4. Run the tunnel
+
+Run this in another terminal:
+
+```bash
+cloudflared --config "$HOME/.cloudflared/cmux-pocket-gateway.yml" tunnel run cmux-pocket-gateway
+```
+
+Then configure cmux Pocket with:
+
+```text
+Host or URL: cmux-gateway.example.com
+Port:        443
+Transport:   wss://
+Token:       contents of ~/.config/cmux-pocket/gateway-token
+```
+
+The app should authenticate and display the current Workspaces and Tabs. Keep Cloudflare's hostname, tunnel credentials, Gateway token, and local configuration files private. Cloudflare may restart an edge connection; cmux Pocket's keepalive and bounded reconnect behavior handle normal WebSocket interruptions, but a reconnect can briefly interrupt the active session.
+
+Official references: [Cloudflare Tunnel setup](https://developers.cloudflare.com/tunnel/setup/), [locally managed configuration files](https://developers.cloudflare.com/tunnel/advanced/local-management/configuration-file/), [routing](https://developers.cloudflare.com/tunnel/routing/), and [WebSockets](https://developers.cloudflare.com/network/websockets/).
+
 ### VPN or private network
 
 A VPN is suitable when the phone and Mac can reach a private ingress that terminates TLS. The VPN does not remove the WSS requirement: use a trusted `wss://` endpoint and keep the Gateway bound to loopback.
@@ -101,6 +182,12 @@ After an established session loses its WebSocket, cmux Pocket retries the saved 
 It makes six automatic attempts, then shows a paused state that requires **Reconnect**. A successful connection resets the schedule. A manual disconnect clears the saved retry target.
 
 If authentication fails repeatedly, first verify that the app token matches the token currently used by the Gateway. If the endpoint or certificate is invalid, correct the profile before retrying.
+
+## Background operation
+
+When cmux Pocket has an active Gateway session, it runs a small Android foreground service with an ongoing **Connection** notification. This keeps the app process important while the phone is backgrounded, so the WebSocket can continue receiving workspace updates and agent-completion events.
+
+Android can still terminate the service after a force-stop, battery-management action, or other system policy decision. If that happens, reopen the app and use **Reconnect**; the bounded retry schedule is described above.
 
 ## Agent completion notifications
 

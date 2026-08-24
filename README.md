@@ -6,7 +6,7 @@ cmux Pocket is an independent Android companion for people who use [cmux](https:
 
 [Download the signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Networking and setup guide](docs/networking.md)
 
-![cmux Pocket terminal output showing a sanitized workspace and tab](docs/assets/terminal-output.png)
+![cmux Pocket running in portrait and landscape emulator layouts with synchronized workspaces and tabs](docs/assets/device-portrait-landscape.png)
 
 ## What it does
 
@@ -15,7 +15,7 @@ cmux Pocket is an independent Android companion for people who use [cmux](https:
 - Synchronizes tab creation and deletion from the Mac; closing the active tab requires confirmation.
 - Keeps main-screen scrollback local to the phone while alternate-screen/TUI scrolling remains owned by cmux on the Mac.
 - Uses encrypted Android connection profiles and a random Gateway authentication token.
-- Shows Android system notifications for detected completed agent turns; tapping one opens the corresponding Workspace and Tab.
+- Keeps an active Gateway session through Android backgrounding with an ongoing connection notification; Android may still stop it after a force-stop or system policy action.
 - Provides a compact keyboard with modifiers, navigation keys, and F1–F12.
 
 ## How the connection works
