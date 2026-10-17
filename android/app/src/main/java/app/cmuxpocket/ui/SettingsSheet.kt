@@ -54,6 +54,7 @@ fun SettingsDialog(
     selectedThemeHex: String,
     themeMode: ThemeMode,
     connectionStatus: ConnectionStatus,
+    connectionReadiness: ConnectionReadiness,
     isLandscape: Boolean,
     settingsManager: SettingsManager,
     onHostChange: (String) -> Unit,
@@ -149,6 +150,7 @@ fun SettingsDialog(
                                     portInput = portInput,
                                     tokenInput = tokenInput,
                                     connectionStatus = connectionStatus,
+                                    connectionReadiness = connectionReadiness,
                                     settingsManager = settingsManager,
 
                                     onHostChange = onHostChange,
@@ -198,6 +200,7 @@ fun SettingsDialog(
                                 portInput = portInput,
                                 tokenInput = tokenInput,
                                 connectionStatus = connectionStatus,
+                                connectionReadiness = connectionReadiness,
                                 settingsManager = settingsManager,
 
                                 onHostChange = onHostChange,
@@ -310,6 +313,7 @@ fun ConnectionSection(
     portInput: String,
     tokenInput: String,
     connectionStatus: ConnectionStatus,
+    connectionReadiness: ConnectionReadiness,
     settingsManager: SettingsManager,
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
@@ -345,7 +349,7 @@ fun ConnectionSection(
         ) {
             Text("Profiles", fontSize = 11.sp, color = theme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
             Text(
-                text = if (connectionStatus == ConnectionStatus.CONNECTED) "Connected" else connectionStatus.name.lowercase().replaceFirstChar { it.uppercase() },
+                text = if (connectionStatus == ConnectionStatus.CONNECTED) connectionReadiness.summary else connectionStatus.name.lowercase().replaceFirstChar { it.uppercase() },
                 fontSize = 11.sp,
                 color = theme.onSurfaceVariant
             )
@@ -451,6 +455,11 @@ fun ConnectionSection(
                     modifier = Modifier.weight(2f)
                 )
             }
+
+            ConnectionAssistant(
+                readiness = connectionReadiness,
+                onCheckConnection = onConnectClick,
+            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(

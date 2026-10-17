@@ -4,6 +4,7 @@ use crate::cli::SetupArgs;
 use crate::error::CliError;
 use crate::output::{print_success, token_fingerprint};
 use crate::probe::probe_gateway;
+use crate::tailscale::{TailnetEndpoint, Tailscale};
 use cmux_pocket_cmux::{CmuxBackend, LiveCmuxBackend};
 use cmux_pocket_macos::{
     create_dir_user_only, ensure_token, generate_launchd_plist, get_current_uid,
@@ -33,6 +34,9 @@ pub struct SetupData {
     pub cmux_discovered: bool,
     pub cmux_path: String,
     pub probe_ok: bool,
+    pub gateway_reused: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tailscale: Option<TailnetEndpoint>,
     pub next_steps: String,
 }
 
@@ -125,8 +129,17 @@ pub async fn handle_setup(
     // 7. Optional service start
     let mut service_started = false;
     let mut probe_ok = false;
+    let mut gateway_reused = false;
 
     if !args.no_start {
+        gateway_reused = probe_gateway(&config.host, config.port, &token, Duration::from_secs(2))
+            .await
+            .is_ok_and(|report| report.is_backend_healthy());
+    }
+
+    if gateway_reused {
+        probe_ok = true;
+    } else if !args.no_start {
         let uid = get_current_uid();
         let target = LaunchdTarget::Gui(uid);
 
@@ -164,12 +177,35 @@ pub async fn handle_setup(
         }
     }
 
-    let endpoint = format!("ws://{}:{}", config.host, config.port);
-    let next_steps = format!(
+    let tailscale = if args.tailscale {
+        if !probe_ok {
+            return Err(CliError::DependencyUnavailable(
+                "Gateway workspace handshake failed. Run cmux-pocket gateway probe. If cmux uses 'cmux processes only' socket access, run cmux-pocket service stop, then cmux-pocket gateway run in a dedicated cmux terminal. Keep it running and rerun setup --tailscale in another tab.".to_string(),
+            ));
+        }
+        Some(
+            Tailscale::default()
+                .setup(&config.host, config.port)
+                .await?,
+        )
+    } else {
+        None
+    };
+
+    let endpoint = match &tailscale {
+        Some(tailnet) => format!("wss://{}", tailnet.host),
+        None => format!("ws://{}:{}", config.host, config.port),
+    };
+    let mut next_steps = format!(
         "In Android cmux Pocket, add a connection profile with endpoint '{}' and copy the token from '{}'.",
         endpoint,
         token_path.display()
     );
+    if tailscale.is_some() {
+        next_steps.push_str(" Connect Tailscale on both devices. In Pocket Settings, use Check connection to verify the phone-to-Gateway handshake and workspace access. Tailscale Serve stays configured in the background.");
+    } else {
+        next_steps.push_str(" This loopback endpoint works on the Mac or with USB reverse. For a phone over Tailscale, run cmux-pocket setup --tailscale.");
+    }
 
     let data = SetupData {
         endpoint: endpoint.clone(),
@@ -181,6 +217,8 @@ pub async fn handle_setup(
         cmux_discovered: cmux_found || cmux_ping_ok,
         cmux_path: discovered_cmux.display().to_string(),
         probe_ok,
+        gateway_reused,
+        tailscale,
         next_steps: next_steps.clone(),
     };
 
@@ -201,7 +239,7 @@ pub async fn handle_setup(
         paths.config_file.display(),
         token_path.display(),
         fp,
-        if service_started { "Started & Enabled" } else if args.no_start { "Configured (no-start flag)" } else { "Created" },
+        if gateway_reused { "Existing Gateway reused" } else if service_started { "Started & Enabled" } else if args.no_start { "Configured (no-start flag)" } else { "Created" },
         if cmux_ping_ok { "Ready (ping ok)" } else if cmux_found { "Found" } else { "Not running" },
         discovered_cmux.display(),
         if probe_ok { "OK (workspace access verified)" } else if args.no_start { "Skipped (--no-start)" } else { "Unavailable (run cmux-pocket gateway probe)" },

@@ -8,10 +8,12 @@ import app.cmuxpocket.protocol.WorkspaceListResponse
 import app.cmuxpocket.protocol.WorkspaceSelection
 import app.cmuxpocket.transport.CmuxWebSocketClient
 import app.cmuxpocket.transport.ConnectionStatus
+import app.cmuxpocket.transport.ConnectionFailure
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,6 +44,9 @@ class TerminalViewModel : ViewModel() {
 
     private val _statusMessage = MutableStateFlow<String>("Ready to connect")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
+
+    private val _connectionReadiness = MutableStateFlow(ConnectionReadiness())
+    val connectionReadiness: StateFlow<ConnectionReadiness> = _connectionReadiness.asStateFlow()
 
     private val _workspaces = MutableStateFlow<List<WorkspaceInfo>>(emptyList())
     private val _agentSessionCompletions = MutableSharedFlow<AgentSessionCompleted>(extraBufferCapacity = 32)
@@ -164,10 +169,12 @@ class TerminalViewModel : ViewModel() {
             wsClient.statusFlow.collect { status ->
                 when (status) {
                     ConnectionStatus.CONNECTING -> {
+                        _connectionReadiness.value = ConnectionReadiness(started = true)
                         _syncPhase.value = AppSyncPhase.CONNECTING
                         _statusMessage.value = "Connecting..."
                     }
                     ConnectionStatus.AUTHENTICATING -> {
+                        _connectionReadiness.value = ConnectionReadiness(step = ConnectionStep.AUTHENTICATION, started = true)
                         _syncPhase.value = AppSyncPhase.AUTHENTICATING
                         _statusMessage.value = "Authenticating..."
                     }
@@ -183,13 +190,37 @@ class TerminalViewModel : ViewModel() {
                         subscribeAndBootstrap(connectionGeneration)
                     }
                     ConnectionStatus.ERROR -> {
+                        currentBootstrapJob?.cancel()
+                        connectionGeneration++
+                        val authFailed = wsClient.connectionFailure == ConnectionFailure.AUTHENTICATION
+                        val authTimedOut = wsClient.connectionFailure == ConnectionFailure.AUTHENTICATION_TIMEOUT
+                        if (authFailed) manualDisconnect = true
+                        _connectionReadiness.value = ConnectionReadiness(
+                            step = if (authFailed || authTimedOut) ConnectionStep.AUTHENTICATION else ConnectionStep.NETWORK,
+                            started = true,
+                            problem = when (wsClient.connectionFailure) {
+                                ConnectionFailure.AUTHENTICATION -> "Gateway rejected the token"
+                                ConnectionFailure.AUTHENTICATION_TIMEOUT -> "Gateway did not answer authentication"
+                                ConnectionFailure.TLS -> "Could not establish a trusted HTTPS connection"
+                                ConnectionFailure.DNS -> "Gateway hostname could not be resolved"
+                                else -> "Cannot reach the Gateway"
+                            },
+                        )
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
-                        _statusMessage.value = "Connection error"
+                        _statusMessage.value = _connectionReadiness.value.summary
                         awaitingReplaySurfaces.clear()
                         mutationTracker.clear()
                         scheduleReconnect()
                     }
                     ConnectionStatus.DISCONNECTED -> {
+                        currentBootstrapJob?.cancel()
+                        connectionGeneration++
+                        if (connectionValidationError != null || _connectionReadiness.value.started) {
+                            _connectionReadiness.value = ConnectionReadiness(
+                                started = true,
+                                problem = connectionValidationError ?: "Gateway disconnected",
+                            )
+                        }
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
                         _statusMessage.value = connectionValidationError ?: "Disconnected"
                         awaitingReplaySurfaces.clear()
@@ -256,6 +287,7 @@ class TerminalViewModel : ViewModel() {
             wsClient.disconnect()
             _syncPhase.value = AppSyncPhase.DISCONNECTED
             _statusMessage.value = connectionValidationError!!
+            _connectionReadiness.value = ConnectionReadiness(started = true, problem = connectionValidationError)
         }
     }
 
@@ -343,10 +375,16 @@ class TerminalViewModel : ViewModel() {
         currentBootstrapJob?.cancel()
         currentBootstrapJob = viewModelScope.launch {
             try {
-                wsClient.subscribeEvents(listOf("terminal.render_grid", "mobile.sync.delta", "workspace.tree", "agent.session.completed"))
-                val wsElement = wsClient.callRpc("mobile.workspace.list")
+                val listResp = verifyGatewayConnection(
+                    callRpc = { method -> wsClient.callRpc(method) },
+                    subscribe = {
+                        wsClient.subscribeEvents(listOf("terminal.render_grid", "mobile.sync.delta", "workspace.tree", "agent.session.completed"))
+                    },
+                    onStep = { step ->
+                        _connectionReadiness.value = ConnectionReadiness(step = step, started = true)
+                    },
+                )
                 if (generation == connectionGeneration) {
-                    val listResp = json.decodeFromJsonElement(WorkspaceListResponse.serializer(), wsElement)
                     updateWorkspaces(listResp.workspaces, syncReconciledFocus = false)
                     _selectedSurfaceId.value?.let { surfaceId ->
                         wsClient.focusSurface(surfaceId)
@@ -354,13 +392,27 @@ class TerminalViewModel : ViewModel() {
                     }
                     _syncPhase.value = AppSyncPhase.READY
                     _statusMessage.value = "Ready"
+                    _connectionReadiness.value = ConnectionReadiness(
+                        step = ConnectionStep.READY,
+                        started = true,
+                        workspaceCount = listResp.workspaces.size,
+                        terminalCount = listResp.workspaces.sumOf { ws -> ws.surfaces.count { it.type == "terminal" } },
+                    )
                     Log.i(tag, "Bootstrap complete for generation $generation! Total workspaces=${listResp.workspaces.size}")
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 if (generation == connectionGeneration) {
                     Log.e(tag, "Failed in bootstrap", e)
                     _syncPhase.value = AppSyncPhase.DISCONNECTED
                     _statusMessage.value = "Bootstrap failed: ${e.message}"
+                    _connectionReadiness.value = _connectionReadiness.value.failed(
+                        when (_connectionReadiness.value.step) {
+                            ConnectionStep.WORKSPACES -> "Gateway connected, but cmux workspaces are unavailable"
+                            ConnectionStep.GATEWAY -> "Gateway did not complete the readiness handshake"
+                            else -> "Workspace synchronization failed"
+                        }
+                    )
                 }
             }
         }

@@ -5,6 +5,7 @@ pub mod commands;
 pub mod error;
 pub mod output;
 pub mod probe;
+pub mod tailscale;
 
 pub use cli::{Cli, Commands};
 pub use error::{CliError, CliExitCode};

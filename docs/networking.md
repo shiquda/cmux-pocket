@@ -89,6 +89,55 @@ pbcopy < "$(cmux-pocket token path)"
 
 ## 2. Choose a secure boundary
 
+### Tailscale connection assistant
+
+Install Tailscale on the Mac and Android phone. Connect both to the same tailnet, enable MagicDNS and HTTPS certificates in Tailscale, and make the `tailscale` CLI available on the Mac. Keep the Mac awake with cmux running.
+
+Run:
+
+```bash
+cmux-pocket setup --tailscale
+```
+
+This command performs the existing Gateway setup and an authenticated workspace query. It reuses a healthy running Gateway, including one running in a cmux terminal. Otherwise it attempts to start the login service. Once workspace access succeeds, it checks Tailscale and configures background HTTPS Serve on port `443`, forwarding to the configured loopback Gateway address and port. It verifies the resulting Serve configuration before printing a `wss://` phone endpoint. It does not start another listener if a healthy Gateway already exists, rotate your token, overwrite an existing conflicting root route, or enable public Funnel.
+
+If Tailscale asks you to enable Serve for the tailnet, run `tailscale serve` with your local Gateway port once and follow its HTTPS setup link. Then rerun `cmux-pocket setup --tailscale`. Commands have a bounded wait; an incomplete setup reports a failure with recovery instructions.
+
+If Gateway workspace verification fails, follow [cmux socket access](#cmux-socket-access). The default cmux process restriction may require a foreground Gateway:
+
+```bash
+# In a dedicated cmux terminal:
+cmux-pocket service stop
+cmux-pocket gateway run
+
+# In another terminal while the first stays open:
+cmux-pocket setup --tailscale
+```
+
+On Android, open **Settings → Connection & Host**, enter the printed phone endpoint (port `443`) and the Gateway token from the path reported by setup, then tap **Check connection**. Existing profiles remain encrypted on the phone. The assistant checks the entered values by reconnecting the active session. It never sends terminal input or changes Mac-side terminal focus as part of the check.
+
+The checklist shows where the handshake stopped:
+
+| Step | What success proves | Recovery if it fails |
+| --- | --- | --- |
+| Reach Gateway | The phone opened a WebSocket to the configured endpoint | Check host/port, Mac awake state, Tailscale on both devices, and Serve configuration |
+| Accept token | The Gateway accepted the phone credential | Copy the existing Gateway token again; it is separate from a cmux automation password |
+| Verify Gateway response | The endpoint responds to the Pocket status RPC | Check reverse-proxy forwarding and `cmux-pocket gateway probe` |
+| Subscribe to workspace updates | The session subscribed before fetching its workspace baseline | Reconnect; if it persists, update the Gateway and run its probe |
+| Read cmux workspaces | The Gateway process can query cmux | Open cmux and check socket access permissions; run the Gateway from a cmux terminal if required |
+
+An empty but valid workspace list passes the handshake and shows zero workspaces/terminals. Authentication with a failed workspace query does **not** show Ready. Failures remain visible on the terminal screen and in Settings, with step-specific guidance. A network failure alone cannot prove whether the phone VPN, host VPN, or Gateway is stopped, so Pocket presents these as checks instead of guessing a cause. **Open Tailscale** is available when the Android Tailscale app is installed; VPN connection and sign-in remain controlled by Tailscale.
+
+Use these Mac commands to inspect the setup later:
+
+```bash
+cmux-pocket gateway probe
+tailscale status
+tailscale serve status
+```
+
+Tailscale Serve keeps its background configuration, but the Mac, cmux, VPN, and Gateway must remain running. This version continues to use the existing manually entered Gateway token; QR pairing and device-specific credentials are separate work.
+
 ### LAN with a TLS reverse proxy
 
 Use a reverse proxy on the Mac or another host that is reachable from the phone over the LAN. The proxy should:

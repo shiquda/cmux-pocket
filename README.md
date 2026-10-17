@@ -43,6 +43,12 @@ The Gateway listens on `127.0.0.1` only. Normal remote or LAN use therefore need
 
 The app should show the Workspaces and Tabs currently available in cmux. See the [networking and setup guide](docs/networking.md) for LAN, reverse-proxy, tunnel, VPN, token, CLI, and troubleshooting details.
 
+### Tailscale connection assistant
+
+If you use Tailscale, connect the Mac and phone to the same tailnet and run `cmux-pocket setup --tailscale` on the Mac. The command verifies Gateway workspace access, sets up private HTTPS forwarding, and prints the phone endpoint. It preserves the existing token and reuses a healthy Gateway. Existing conflicting Tailscale routes are left unchanged.
+
+In Android **Settings → Connection & Host**, enter that endpoint and token, then tap **Check connection**. The checklist verifies reachability, authentication, Gateway response, workspace access, and update subscription. **Ready** means the workspace query succeeded; an authenticated socket alone is insufficient. **Host setup** provides the setup command and **Open Tailscale** opens the installed VPN app. See [Tailscale setup and recovery](docs/networking.md#tailscale-connection-assistant).
+
 ### Temporary development/testing path: ADB reverse
 
 ADB reverse is useful for emulator and local device verification, but it is not the recommended user deployment:
