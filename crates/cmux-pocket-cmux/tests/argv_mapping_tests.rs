@@ -81,68 +81,206 @@ fn test_send_input_special_keys() {
 
     // Escape
     assert_eq!(
-        send_input_args(surf, "\u{001b}"),
+        send_input_args(
+            surf,
+            "\u{001b}",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "escape"]
     );
 
     // Tab
     assert_eq!(
-        send_input_args(surf, "\t"),
+        send_input_args(
+            surf,
+            "\t",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "tab"]
     );
 
     // Up / Down / Right / Left
     assert_eq!(
-        send_input_args(surf, "\u{001b}[A"),
+        send_input_args(
+            surf,
+            "\u{001b}[A",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "up"]
     );
     assert_eq!(
-        send_input_args(surf, "\u{001b}[B"),
+        send_input_args(
+            surf,
+            "\u{001b}[B",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "down"]
     );
     assert_eq!(
-        send_input_args(surf, "\u{001b}[C"),
+        send_input_args(
+            surf,
+            "\u{001b}[C",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "right"]
     );
     assert_eq!(
-        send_input_args(surf, "\u{001b}[D"),
+        send_input_args(
+            surf,
+            "\u{001b}[D",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "left"]
     );
 
     // Ctrl-C / Ctrl-D
     assert_eq!(
-        send_input_args(surf, "\u{0003}"),
+        send_input_args(
+            surf,
+            "\u{0003}",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "ctrl-c"]
     );
     assert_eq!(
-        send_input_args(surf, "\u{0004}"),
+        send_input_args(
+            surf,
+            "\u{0004}",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "ctrl-d"]
     );
 
     // Backspace (\x7f and \x08)
     assert_eq!(
-        send_input_args(surf, "\u{007f}"),
+        send_input_args(
+            surf,
+            "\u{007f}",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "backspace"]
     );
     assert_eq!(
-        send_input_args(surf, "\u{0008}"),
+        send_input_args(
+            surf,
+            "\u{0008}",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "backspace"]
     );
 
     // Enter (\n and \r)
     assert_eq!(
-        send_input_args(surf, "\n"),
+        send_input_args(
+            surf,
+            "\n",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "enter"]
     );
     assert_eq!(
-        send_input_args(surf, "\r"),
+        send_input_args(
+            surf,
+            "\r",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                ..Default::default()
+            }
+        ),
         vec!["send-key", "--surface", surf, "enter"]
     );
 
     // Literal text
     assert_eq!(
-        send_input_args(surf, "git status"),
-        vec!["send", "--surface", surf, "git status"]
+        send_input_args(surf, "git status", TerminalInputOptions::default()),
+        vec!["send", "--surface", surf, "--", "git status"]
+    );
+}
+
+#[test]
+fn test_literal_text_is_never_parsed_as_a_key_or_option() {
+    let surf = "surface:99";
+
+    assert_eq!(
+        send_input_args(surf, "--force", TerminalInputOptions::default()),
+        vec!["send", "--surface", surf, "--", "--force"]
+    );
+    assert_eq!(
+        send_input_args(surf, "\n", TerminalInputOptions::default()),
+        vec!["send", "--surface", surf, "--", "\n"]
+    );
+}
+
+#[test]
+fn test_paste_and_remote_takeover_are_explicit() {
+    let surf = "surface:99";
+
+    assert_eq!(
+        send_input_args(
+            surf,
+            "hello",
+            TerminalInputOptions {
+                paste: true,
+                ..Default::default()
+            },
+        ),
+        vec!["send", "--surface", surf, "--paste", "--", "hello"]
+    );
+    assert_eq!(
+        send_input_args(
+            surf,
+            "\\n",
+            TerminalInputOptions {
+                paste: true,
+                ..Default::default()
+            },
+        ),
+        vec!["send", "--surface", surf, "--paste", "--", "\\n"]
+    );
+    assert_eq!(
+        send_input_args(
+            surf,
+            "\u{001b}[A",
+            TerminalInputOptions {
+                kind: TerminalInputKind::Key,
+                force: true,
+                ..Default::default()
+            },
+        ),
+        vec!["send-key", "--surface", surf, "--force", "up"]
     );
 }
 

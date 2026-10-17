@@ -224,10 +224,19 @@ class CmuxWebSocketClient(
         }
     }
 
-    suspend fun sendTerminalInput(surfaceId: String, text: String) {
+    suspend fun sendTerminalInput(
+        surfaceId: String,
+        text: String,
+        inputKind: String,
+        remoteTakeover: Boolean,
+        paste: Boolean,
+    ) {
         val params = buildJsonObject {
             put("surface_id", surfaceId)
             put("text", text)
+            put("input_kind", inputKind)
+            put("remote_takeover", remoteTakeover)
+            put("paste", paste)
             put("client_id", "android-client")
         }
         callRpc("mobile.terminal.input", params)

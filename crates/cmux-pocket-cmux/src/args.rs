@@ -5,6 +5,8 @@
 
 use serde_json::json;
 
+use crate::backend::{TerminalInputKind, TerminalInputOptions};
+
 /// Constructs arguments for `cmux ping`.
 pub fn ping_args() -> Vec<String> {
     vec!["ping".to_string()]
@@ -64,76 +66,53 @@ pub fn close_surface_args(surface_id: &str, workspace_key: Option<&str>) -> Vec<
     args
 }
 
-/// Maps terminal text input to either `send-key` for control/special keys or `send` for literal text.
-pub fn send_input_args(surface_id: &str, text: &str) -> Vec<String> {
-    match text {
-        "\u{001b}" => vec![
+/// Maps an intentional control key to `send-key`; all other input is literal
+/// text passed after `--` so it can never be parsed as a cmux option.
+pub fn send_input_args(surface_id: &str, text: &str, options: TerminalInputOptions) -> Vec<String> {
+    let key_name = match options.kind {
+        TerminalInputKind::Text => None,
+        TerminalInputKind::Key => match text {
+            "\u{001b}" => Some("escape"),
+            "\t" => Some("tab"),
+            "\u{001b}[A" => Some("up"),
+            "\u{001b}[B" => Some("down"),
+            "\u{001b}[C" => Some("right"),
+            "\u{001b}[D" => Some("left"),
+            "\u{0003}" => Some("ctrl-c"),
+            "\u{0004}" => Some("ctrl-d"),
+            "\u{007f}" | "\u{0008}" => Some("backspace"),
+            "\n" | "\r" => Some("enter"),
+            _ => None,
+        },
+    };
+
+    if let Some(key) = key_name {
+        let mut args = vec![
             "send-key".to_string(),
             "--surface".to_string(),
             surface_id.to_string(),
-            "escape".to_string(),
-        ],
-        "\t" => vec![
-            "send-key".to_string(),
-            "--surface".to_string(),
-            surface_id.to_string(),
-            "tab".to_string(),
-        ],
-        "\u{001b}[A" => vec![
-            "send-key".to_string(),
-            "--surface".to_string(),
-            surface_id.to_string(),
-            "up".to_string(),
-        ],
-        "\u{001b}[B" => vec![
-            "send-key".to_string(),
-            "--surface".to_string(),
-            surface_id.to_string(),
-            "down".to_string(),
-        ],
-        "\u{001b}[C" => vec![
-            "send-key".to_string(),
-            "--surface".to_string(),
-            surface_id.to_string(),
-            "right".to_string(),
-        ],
-        "\u{001b}[D" => vec![
-            "send-key".to_string(),
-            "--surface".to_string(),
-            surface_id.to_string(),
-            "left".to_string(),
-        ],
-        "\u{0003}" => vec![
-            "send-key".to_string(),
-            "--surface".to_string(),
-            surface_id.to_string(),
-            "ctrl-c".to_string(),
-        ],
-        "\u{0004}" => vec![
-            "send-key".to_string(),
-            "--surface".to_string(),
-            surface_id.to_string(),
-            "ctrl-d".to_string(),
-        ],
-        "\u{007f}" | "\u{0008}" => vec![
-            "send-key".to_string(),
-            "--surface".to_string(),
-            surface_id.to_string(),
-            "backspace".to_string(),
-        ],
-        "\n" | "\r" => vec![
-            "send-key".to_string(),
-            "--surface".to_string(),
-            surface_id.to_string(),
-            "enter".to_string(),
-        ],
-        _ => vec![
-            "send".to_string(),
-            "--surface".to_string(),
-            surface_id.to_string(),
-            text.to_string(),
-        ],
+        ];
+        if options.force {
+            args.push("--force".to_string());
+        }
+        args.push(key.to_string());
+        return args;
     }
+
+    let mut args = vec![
+        "send".to_string(),
+        "--surface".to_string(),
+        surface_id.to_string(),
+    ];
+    if options.force {
+        args.push("--force".to_string());
+    }
+    if options.paste && text.chars().count() > 1 {
+        args.push("--paste".to_string());
+    }
+    args.push("--".to_string());
+    args.push(text.to_string());
+    args
 }
 
 /// Constructs arguments for `cmux rpc terminal.replay <json_payload>`.

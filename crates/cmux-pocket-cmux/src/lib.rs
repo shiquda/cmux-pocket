@@ -9,7 +9,7 @@ pub mod mock;
 pub mod tree_parser;
 
 pub use args::*;
-pub use backend::CmuxBackend;
+pub use backend::{CmuxBackend, TerminalInputKind, TerminalInputOptions};
 pub use error::CmuxError;
 pub use events::CmuxEventStream;
 pub use live::{LiveCmuxBackend, DEFAULT_COMMAND_TIMEOUT};

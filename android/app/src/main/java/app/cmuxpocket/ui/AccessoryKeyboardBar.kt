@@ -14,6 +14,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+@Composable
+fun HostInputProtectedBanner(
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Text(
+            text = "Host input is protected. Enable Take over to send to this tab.",
+            fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+    }
+}
+
 /**
  * Persistent accessory key strip shown below the terminal stage.
  *
@@ -24,6 +41,9 @@ import androidx.compose.ui.unit.sp
 fun AccessoryKeyboardBar(
     onSendKey: (String) -> Unit,
     onOpenKeyboardPanel: () -> Unit,
+    remoteTakeoverActive: Boolean,
+    onEnableRemoteTakeover: () -> Unit,
+    onDisableRemoteTakeover: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val theme = CmuxTheme.colors
@@ -48,6 +68,28 @@ fun AccessoryKeyboardBar(
                 tint = theme.primary,
                 modifier = Modifier.size(22.dp)
             )
+        }
+
+        VerticalDivider(
+            color = theme.divider,
+            modifier = Modifier
+                .height(24.dp)
+                .padding(horizontal = 4.dp)
+        )
+
+        if (remoteTakeoverActive) {
+            Text(
+                text = "TAKEOVER",
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 11.sp,
+            )
+            TextButton(onClick = onDisableRemoteTakeover) {
+                Text("Stop", fontSize = 11.sp)
+            }
+        } else {
+            TextButton(onClick = onEnableRemoteTakeover) {
+                Text("Take over", fontSize = 11.sp)
+            }
         }
 
         VerticalDivider(

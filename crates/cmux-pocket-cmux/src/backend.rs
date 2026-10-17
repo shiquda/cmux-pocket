@@ -6,6 +6,28 @@ use cmux_pocket_protocol::{BackendHealth, RenderGridFrame, SurfaceInfo, Workspac
 use crate::error::CmuxError;
 use crate::events::CmuxEventStream;
 
+/// How a remote client intends cmux to deliver terminal input.
+///
+/// `Text` is always sent as a positional argument after `--`, while `Key` is
+/// reserved for an intentional control key selected by the client UI.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TerminalInputKind {
+    #[default]
+    Text,
+    Key,
+}
+
+/// Explicit, opt-in delivery options for one terminal input request.
+///
+/// A caller must never infer `force` from a failed input. It is only used by
+/// a user-enabled, temporary remote-takeover mode.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TerminalInputOptions {
+    pub kind: TerminalInputKind,
+    pub force: bool,
+    pub paste: bool,
+}
+
 /// Core interface for cmux backend implementations (live subprocess or mock).
 #[async_trait]
 pub trait CmuxBackend: Send + Sync {
@@ -41,6 +63,19 @@ pub trait CmuxBackend: Send + Sync {
 
     /// Sends literal text or control keys to a surface.
     async fn send_input(&self, surface_id: &str, text: &str) -> Result<(), CmuxError>;
+
+    /// Sends terminal input with explicit delivery options.
+    ///
+    /// Implementations that do not support the newer options retain the safe
+    /// default behavior: they receive ordinary input with no forced takeover.
+    async fn send_input_with_options(
+        &self,
+        surface_id: &str,
+        text: &str,
+        _options: TerminalInputOptions,
+    ) -> Result<(), CmuxError> {
+        self.send_input(surface_id, text).await
+    }
 
     /// Handles terminal scrolling for a surface, returning the updated frame.
     async fn handle_scroll(
