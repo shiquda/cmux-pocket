@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -258,6 +259,7 @@ fun CmuxApp(
 
     var isSidebarExpanded by remember { mutableStateOf(false) }
     var showWorkspaceSheet by remember { mutableStateOf(false) }
+    var showSessionSurfaceDrawer by remember { mutableStateOf(false) }
     var showNewWorkspaceDialog by remember { mutableStateOf(false) }
     var showNewSurfaceDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -324,47 +326,32 @@ fun CmuxApp(
                                 terminalInputView?.requestKeyboard()
                             },
                             onTerminalScroll = viewModel::scrollTerminal,
-                            onNewSurfaceClick = { showNewSurfaceDialog = true }
+                            onNewSurfaceClick = { showNewSurfaceDialog = true },
+                            onSendKey = { key -> viewModel.sendInput(key) },
+                            onClearScreen = { viewModel.clearScrollback() }
                         )
                     }
 
                     AccessoryKeyboardBar(
                         onSendKey = { key -> viewModel.sendInput(key) },
-                        onOpenKeyboardPanel = { showKeyboardPanel = true }
+                        onOpenKeyboardPanel = { showKeyboardPanel = true },
+                        onTabsClick = { showSessionSurfaceDrawer = true },
+                        onSettingsClick = { showSettingsDialog = true },
+                        surfaceCount = activeSurfaces.size
                     )
                 }
             }
         } else {
-            // PORTRAIT LAYOUT: Standard TopBar + Horizontal Tab Strip + Bottom Accessory Bar
+            // PORTRAIT LAYOUT: Proposal C (Terminal Pure · 极致沉浸悬浮岛)
+            // 0dp fixed top bar consumption: terminal canvas 直接贴顶
             Scaffold(
-                topBar = {
-                    Column {
-                        WorkspaceTopBar(
-                            workspace = activeWorkspace,
-                            connectionStatus = status,
-                            statusMessage = statusMsg,
-                            onWorkspaceClick = { showWorkspaceSheet = true },
-                            onNewSurfaceClick = { showNewSurfaceDialog = true },
-                            onConnectSettingsClick = { showSettingsDialog = true },
-                            onReconnectClick = {
-                                viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
-                            }
-                        )
-
-                        ConnectionReadinessNotice(connectionReadiness) { showSettingsDialog = true }
-                        SurfaceTabBar(
-                            surfaces = activeSurfaces,
-                            selectedSurfaceId = selectedSurfaceId,
-                            onSelectSurface = { surfaceId -> viewModel.selectSurface(surfaceId) },
-                            onCloseSurface = { surfaceId -> requestCloseSurface(surfaceId) },
-                            onNewSurface = { showNewSurfaceDialog = true }
-                        )
-                    }
-                },
                 bottomBar = {
                     AccessoryKeyboardBar(
                         onSendKey = { key -> viewModel.sendInput(key) },
-                        onOpenKeyboardPanel = { showKeyboardPanel = true }
+                        onOpenKeyboardPanel = { showKeyboardPanel = true },
+                        onTabsClick = { showSessionSurfaceDrawer = true },
+                        onSettingsClick = { showSettingsDialog = true },
+                        surfaceCount = activeSurfaces.size
                     )
                 },
                 containerColor = theme.background
@@ -374,6 +361,7 @@ fun CmuxApp(
                         .fillMaxSize()
                         .padding(paddingValues)
                 ) {
+                    // Full Viewport Terminal Stage
                     TerminalStage(
                         surfaces = activeSurfaces,
                         activeScreenState = activeScreenState,
@@ -385,7 +373,21 @@ fun CmuxApp(
                             terminalInputView?.requestKeyboard()
                         },
                         onTerminalScroll = viewModel::scrollTerminal,
-                        onNewSurfaceClick = { showNewSurfaceDialog = true }
+                        onNewSurfaceClick = { showNewSurfaceDialog = true },
+                        onSendKey = { key -> viewModel.sendInput(key) },
+                        onClearScreen = { viewModel.clearScrollback() }
+                    )
+
+                    // Minimalist frosted Floating Island Pill overlaid at top center
+                    FloatingIslandPill(
+                        connectionStatus = status,
+                        activeWorkspace = activeWorkspace,
+                        activeSurface = activeSurfaces.firstOrNull { it.id == selectedSurfaceId } ?: activeSurfaces.firstOrNull(),
+                        onClick = { showSessionSurfaceDrawer = true },
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 8.dp)
                     )
                 }
             }
@@ -416,6 +418,22 @@ fun CmuxApp(
             onSelectWorkspace = { key -> viewModel.selectWorkspace(key) },
             onNewWorkspaceClick = { showNewWorkspaceDialog = true },
             onDismissRequest = { showWorkspaceSheet = false }
+        )
+    }
+    if (showSessionSurfaceDrawer) {
+        SessionSurfaceDrawer(
+            workspaces = workspaces,
+            activeWorkspace = activeWorkspace,
+            surfaces = activeSurfaces,
+            selectedSurfaceId = selectedSurfaceId,
+            hostLabel = hostInput,
+            onSelectSurface = { surfaceId -> viewModel.selectSurface(surfaceId) },
+            onCloseSurface = { surfaceId -> requestCloseSurface(surfaceId) },
+            onNewSurfaceClick = { showNewSurfaceDialog = true },
+            onSelectWorkspace = { key -> viewModel.selectWorkspace(key) },
+            onNewWorkspaceClick = { showNewWorkspaceDialog = true },
+            onSettingsClick = { showSettingsDialog = true },
+            onDismissRequest = { showSessionSurfaceDrawer = false }
         )
     }
 
@@ -501,6 +519,7 @@ fun CmuxApp(
                 viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
             },
             onScanQrClick = onScanQrClick,
+            onClearScrollback = { viewModel.clearScrollback() },
             onDismissRequest = { showSettingsDialog = false }
         )
     }

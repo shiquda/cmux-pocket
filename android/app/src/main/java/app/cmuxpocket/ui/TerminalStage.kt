@@ -29,7 +29,9 @@ fun TerminalStage(
     modifier: Modifier = Modifier,
     displayPreference: TerminalDisplayPreference = TerminalDisplayPreference(),
     onDisplayPreferenceChange: (TerminalDisplayPreference) -> Unit = {},
-    themeHex: String = "#1E1E1E"
+    themeHex: String = "#1E1E1E",
+    onSendKey: (String) -> Unit = {},
+    onClearScreen: () -> Unit = {}
 ) {
     val theme = CmuxTheme.colors
     val stageBg = try {
@@ -99,6 +101,8 @@ fun TerminalStage(
                 displayPreference = displayPreference,
                 onDisplayPreferenceChange = onDisplayPreferenceChange,
                 themeHex = themeHex,
+                onSendKey = onSendKey,
+                onClearScreen = onClearScreen,
                 modifier = Modifier.fillMaxSize()
             )
         }

@@ -2,6 +2,7 @@ package app.cmuxpocket.transport
 
 import app.cmuxpocket.engine.NumericTraceHelper
 import app.cmuxpocket.protocol.*
+import app.cmuxpocket.diagnostics.DiagnosticsManager
 import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -95,6 +96,7 @@ class CmuxWebSocketClient(
         connectionFailure = null
         _statusFlow.value = ConnectionStatus.CONNECTING
         Log.i(tag, "Connecting to gateway...")
+        DiagnosticsManager.log("WS", "Connecting to $url", listOf(token))
 
         webSocket = okHttpClient.newWebSocket(request, this)
         connectionTimeoutJob?.cancel()
@@ -116,6 +118,7 @@ class CmuxWebSocketClient(
 
     fun disconnect() {
         Log.i(tag, "Disconnecting...")
+        DiagnosticsManager.log("WS", "Disconnecting...")
         connectionTimeoutJob?.cancel()
         webSocket?.close(1000, "Normal Closure")
         webSocket = null
@@ -134,6 +137,7 @@ class CmuxWebSocketClient(
         val authReq = AuthRequest(type = "auth", token = authToken, clientId = "android-${UUID.randomUUID()}")
         val authJson = json.encodeToString(AuthRequest.serializer(), authReq)
         webSocket.send(authJson)
+        DiagnosticsManager.log("WS", "WebSocket onOpen: sent auth frame", listOf(authToken))
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
@@ -157,6 +161,7 @@ class CmuxWebSocketClient(
                     connectionTimeoutJob?.cancel()
                     Log.i(tag, "Auth success! Changing status to CONNECTED")
                     _statusFlow.value = ConnectionStatus.CONNECTED
+                    DiagnosticsManager.log("AUTH", "Authentication success (CONNECTED)")
                     return
                 } else if (msgType == "auth_error") {
                     Log.e(tag, "Auth error received from server")
@@ -165,6 +170,7 @@ class CmuxWebSocketClient(
                     webSocket = null
                     connectionFailure = ConnectionFailure.AUTHENTICATION
                     _statusFlow.value = ConnectionStatus.ERROR
+                    DiagnosticsManager.log("AUTH", "Authentication failed (auth_error)")
                     return
                 }
             }
@@ -232,6 +238,7 @@ class CmuxWebSocketClient(
             is java.net.UnknownHostException -> ConnectionFailure.DNS
             else -> ConnectionFailure.NETWORK
         }
+        DiagnosticsManager.log("WS", "WebSocket error: ${t.message}")
         _statusFlow.value = ConnectionStatus.ERROR
         pendingRequests.forEach { (_, deferred) ->
             deferred.completeExceptionally(t)
@@ -252,6 +259,7 @@ class CmuxWebSocketClient(
             _statusFlow.value = ConnectionStatus.ERROR
             return
         }
+        DiagnosticsManager.log("WS", "WebSocket onClosed code=$code reason=$reason")
         _statusFlow.value = ConnectionStatus.DISCONNECTED
     }
 
@@ -263,6 +271,7 @@ class CmuxWebSocketClient(
 
         val jsonStr = json.encodeToString(JsonRpcRequest.serializer(), rpcReq)
         Log.d(tag, "callRpc [$method] id=$reqId")
+        DiagnosticsManager.log("RPC", "callRpc [$method] id=$reqId")
         val sent = webSocket?.send(jsonStr) ?: false
         if (!sent) {
             pendingRequests.remove(reqId)

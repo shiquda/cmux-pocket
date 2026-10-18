@@ -177,7 +177,9 @@ fun TerminalCanvas(
     modifier: Modifier = Modifier,
     displayPreference: TerminalDisplayPreference = TerminalDisplayPreference(),
     onDisplayPreferenceChange: (TerminalDisplayPreference) -> Unit = {},
-    themeHex: String = "#1E1E1E"
+    themeHex: String = "#1E1E1E",
+    onSendKey: (String) -> Unit = {},
+    onClearScreen: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -194,6 +196,7 @@ fun TerminalCanvas(
 
     var selectionState by remember { mutableStateOf<TerminalSelectionState?>(null) }
     var selectionBackgroundColor by remember { mutableStateOf<Int?>(null) }
+    var contextualBubbleOffset by remember { mutableStateOf<Offset?>(null) }
 
     val surfaceId = screenState.surfaceId
     val isConfirmedPrimary = screenState.activeScreen == "primary"
@@ -364,8 +367,8 @@ fun TerminalCanvas(
             .pointerInput(surfaceId, isSelecting) {
                 if (!isSelecting) {
                     detectTapGestures(
-                        onDoubleTap = {
-                            currentOnDisplayPreferenceChange(currentDisplayPreference.copy(fitWidth = true, panX = 0f, panY = null))
+                        onDoubleTap = { offset ->
+                            contextualBubbleOffset = offset
                         },
                         onLongPress = { offset ->
                             val geom = currentGeometry ?: return@detectTapGestures
@@ -381,14 +384,20 @@ fun TerminalCanvas(
                                 panY = geom.originY - (geom.canvasHeight - geom.rows * geom.rowHeight)
                             ))
                             selectionState = beginWordSelection(viewport, geom.pointToCell(offset))
+                            contextualBubbleOffset = offset
                         },
                         onTap = { offset ->
-                            if (offset.y < canvasSizePx.height) currentOnTap()
+                            if (contextualBubbleOffset != null) {
+                                contextualBubbleOffset = null
+                            } else if (offset.y < canvasSizePx.height) {
+                                currentOnTap()
+                            }
                         }
                     )
                 } else {
                     detectTapGestures(
                         onTap = { offset ->
+                            contextualBubbleOffset = null
                             val currentSel = currentSelectionState ?: return@detectTapGestures
                             val geom = currentGeometry ?: return@detectTapGestures
                             if (!geom.containsGridPoint(offset) || !currentSel.contains(geom.pointToCell(offset))) {
@@ -741,6 +750,67 @@ fun TerminalCanvas(
                     )
                 }
             }
+        }
+
+        val bubblePos = contextualBubbleOffset
+        if (bubblePos != null) {
+            val bubbleWidthPx = with(density) { 190.dp.toPx() }
+            val bubbleHeightPx = with(density) { 180.dp.toPx() }
+            val clampedX = (bubblePos.x - bubbleWidthPx / 2f).coerceIn(12f, (canvasSizePx.width - bubbleWidthPx - 12f).coerceAtLeast(12f))
+            val clampedY = (bubblePos.y - bubbleHeightPx - 16f).let { y ->
+                if (y < 12f) (bubblePos.y + 16f).coerceIn(12f, (canvasSizePx.height - bubbleHeightPx - 12f).coerceAtLeast(12f))
+                else y
+            }
+
+            ContextualActionBubble(
+                offset = IntOffset(clampedX.roundToInt(), clampedY.roundToInt()),
+                hasSelection = selectionState != null,
+                onCopy = {
+                    val currentSel = selectionState
+                    val textToCopy = if (currentSel != null) {
+                        extractSelectedText(currentSel)
+                    } else {
+                        currentEffectiveGrid.joinToString("\n") { row ->
+                            row.map { it.text }.joinToString("").trimEnd()
+                        }.trim()
+                    }
+                    if (textToCopy.isNotEmpty()) {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("cmux terminal content", textToCopy)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "已复制选中终端内容", Toast.LENGTH_SHORT).show()
+                    }
+                    clearSelection()
+                    contextualBubbleOffset = null
+                },
+                onPaste = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = clipboard.primaryClip
+                    if (clip != null && clip.itemCount > 0) {
+                        val pasteText = clip.getItemAt(0).text?.toString().orEmpty()
+                        if (pasteText.isNotEmpty()) {
+                            onSendKey(pasteText)
+                            Toast.makeText(context, "已粘贴剪贴板内容", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    contextualBubbleOffset = null
+                },
+                onInterrupt = {
+                    onSendKey("\u0003")
+                    Toast.makeText(context, "已发送中断 (Ctrl+C)", Toast.LENGTH_SHORT).show()
+                    contextualBubbleOffset = null
+                },
+                onClear = {
+                    onClearScreen()
+                    onSendKey("\u000c")
+                    Toast.makeText(context, "终端画布已清屏", Toast.LENGTH_SHORT).show()
+                    clearSelection()
+                    contextualBubbleOffset = null
+                },
+                onDismiss = {
+                    contextualBubbleOffset = null
+                }
+            )
         }
 
         Column(

@@ -1,5 +1,12 @@
 package app.cmuxpocket.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.platform.LocalContext
+import app.cmuxpocket.diagnostics.DiagnosticsManager
 import app.cmuxpocket.transport.ConnectionStatus
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -65,11 +72,21 @@ fun SettingsDialog(
     onThemeModeChange: (ThemeMode) -> Unit,
     onConnectClick: () -> Unit,
     onScanQrClick: () -> Unit = {},
+    onClearScrollback: () -> Unit = {},
     onDismissRequest: () -> Unit
 ) {
     val theme = CmuxTheme.colors
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
+    val currentVersion = "0.2.0"
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var updateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var showLicensesDialog by remember { mutableStateOf(false) }
+    var showDiagnosticsDialog by remember { mutableStateOf(false) }
+    var isDiagnosticsEnabled by remember { mutableStateOf(settingsManager.isDiagnosticsEnabled) }
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -136,6 +153,7 @@ fun SettingsDialog(
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // Left Column: Connection & Gateway
+                        // Left Column: Connection & Gateway + Display
                         LazyColumn(
                             modifier = Modifier
                                 .weight(1f)
@@ -153,7 +171,6 @@ fun SettingsDialog(
                                     connectionStatus = connectionStatus,
                                     connectionReadiness = connectionReadiness,
                                     settingsManager = settingsManager,
-
                                     onHostChange = onHostChange,
                                     onPortChange = onPortChange,
                                     onTokenChange = onTokenChange,
@@ -161,15 +178,9 @@ fun SettingsDialog(
                                     onScanQrClick = onScanQrClick,
                                 )
                             }
-                        }
-
-                        // Right Column: Display, Fonts, Columns & Themes
-                        LazyColumn(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                            item {
+                                HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
+                            }
                             item {
                                 SectionHeader(title = "DISPLAY & TERMINAL", icon = Icons.Default.TextFields, color = theme.primary)
                             }
@@ -184,6 +195,101 @@ fun SettingsDialog(
                                 )
                             }
                         }
+
+                        // Right Column: App Hub, Releases, Community, Diagnostics, Storage
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            item {
+                                BrandHeroCard()
+                            }
+                            item {
+                                SectionHeader(title = "应用版本与更新 (RELEASE LIFECYCLE)", icon = Icons.Default.CloudDownload, color = theme.primary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                ReleaseSection(
+                                    currentVersion = currentVersion,
+                                    isChecking = isCheckingUpdate,
+                                    updateResult = updateResult,
+                                    onCheckClick = {
+                                        isCheckingUpdate = true
+                                        scope.launch {
+                                            val res = ReleaseUpdateChecker.check(currentVersion)
+                                            isCheckingUpdate = false
+                                            updateResult = res
+                                            when (res) {
+                                                is UpdateCheckResult.UpdateAvailable -> {
+                                                    showUpdateDialog = true
+                                                }
+                                                is UpdateCheckResult.UpToDate -> {
+                                                    Toast.makeText(context, "当前已是最新版本 (v$currentVersion)", Toast.LENGTH_SHORT).show()
+                                                }
+                                                is UpdateCheckResult.Error -> {
+                                                    Toast.makeText(context, "检查更新失败: ${res.message}", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                            item {
+                                SectionHeader(title = "开源社区与许可 (OPEN SOURCE & COMMUNITY)", icon = Icons.Default.Code, color = theme.primary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                OpenSourceSection(
+                                    onOpenRepo = { uriHandler.openUri(SOURCE_URL) },
+                                    onOpenIssues = { uriHandler.openUri("$SOURCE_URL/issues") },
+                                    onOpenLicenses = { showLicensesDialog = true }
+                                )
+                            }
+                            item {
+                                SectionHeader(title = "开发者诊断与排查 (DIAGNOSTICS & LOGS)", icon = Icons.Default.BugReport, color = theme.primary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                DiagnosticsSection(
+                                    isEnabled = isDiagnosticsEnabled,
+                                    onToggleEnabled = {
+                                        isDiagnosticsEnabled = it
+                                        settingsManager.isDiagnosticsEnabled = it
+                                    },
+                                    onViewLogs = { showDiagnosticsDialog = true },
+                                    onExportBundle = {
+                                        val bundle = DiagnosticsManager.exportDiagnosticsBundle(context, settingsManager, connectionStatus)
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket diagnostics", bundle))
+                                        Toast.makeText(context, "已复制脱敏诊断包至剪贴板", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                            item {
+                                SectionHeader(title = "配置备份与存储 (PROFILES & STORAGE)", icon = Icons.Default.Save, color = theme.primary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                StorageSection(
+                                    profileCount = settingsManager.profiles.size,
+                                    onExportProfiles = {
+                                        val json = settingsManager.exportProfilesJson()
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket host profiles", json))
+                                        Toast.makeText(context, "已导出 ${settingsManager.profiles.size} 个 Host Profiles 到剪贴板", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onImportProfiles = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = clipboard.primaryClip
+                                        val text = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString().orEmpty() else ""
+                                        val count = settingsManager.importProfilesJson(text)
+                                        if (count > 0) {
+                                            Toast.makeText(context, "成功导入并合并 $count 个 Host Profiles", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "剪贴板中无有效的 Host Profiles JSON", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    onClearScrollback = {
+                                        onClearScrollback()
+                                        Toast.makeText(context, "已清空终端回滚历史缓冲区并释放显存", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        }
                     }
                 } else {
                     // Portrait: Vertical Scrollable List
@@ -195,6 +301,104 @@ fun SettingsDialog(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         item {
+                            BrandHeroCard()
+                        }
+                        item {
+                            SectionHeader(title = "应用版本与更新 (RELEASE LIFECYCLE)", icon = Icons.Default.CloudDownload, color = theme.primary)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            ReleaseSection(
+                                currentVersion = currentVersion,
+                                isChecking = isCheckingUpdate,
+                                updateResult = updateResult,
+                                onCheckClick = {
+                                    isCheckingUpdate = true
+                                    scope.launch {
+                                        val res = ReleaseUpdateChecker.check(currentVersion)
+                                        isCheckingUpdate = false
+                                        updateResult = res
+                                        when (res) {
+                                            is UpdateCheckResult.UpdateAvailable -> {
+                                                showUpdateDialog = true
+                                            }
+                                            is UpdateCheckResult.UpToDate -> {
+                                                Toast.makeText(context, "当前已是最新版本 (v$currentVersion)", Toast.LENGTH_SHORT).show()
+                                            }
+                                            is UpdateCheckResult.Error -> {
+                                                Toast.makeText(context, "检查更新失败: ${res.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                        item {
+                            HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
+                        }
+                        item {
+                            SectionHeader(title = "开源社区与许可 (OPEN SOURCE & COMMUNITY)", icon = Icons.Default.Code, color = theme.primary)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OpenSourceSection(
+                                onOpenRepo = { uriHandler.openUri(SOURCE_URL) },
+                                onOpenIssues = { uriHandler.openUri("$SOURCE_URL/issues") },
+                                onOpenLicenses = { showLicensesDialog = true }
+                            )
+                        }
+                        item {
+                            HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
+                        }
+                        item {
+                            SectionHeader(title = "开发者诊断与排查 (DIAGNOSTICS & LOGS)", icon = Icons.Default.BugReport, color = theme.primary)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            DiagnosticsSection(
+                                isEnabled = isDiagnosticsEnabled,
+                                onToggleEnabled = {
+                                    isDiagnosticsEnabled = it
+                                    settingsManager.isDiagnosticsEnabled = it
+                                },
+                                onViewLogs = { showDiagnosticsDialog = true },
+                                onExportBundle = {
+                                    val bundle = DiagnosticsManager.exportDiagnosticsBundle(context, settingsManager, connectionStatus)
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket diagnostics", bundle))
+                                    Toast.makeText(context, "已复制脱敏诊断包至剪贴板", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                        item {
+                            HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
+                        }
+                        item {
+                            SectionHeader(title = "配置备份与存储 (PROFILES & STORAGE)", icon = Icons.Default.Save, color = theme.primary)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            StorageSection(
+                                profileCount = settingsManager.profiles.size,
+                                onExportProfiles = {
+                                    val json = settingsManager.exportProfilesJson()
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket host profiles", json))
+                                    Toast.makeText(context, "已导出 ${settingsManager.profiles.size} 个 Host Profiles 到剪贴板", Toast.LENGTH_SHORT).show()
+                                },
+                                onImportProfiles = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = clipboard.primaryClip
+                                    val text = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString().orEmpty() else ""
+                                    val count = settingsManager.importProfilesJson(text)
+                                    if (count > 0) {
+                                        Toast.makeText(context, "成功导入并合并 $count 个 Host Profiles", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "剪贴板中无有效的 Host Profiles JSON", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onClearScrollback = {
+                                    onClearScrollback()
+                                    Toast.makeText(context, "已清空终端回滚历史缓冲区并释放显存", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                        item {
+                            HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
+                        }
+                        item {
                             SectionHeader(title = "CONNECTION & HOST", icon = Icons.Default.Cast, color = theme.primary)
                             Spacer(modifier = Modifier.height(6.dp))
                             ConnectionSection(
@@ -204,7 +408,6 @@ fun SettingsDialog(
                                 connectionStatus = connectionStatus,
                                 connectionReadiness = connectionReadiness,
                                 settingsManager = settingsManager,
-
                                 onHostChange = onHostChange,
                                 onPortChange = onPortChange,
                                 onTokenChange = onTokenChange,
@@ -212,11 +415,9 @@ fun SettingsDialog(
                                 onScanQrClick = onScanQrClick,
                             )
                         }
-
                         item {
                             HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
                         }
-
                         item {
                             SectionHeader(title = "DISPLAY & TERMINAL", icon = Icons.Default.TextFields, color = theme.primary)
                             Spacer(modifier = Modifier.height(6.dp))
@@ -284,6 +485,52 @@ fun SettingsDialog(
                 }
             }
         }
+    }
+
+    if (showLicensesDialog) {
+        OpenSourceLicensesDialog(
+            onDismissRequest = { showLicensesDialog = false }
+        )
+    }
+
+    if (showDiagnosticsDialog) {
+        DiagnosticsViewerDialog(
+            settingsManager = settingsManager,
+            connectionStatus = connectionStatus,
+            onDismissRequest = { showDiagnosticsDialog = false }
+        )
+    }
+
+    if (showUpdateDialog && updateResult is UpdateCheckResult.UpdateAvailable) {
+        val info = updateResult as UpdateCheckResult.UpdateAvailable
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            title = {
+                Text("发现新版本 ${info.latestVersion}", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text("当前版本 v${info.currentVersion}，官方最新发布已就绪。点击前往下载 APK。")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUpdateDialog = false
+                        uriHandler.openUri(info.downloadUrl)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0A84FF))
+                ) {
+                    Text("前往下载 APK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUpdateDialog = false }) {
+                    Text("稍后")
+                }
+            },
+            containerColor = Color(0xFF2C2C2E),
+            titleContentColor = Color.White,
+            textContentColor = Color(0xFFE5E5EA)
+        )
     }
 }
 
@@ -750,6 +997,517 @@ fun DisplaySection(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun BrandHeroCard() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(60.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF141E2E))
+                .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Terminal,
+                contentDescription = null,
+                tint = Color(0xFF0A84FF),
+                modifier = Modifier.size(34.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "cmux pocket",
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0x260A84FF))
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "Open Source",
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0A84FF)
+                )
+            }
+        }
+
+        Text(
+            text = "cmux companion • multi-surface terminal client • v0.2.0",
+            fontSize = 12.sp,
+            color = Color(0xFF8E8E93),
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
+fun ReleaseSection(
+    currentVersion: String,
+    isChecking: Boolean,
+    updateResult: UpdateCheckResult?,
+    onCheckClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !isChecking, onClick = onCheckClick)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFF0A84FF)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = "检查官网更新",
+                            fontSize = 14.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "当前版本 v$currentVersion",
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF8E8E93)
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isChecking) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color(0xFF0A84FF)
+                        )
+                    } else if (updateResult is UpdateCheckResult.UpdateAvailable) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0x33FF9F0A))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "有新版",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF9F0A)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "检查",
+                            fontSize = 12.sp,
+                            color = Color(0xFF0A84FF),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = "›", fontSize = 16.sp, color = Color(0xFF636366))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun OpenSourceSection(
+    onOpenRepo: () -> Unit,
+    onOpenIssues: () -> Unit,
+    onOpenLicenses: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenRepo)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFF24292E)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Code,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("GitHub 源码仓库", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text("shiquda/cmux-pocket", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("★ Star", fontSize = 12.sp, color = Color(0xFF0A84FF), fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+                }
+            }
+
+            HorizontalDivider(color = Color(0x1AFFFFFF), modifier = Modifier.padding(start = 48.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenIssues)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFFFF9F0A)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BugReport,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("问题反馈与功能提议", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text("提交 GitHub Issue 报告", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                    }
+                }
+                Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+            }
+
+            HorizontalDivider(color = Color(0x1AFFFFFF), modifier = Modifier.padding(start = 48.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenLicenses)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFF30D158)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("开源协议与依赖声明", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text("GNU AGPL-3.0 及三方库许可", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                    }
+                }
+                Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+            }
+        }
+    }
+}
+
+@Composable
+fun DiagnosticsSection(
+    isEnabled: Boolean,
+    onToggleEnabled: (Boolean) -> Unit,
+    onViewLogs: () -> Unit,
+    onExportBundle: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onViewLogs)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFFBF5AF2)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Terminal,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("实时网关连接诊断日志", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text(if (isEnabled) "查看 WebSocket & RPC 诊断帧" else "未开启日志记录 (点击查看)", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                    }
+                }
+
+                Switch(
+                    checked = isEnabled,
+                    onCheckedChange = onToggleEnabled,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF30D158),
+                        uncheckedThumbColor = Color.LightGray,
+                        uncheckedTrackColor = Color(0xFF39393D)
+                    )
+                )
+            }
+
+            HorizontalDivider(color = Color(0x1AFFFFFF), modifier = Modifier.padding(start = 48.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onExportBundle)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFF64D2FF)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("一键导出故障诊断包", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text("脱敏配置与近 500 行网络诊断 (JSON)", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("JSON", fontSize = 12.sp, color = Color(0xFF8E8E93))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StorageSection(
+    profileCount: Int,
+    onExportProfiles: () -> Unit,
+    onImportProfiles: () -> Unit,
+    onClearScrollback: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onExportProfiles)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFF32D74B)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("导出 Host 配置与预设", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text("备份全部 $profileCount 个 Profiles (JSON 复制到剪贴板)", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                    }
+                }
+                Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+            }
+
+            HorizontalDivider(color = Color(0x1AFFFFFF), modifier = Modifier.padding(start = 48.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onImportProfiles)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFFFFD60A)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileUpload,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("导入配置 (从剪贴板)", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text("从剪贴板读取 JSON 并合并入现有配置", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                    }
+                }
+                Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+            }
+
+            HorizontalDivider(color = Color(0x1AFFFFFF), modifier = Modifier.padding(start = 48.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onClearScrollback)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFFFF453A)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CleaningServices,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("清空终端历史回滚缓冲区", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text("重置 Scrollback 缓冲区并释放显存", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                    }
+                }
+                Text("›", fontSize = 16.sp, color = Color(0xFF636366))
             }
         }
     }

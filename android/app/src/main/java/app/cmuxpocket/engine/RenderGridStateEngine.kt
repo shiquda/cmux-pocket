@@ -434,6 +434,12 @@ class RenderGridStateEngine {
     }
 
     @Synchronized
+    fun clearScrollback() {
+        scrollbackBuffer.clear()
+        _screenState.value = _screenState.value.copy(scrollback = emptyList())
+    }
+
+    @Synchronized
     fun markStale() {
         syncState = SurfaceSyncState.STALE
         _screenState.value = _screenState.value.copy(syncState = SurfaceSyncState.STALE)
