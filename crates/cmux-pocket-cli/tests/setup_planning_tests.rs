@@ -13,6 +13,10 @@ async fn test_setup_first_run_no_start() {
         port: Some(8089),
         no_start: true,
         tailscale: false,
+        qr: false,
+        endpoint: None,
+        no_invert: false,
+        invert: false,
     };
 
     let res = handle_setup(&paths, &args, false).await;
@@ -55,6 +59,10 @@ async fn test_setup_idempotency_preserves_token_and_config() {
         port: Some(8090),
         no_start: true,
         tailscale: false,
+        qr: false,
+        endpoint: None,
+        no_invert: false,
+        invert: false,
     };
 
     // First setup run
@@ -66,6 +74,10 @@ async fn test_setup_idempotency_preserves_token_and_config() {
         port: None,
         no_start: true,
         tailscale: false,
+        qr: false,
+        endpoint: None,
+        no_invert: false,
+        invert: false,
     };
     handle_setup(&paths, &args2, false).await.unwrap();
 

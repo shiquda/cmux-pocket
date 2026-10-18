@@ -16,8 +16,8 @@ pub mod token;
 // Re-export common types and functions for ergonomic access
 pub use command::CommandSpec;
 pub use config::{
-    ensure_config, load_config, save_config, GatewayConfig, DEFAULT_GATEWAY_HOST,
-    DEFAULT_GATEWAY_PORT,
+    ensure_config, load_config, parse_and_validate_endpoint, save_config, validate_remote_endpoint,
+    GatewayConfig, ParsedEndpoint, DEFAULT_GATEWAY_HOST, DEFAULT_GATEWAY_PORT,
 };
 pub use error::{LoopbackError, MacOsError};
 pub use launchd::{

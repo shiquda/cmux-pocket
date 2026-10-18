@@ -264,7 +264,81 @@ If Serve is not enabled for the tailnet, follow the account enablement link prin
 
 [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve) handles TLS and forwards WebSocket connections to the loopback Gateway within the tailnet. It does not replace the Gateway process or grant it permission to access cmux's socket.
 
-## 3. Configure the Android app
+
+## 3. QR code pairing and one-tap import (`cmux-pocket://`)
+
+cmux Pocket provides automatic pairing to transfer your Gateway endpoint, port, TLS settings, and authentication token to your Android phone without manually retyping credentials.
+
+### Generating a QR code on the Mac
+
+Run the `qr` command in any terminal:
+
+```bash
+cmux-pocket qr
+```
+
+Or display a QR code automatically after setup:
+
+```bash
+cmux-pocket setup --tailscale --qr
+```
+
+The CLI renders an ANSI QR code block directly in the terminal, accompanied by the `cmux-pocket://` import URI.
+
+### Endpoint configuration and precedence
+
+The CLI resolves the phone connection endpoint using strict precedence:
+
+1. **Explicit CLI argument (`--endpoint <URL>`)**:
+   Takes top priority. Use this for a single-use connection or testing without modifying your configuration:
+   ```bash
+   cmux-pocket qr --endpoint wss://custom.proxy.example.com:8443 --name "Workstation"
+   ```
+
+2. **User locally saved endpoint (`config.endpoint`)**:
+   Persists your preferred remote URL (e.g. your private domain, reverse proxy, or secure ingress) across sessions:
+   ```bash
+   cmux-pocket config set endpoint wss://custom.proxy.example.com:8443
+   cmux-pocket config get endpoint
+   cmux-pocket qr
+   ```
+
+3. **Tailscale automatic discovery (`.ts.net`)**:
+   If no custom endpoint is configured and Tailscale is running with a valid tailnet domain, cmux-pocket automatically uses `wss://<node>.ts.net` with port `443`.
+
+**Loopback safety:**
+cmux-pocket never automatically assumes a local loopback address (`127.0.0.1`) can be reached by a remote phone over Wi-Fi or cellular. If no remote endpoint is found, the CLI will output actionable setup instructions rather than generating a misleading QR code. If you intentionally want to test loopback over ADB reverse, you can pass `--endpoint ws://127.0.0.1:8088` explicitly.
+
+### Android scanning and deep link import
+
+Two import paths are supported:
+
+1. **In-app QR scanner**:
+   In cmux Pocket, open **Settings → Connection & Host** and tap **Scan QR**.
+   - Camera permission is requested on first use.
+   - If denied, the app provides guidance on enabling camera access in Settings, or continuing with manual entry.
+   - Scanning can be canceled at any time, returning safely to the previous screen without altering existing settings.
+
+2. **External QR scanners and deep links**:
+   Scanning with an external barcode scanner or tapping a `cmux-pocket://` link will launch cmux Pocket on both cold start and when running in the background.
+   - **Compatibility notice:** External scanner behavior depends on the scanner tool and Android vendor ROM. While dedicated barcode scanners (such as ZXing Barcode Scanner) and supported browser links handle custom schemes, some stock camera apps only support `http://` and `https://` URLs. If your stock camera does not recognize the custom scheme, use the in-app scanner (**Settings → Scan QR**).
+
+### Import preview and confirmation
+
+Both in-app scanning and external deep links always open the **Import Gateway Profile** preview dialog:
+
+- **No silent overwrite:** If an existing profile matches the endpoint or name, the dialog flags the match and gives you an explicit choice: **Update Existing** or **Save as New**.
+- **No automatic connection on link open:** Opening a link or scanning a code will never initiate a connection automatically. The user must explicitly tap **Import & Connect** or confirm the action.
+- **Token masking:** The secret bearer token is masked in the preview (`0123••••cdef`) and can be revealed with the **Show** toggle before saving.
+- **Cancellation:** Tapping **Cancel** dismisses the dialog without modifying any saved profiles or changing the active connection.
+
+### Security and credential considerations
+
+> ⚠️ **Bearer Token Security:** The QR code and `cmux-pocket://` URI contain your active Gateway authentication token. Anyone who scans this QR code or opens this link can connect to your Gateway and view active cmux workspaces.
+> - Do NOT screenshot the QR code or post it in public chat groups, bug reports, or repositories.
+> - Non-loopback endpoints must use TLS (`wss://` or `https://`). The app and CLI strictly reject cleartext non-loopback connections.
+> - External deep link payloads are untrusted inputs: the app strictly validates the protocol scheme, version (`v=1`), host, port, and token before displaying the preview dialog.
+## 4. Manual configuration in the Android app
 
 1. Open **Settings**.
 2. Tap **Add Host** and create a named profile.

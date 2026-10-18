@@ -120,6 +120,12 @@ impl Tailscale {
             route_created: !already_configured,
         })
     }
+
+    pub async fn discover_endpoint(&self) -> Result<String, CliError> {
+        let status = self.json(&["status", "--json"]).await?;
+        let host = tailnet_host(&status)?;
+        Ok(format!("wss://{}", host))
+    }
 }
 
 #[cfg(test)]

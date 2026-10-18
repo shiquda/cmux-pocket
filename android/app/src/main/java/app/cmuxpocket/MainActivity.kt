@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        handleDeepLinkIntent(intent)
         handleNotificationIntent(intent)
         setContent {
             CmuxAppRoot(viewModel = viewModel)
@@ -60,6 +61,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleNotificationIntent(intent)
+        handleDeepLinkIntent(intent)
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -79,12 +81,37 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(AgentCompletionNotifications.extraSurfaceId)
         intent.removeExtra(AgentCompletionNotifications.extraWorkspaceId)
     }
+
+    private fun handleDeepLinkIntent(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme?.equals("cmux-pocket", ignoreCase = true) == true) {
+            viewModel.setPendingImportUri(uri.toString())
+            intent.data = null
+        }
+    }
 }
 
 @Composable
 fun CmuxAppRoot(viewModel: TerminalViewModel) {
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
+    val pendingImportUri by viewModel.pendingImportUri.collectAsState()
+    var importPayload by remember { mutableStateOf<CmuxImportPayload?>(null) }
+    var importErrorMessage by remember { mutableStateOf<String?>(null) }
+    var showQrScanner by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pendingImportUri) {
+        val rawUri = pendingImportUri
+        if (rawUri != null) {
+            try {
+                importPayload = CmuxImportUri.parse(rawUri)
+                importErrorMessage = null
+            } catch (e: Exception) {
+                importPayload = null
+                importErrorMessage = e.message ?: "Invalid cmux-pocket configuration link"
+            }
+        }
+    }
 
     var themeMode by remember { mutableStateOf(settingsManager.themeMode) }
     var selectedThemeHex by remember { mutableStateOf(settingsManager.terminalBgTheme) }
@@ -92,7 +119,6 @@ fun CmuxAppRoot(viewModel: TerminalViewModel) {
     var portInput by remember { mutableStateOf(settingsManager.port.toString()) }
     var tokenInput by remember { mutableStateOf(settingsManager.token) }
     var fontSizeSp by remember { mutableStateOf(settingsManager.fontSizeSp) }
-
     CmuxAppTheme(themeMode = themeMode) {
         CmuxApp(
             viewModel = viewModel,
@@ -103,6 +129,7 @@ fun CmuxAppRoot(viewModel: TerminalViewModel) {
             fontSizeSp = fontSizeSp,
             selectedThemeHex = selectedThemeHex,
             themeMode = themeMode,
+            onScanQrClick = { showQrScanner = true },
 
             onHostChange = {
                 hostInput = it
@@ -129,6 +156,52 @@ fun CmuxAppRoot(viewModel: TerminalViewModel) {
                 settingsManager.themeMode = it
             },
         )
+
+        importPayload?.let { payload ->
+            ImportPreviewDialog(
+                payload = payload,
+                settingsManager = settingsManager,
+                onDismiss = {
+                    importPayload = null
+                    viewModel.clearPendingImportUri()
+                },
+                onImportConfirmed = { profile, connectImmediately ->
+                    settingsManager.upsertProfile(profile)
+                    settingsManager.activeProfileId = profile.id
+                    hostInput = profile.host
+                    portInput = profile.port.toString()
+                    tokenInput = profile.token
+                    settingsManager.host = profile.host
+                    settingsManager.port = profile.port
+                    settingsManager.token = profile.token
+                    importPayload = null
+                    viewModel.clearPendingImportUri()
+                    if (connectImmediately) {
+                        viewModel.connect(profile.host, profile.port, profile.token)
+                    }
+                }
+            )
+        }
+
+        importErrorMessage?.let { errMsg ->
+            ImportErrorDialog(
+                errorMessage = errMsg,
+                onDismiss = {
+                    importErrorMessage = null
+                    viewModel.clearPendingImportUri()
+                }
+            )
+        }
+
+        if (showQrScanner) {
+            QrScannerDialog(
+                onDismiss = { showQrScanner = false },
+                onQrCodeDetected = { qrText ->
+                    showQrScanner = false
+                    viewModel.setPendingImportUri(qrText)
+                }
+            )
+        }
     }
 }
 
@@ -150,6 +223,7 @@ fun CmuxApp(
     onFontSizeChange: (Float) -> Unit,
     onThemeHexChange: (String) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onScanQrClick: () -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
     val activeScreenState by viewModel.activeScreenState.collectAsState()
@@ -426,6 +500,7 @@ fun CmuxApp(
             onConnectClick = {
                 viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
             },
+            onScanQrClick = onScanQrClick,
             onDismissRequest = { showSettingsDialog = false }
         )
     }

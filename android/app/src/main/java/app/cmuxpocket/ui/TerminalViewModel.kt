@@ -48,6 +48,16 @@ class TerminalViewModel : ViewModel() {
     private val _connectionReadiness = MutableStateFlow(ConnectionReadiness())
     val connectionReadiness: StateFlow<ConnectionReadiness> = _connectionReadiness.asStateFlow()
 
+    private val _pendingImportUri = MutableStateFlow<String?>(null)
+    val pendingImportUri: StateFlow<String?> = _pendingImportUri.asStateFlow()
+
+    fun setPendingImportUri(uri: String?) {
+        _pendingImportUri.value = uri
+    }
+
+    fun clearPendingImportUri() {
+        _pendingImportUri.value = null
+    }
     private val _workspaces = MutableStateFlow<List<WorkspaceInfo>>(emptyList())
     private val _agentSessionCompletions = MutableSharedFlow<AgentSessionCompleted>(extraBufferCapacity = 32)
     val agentSessionCompletions: SharedFlow<AgentSessionCompleted> = _agentSessionCompletions.asSharedFlow()
