@@ -83,8 +83,10 @@ data class CmuxColors(
     /** Decorative category tiles; saturated in both themes because the glyph is white. */
     val accentPurple: Color,
     val accentTeal: Color,
-    /** GitHub brand tile. */
+    /** GitHub brand tile; light theme uses the brand black, dark theme an inverted light tile. */
     val brandGithub: Color,
+    /** Glyph colour for [brandGithub]. */
+    val onBrandGithub: Color,
     /** Content colour for a bright accent fill (yellow tiles), where [onPrimary] would be unreadable. */
     val onAccentBright: Color
 )
@@ -128,7 +130,8 @@ val DarkCmuxColors = CmuxColors(
     accentYellow = Color(0xFFFFD60A),
     accentPurple = Color(0xFFBF5AF2),
     accentTeal = Color(0xFF64D2FF),
-    brandGithub = Color(0xFF24292E),
+    brandGithub = Color(0xFFE8EAED),
+    onBrandGithub = Color(0xFF1C1C1E),
     onAccentBright = Color(0xFF1C1C1E)
 )
 
@@ -172,6 +175,7 @@ val LightCmuxColors = CmuxColors(
     accentPurple = Color(0xFFAF52DE),
     accentTeal = Color(0xFF00A3C4),
     brandGithub = Color(0xFF24292E),
+    onBrandGithub = Color.White,
     onAccentBright = Color(0xFF1C1C1E)
 )
 

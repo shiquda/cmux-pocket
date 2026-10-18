@@ -1227,7 +1227,7 @@ fun OpenSourceSection(
                         Icon(
                             imageVector = Icons.Default.Code,
                             contentDescription = null,
-                            tint = theme.onPrimary,
+                            tint = theme.onBrandGithub,
                             modifier = Modifier.size(16.dp)
                         )
                     }
