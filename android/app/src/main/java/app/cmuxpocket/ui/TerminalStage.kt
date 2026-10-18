@@ -79,8 +79,8 @@ fun TerminalStage(
                 Button(
                     onClick = onNewSurfaceClick,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (theme.isDark) Color(0xFF00FF7F) else Color(0xFF007AFF),
-                        contentColor = Color.Black
+                        containerColor = theme.primary,
+                        contentColor = theme.onPrimary
                     ),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(48.dp)
@@ -112,7 +112,7 @@ fun TerminalStage(
         // Offline / Reconnecting Banner
         if (connectionStatus == ConnectionStatus.CONNECTING || connectionStatus == ConnectionStatus.AUTHENTICATING) {
             Surface(
-                color = Color(0xB3212121),
+                color = theme.scrim,
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
@@ -125,13 +125,13 @@ fun TerminalStage(
                     CircularProgressIndicator(
                         modifier = Modifier.size(12.dp),
                         strokeWidth = 2.dp,
-                        color = Color(0xFFFFB300)
+                        color = theme.accentOrange
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = stringResource(R.string.stage_syncing),
                         fontSize = 11.sp,
-                        color = Color(0xFFFFB300)
+                        color = theme.accentOrange
                     )
                 }
             }

@@ -24,7 +24,6 @@
     <!-- Accessory keyboard bar -->
     <string name="kb_open_panel">Open keyboard panel</string>
     <string name="kb_settings">Settings</string>
-    <string name="kb_tabs">Tabs (%1$d)</string>
 
     <!-- Contextual action bubble -->
     <string name="bubble_copy_selection">Copy selection</string>

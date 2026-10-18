@@ -700,10 +700,14 @@ fun TerminalCanvas(
         if (bubblePos != null) {
             val bubbleWidthPx = with(density) { 190.dp.toPx() }
             val bubbleHeightPx = with(density) { 180.dp.toPx() }
+            // The breadcrumb pill floats over the top of the canvas; keep the bubble clear of it
+            // so the two never overlap (status bar inset + pill height + margins).
+            val floatingChromePx = WindowInsets.statusBars.getTop(density) + with(density) { 60.dp.toPx() }
+            val lowestTop = (canvasSizePx.height - bubbleHeightPx - 12f).coerceAtLeast(floatingChromePx)
             val clampedX = (bubblePos.x - bubbleWidthPx / 2f).coerceIn(12f, (canvasSizePx.width - bubbleWidthPx - 12f).coerceAtLeast(12f))
             val clampedY = (bubblePos.y - bubbleHeightPx - 16f).let { y ->
-                if (y < 12f) (bubblePos.y + 16f).coerceIn(12f, (canvasSizePx.height - bubbleHeightPx - 12f).coerceAtLeast(12f))
-                else y
+                if (y >= floatingChromePx) y
+                else (bubblePos.y + 16f).coerceIn(floatingChromePx, lowestTop)
             }
 
             ContextualActionBubble(
@@ -803,7 +807,8 @@ private fun TerminalTextControls(
     val canIncrease = enabled && !preference.fitWidth && preference.fontSizeSp < 48f
     val decreaseLabel = stringResource(R.string.canvas_decrease_text_size)
     val increaseLabel = stringResource(R.string.canvas_increase_text_size)
-    Surface(modifier = modifier, color = ComposeColor(0xFF222226)) {
+    val theme = CmuxTheme.colors
+    Surface(modifier = modifier, color = theme.containerBg) {
         Row(
             modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -817,8 +822,8 @@ private fun TerminalTextControls(
                     enabled = canDecrease,
                     modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                         .semantics { contentDescription = decreaseLabel }
-                ) { Text("A−", color = if (canDecrease) ComposeColor.White else ComposeColor.Gray) }
-                Text(stringResource(R.string.font_size_sp_value, ((renderedFontSizeSp * 10).roundToInt() / 10f).toString()), color = ComposeColor(0xFFCCCCCC), fontSize = 12.sp)
+                ) { Text("A−", color = if (canDecrease) theme.onContainer else theme.onContainerMuted) }
+                Text(stringResource(R.string.font_size_sp_value, ((renderedFontSizeSp * 10).roundToInt() / 10f).toString()), color = theme.onContainerMuted, fontSize = 12.sp)
                 TextButton(
                     onClick = {
                         onChange(preference.copy(fontSizeSp = (preference.fontSizeSp + 1f).coerceAtMost(48f), panX = 0f, panY = null))
@@ -826,16 +831,16 @@ private fun TerminalTextControls(
                     enabled = canIncrease,
                     modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                         .semantics { contentDescription = increaseLabel }
-                ) { Text("A+", color = if (canIncrease) ComposeColor.White else ComposeColor.Gray) }
+                ) { Text("A+", color = if (canIncrease) theme.onContainer else theme.onContainerMuted) }
             }
             TextButton(
                 onClick = { onChange(preference.copy(fitWidth = !preference.fitWidth, panX = 0f, panY = null)) },
                 enabled = enabled,
                 modifier = Modifier.heightIn(min = 48.dp)
             ) {
-                Icon(Icons.Default.FitScreen, contentDescription = null, tint = ComposeColor(0xFF00FF7F), modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.FitScreen, contentDescription = null, tint = theme.primary, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(if (preference.fitWidth) stringResource(R.string.canvas_readable) else stringResource(R.string.canvas_fit_width), color = ComposeColor.White, fontSize = 12.sp)
+                Text(if (preference.fitWidth) stringResource(R.string.canvas_readable) else stringResource(R.string.canvas_fit_width), color = theme.onContainer, fontSize = 12.sp)
             }
         }
     }
@@ -848,6 +853,7 @@ private fun VerticalScrollJoystick(
 ) {
     var knobY by remember { mutableFloatStateOf(0f) }
     var held by remember { mutableStateOf(false) }
+    val theme = CmuxTheme.colors
 
     LaunchedEffect(held, knobY) {
         if (!held) return@LaunchedEffect
@@ -866,8 +872,8 @@ private fun VerticalScrollJoystick(
             .width(48.dp)
             .height(148.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(ComposeColor(0xCC1A1A1E))
-            .border(1.dp, ComposeColor(0x33FFFFFF), RoundedCornerShape(24.dp))
+            .background(theme.islandBg)
+            .border(1.dp, theme.islandBorder, RoundedCornerShape(24.dp))
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = { held = true },
@@ -895,14 +901,14 @@ private fun VerticalScrollJoystick(
                 .width(4.dp)
                 .fillMaxHeight(0.72f)
                 .clip(RoundedCornerShape(2.dp))
-                .background(ComposeColor(0x33FFFFFF))
+                .background(theme.controlBorder)
         )
         Box(
             modifier = Modifier
                 .offset(y = (knobY * 46).dp)
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(if (held) ComposeColor(0xFF64B5F6) else ComposeColor(0xFFE0E0E0))
+                .background(if (held) theme.primary else theme.onSurfaceVariant)
         )
     }
 }

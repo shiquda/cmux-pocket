@@ -102,7 +102,7 @@ fun ImportPreviewDialog(
                 if (existingProfile != null) {
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = if (theme.isDark) Color(0xFF332B00) else Color(0xFFFFF9E6)
+                            containerColor = theme.accentOrange.copy(alpha = if (theme.isDark) 0.18f else 0.12f)
                         ),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -112,7 +112,7 @@ fun ImportPreviewDialog(
                                 Icon(
                                     imageVector = Icons.Default.Warning,
                                     contentDescription = null,
-                                    tint = Color(0xFFFFB300),
+                                    tint = theme.accentOrange,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -120,7 +120,7 @@ fun ImportPreviewDialog(
                                     text = stringResource(R.string.dlg_import_existing_found),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (theme.isDark) Color(0xFFFFE082) else Color(0xFFB78103)
+                                    color = theme.accentOrange
                                 )
                             }
                             Text(
@@ -131,7 +131,7 @@ fun ImportPreviewDialog(
                                     existingProfile.port
                                 ),
                                 fontSize = 12.sp,
-                                color = if (theme.isDark) Color(0xFFFFECB3) else Color(0xFF664D03)
+                                color = theme.onContainerMuted
                             )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -218,7 +218,7 @@ fun ImportPreviewDialog(
                                     Icon(
                                         imageVector = if (payload.tls) Icons.Default.Lock else Icons.Default.LockOpen,
                                         contentDescription = null,
-                                        tint = if (payload.tls) Color(0xFF00FF7F) else Color(0xFFFFB300),
+                                        tint = if (payload.tls) theme.accentGreen else theme.accentOrange,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -310,7 +310,7 @@ fun ImportPreviewDialog(
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = theme.primary,
-                            contentColor = Color.White
+                            contentColor = theme.onPrimary
                         ),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
@@ -354,7 +354,7 @@ fun ImportErrorDialog(
                 onClick = onDismiss,
                 colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
             ) {
-                Text(stringResource(R.string.dlg_import_error_ok), color = Color.White)
+                Text(stringResource(R.string.dlg_import_error_ok), color = theme.onPrimary)
             }
         }
     )

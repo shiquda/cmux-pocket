@@ -109,10 +109,10 @@ fun LandscapeSidebar(
                         }
 
                         val statusColor = when (connectionStatus) {
-                            ConnectionStatus.CONNECTED -> Color(0xFF4CAF50)
-                            ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Color(0xFFFF9800)
-                            ConnectionStatus.ERROR -> Color(0xFFF44336)
-                            ConnectionStatus.DISCONNECTED -> Color.Gray
+                            ConnectionStatus.CONNECTED -> theme.accentGreen
+                            ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> theme.accentOrange
+                            ConnectionStatus.ERROR -> theme.accentRed
+                            ConnectionStatus.DISCONNECTED -> theme.onSurfaceVariant
                         }
                         Box(
                             modifier = Modifier
@@ -162,7 +162,7 @@ fun LandscapeSidebar(
                                 ) {
                                     Text(stringResource(R.string.sidebar_workspaces_header), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.onSurfaceVariant)
                                     IconButton(onClick = onNewWorkspace, modifier = Modifier.size(32.dp)) {
-                                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.sidebar_new_workspace), tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.sidebar_new_workspace), tint = theme.accentGreen, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -216,7 +216,7 @@ fun LandscapeSidebar(
                                 ) {
                                     Text(stringResource(R.string.sidebar_tabs_header), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.onSurfaceVariant)
                                     IconButton(onClick = onNewSurface, modifier = Modifier.size(32.dp)) {
-                                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.sidebar_new_tab), tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.sidebar_new_tab), tint = theme.accentGreen, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -237,7 +237,7 @@ fun LandscapeSidebar(
                                     Icon(
                                         imageVector = Icons.Default.Terminal,
                                         contentDescription = null,
-                                        tint = if (isSurfSelected) (if (theme.isDark) Color(0xFF00FF7F) else Color(0xFF007AFF)) else theme.onSurfaceVariant,
+                                        tint = if (isSurfSelected) theme.primary else theme.onSurfaceVariant,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -254,10 +254,10 @@ fun LandscapeSidebar(
                                     // Agent Attention / Activity Dot
                                     if (surf.attention || surf.agentState != null) {
                                         val dotColor = when (surf.agentState) {
-                                            "working" -> Color(0xFF2196F3)
-                                            "needs_input" -> Color(0xFFFF9800)
-                                            "done" -> Color(0xFF4CAF50)
-                                            else -> Color(0xFFFF5722)
+                                            "working" -> theme.primary
+                                            "needs_input" -> theme.accentOrange
+                                            "done" -> theme.accentGreen
+                                            else -> theme.accentRed
                                         }
                                         Box(
                                             modifier = Modifier
@@ -305,16 +305,16 @@ fun LandscapeSidebar(
                                     Icon(
                                         imageVector = Icons.Default.Terminal,
                                         contentDescription = surf.displayTitle,
-                                        tint = if (isSurfSelected) (if (theme.isDark) Color(0xFF00FF7F) else Color(0xFF007AFF)) else theme.onSurfaceVariant,
+                                        tint = if (isSurfSelected) theme.primary else theme.onSurfaceVariant,
                                         modifier = Modifier.size(22.dp)
                                     )
 
                                     if (surf.attention || surf.agentState != null) {
                                         val dotColor = when (surf.agentState) {
-                                            "working" -> Color(0xFF2196F3)
-                                            "needs_input" -> Color(0xFFFF9800)
-                                            "done" -> Color(0xFF4CAF50)
-                                            else -> Color(0xFFFF5722)
+                                            "working" -> theme.primary
+                                            "needs_input" -> theme.accentOrange
+                                            "done" -> theme.accentGreen
+                                            else -> theme.accentRed
                                         }
                                         Box(
                                             modifier = Modifier
@@ -335,7 +335,7 @@ fun LandscapeSidebar(
                                     Icon(
                                         imageVector = Icons.Default.Add,
                                         contentDescription = stringResource(R.string.sidebar_add_tab),
-                                        tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32),
+                                        tint = theme.accentGreen,
                                         modifier = Modifier.size(22.dp)
                                     )
                                 }

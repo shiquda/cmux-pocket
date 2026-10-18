@@ -21,7 +21,6 @@
     <!-- Accessory keyboard bar -->
     <string name="kb_open_panel">打开键盘面板</string>
     <string name="kb_settings">设置</string>
-    <string name="kb_tabs">标签 (%1$d)</string>
 
     <!-- Contextual action bubble -->
     <string name="bubble_copy_selection">复制选中内容</string>

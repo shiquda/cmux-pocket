@@ -50,5 +50,5 @@
     <string name="diag_toast_cleared">Diagnostic logs cleared</string>
     <string name="diag_clip_label">cmux pocket diagnostics</string>
     <string name="diag_toast_copied">Sanitized diagnostics bundle copied to clipboard</string>
-    <string name="diag_export_button">Export Sanitized Diagnostics</string>
+    <string name="diag_export_button">Export Sanitized</string>
 </resources>

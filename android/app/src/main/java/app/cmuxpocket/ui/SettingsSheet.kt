@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -319,61 +320,64 @@ fun SettingsScreen(
                         }
                     }
 
-                    HorizontalDivider(color = theme.divider)
+                }
+            }
+            HorizontalDivider(color = theme.divider)
 
-                    // AGPL-required source/license notice and the explicit apply action.
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(theme.surfaceVariant)
-                            .navigationBarsPadding()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { uriHandler.openUri(SOURCE_URL) },
-                            modifier = Modifier.heightIn(min = 48.dp)
-                        ) {
-                            Column {
-                                Text(
-                                    text = stringResource(R.string.settings_footer_version, currentVersion),
-                                    fontSize = 11.sp,
-                                    color = theme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = stringResource(R.string.settings_footer_license),
-                                    fontSize = 9.sp,
-                                    color = theme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Button(
-                            onClick = {
-                                onConnectClick()
-                                onDismissRequest()
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = theme.primary,
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = stringResource(R.string.settings_apply_save),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+            // AGPL-required source/license notice and the explicit apply action.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(theme.surfaceVariant)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = { uriHandler.openUri(SOURCE_URL) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.settings_footer_version, currentVersion),
+                            fontSize = 11.sp,
+                            color = theme.onSurfaceVariant
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_footer_license),
+                            fontSize = 9.sp,
+                            color = theme.onSurfaceVariant
+                        )
                     }
+                }
+
+                Button(
+                    onClick = {
+                        onConnectClick()
+                        onDismissRequest()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = theme.primary,
+                        contentColor = theme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.settings_apply_save),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
                 }
             }
         }
@@ -412,7 +416,7 @@ fun SettingsScreen(
                         showUpdateDialog = false
                         uriHandler.openUri(info.downloadUrl)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0A84FF))
+                    colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
                 ) {
                     Text(stringResource(R.string.settings_update_download))
                 }
@@ -422,9 +426,9 @@ fun SettingsScreen(
                     Text(stringResource(R.string.settings_update_later))
                 }
             },
-            containerColor = Color(0xFF2C2C2E),
-            titleContentColor = Color.White,
-            textContentColor = Color(0xFFE5E5EA)
+            containerColor = theme.containerBg,
+            titleContentColor = theme.onContainer,
+            textContentColor = theme.onContainer
         )
     }
 }
@@ -449,7 +453,7 @@ private fun SettingsSectionRail(
     val theme = CmuxTheme.colors
     Column(
         modifier = Modifier
-            .width(112.dp)
+            .width(144.dp)
             .fillMaxHeight()
             .background(theme.surfaceVariant)
             .verticalScroll(rememberScrollState())
@@ -475,7 +479,7 @@ private fun SettingsSectionRail(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = stringResource(section.labelRes),
-                    fontSize = 12.sp,
+                    fontSize = 11.5.sp,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                     color = if (selected) theme.primary else theme.onSurface,
                     maxLines = 2
@@ -494,7 +498,7 @@ fun LanguageSection(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
             Row(
@@ -506,7 +510,7 @@ fun LanguageSection(
                 Icon(
                     imageVector = Icons.Default.Translate,
                     contentDescription = null,
-                    tint = Color(0xFF8E8E93),
+                    tint = theme.onContainerMuted,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -515,12 +519,12 @@ fun LanguageSection(
                         text = stringResource(R.string.settings_language_title),
                         fontSize = 14.5.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color.White
+                        color = theme.onContainer
                     )
                     Text(
                         text = stringResource(R.string.settings_language_desc),
                         fontSize = 11.5.sp,
-                        color = Color(0xFF8E8E93)
+                        color = theme.onContainerMuted
                     )
                 }
             }
@@ -540,7 +544,7 @@ fun LanguageSection(
                             AppLanguage.CHINESE -> stringResource(R.string.settings_language_chinese)
                         },
                         fontSize = 14.sp,
-                        color = Color.White
+                        color = theme.onContainer
                     )
                     RadioButton(
                         selected = option == language,
@@ -682,7 +686,7 @@ fun ConnectionSection(
                 onValueChange = onHostChange,
                 enabled = activeProfileId != ConnectionProfile.USB_ID,
                 label = { Text(stringResource(R.string.settings_host_or_url), fontSize = 12.sp) },
-                placeholder = { Text(stringResource(R.string.settings_host_placeholder), fontSize = 12.sp, color = Color.Gray) },
+                placeholder = { Text(stringResource(R.string.settings_host_placeholder), fontSize = 12.sp, color = theme.onSurfaceVariant) },
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = theme.onSurface,
@@ -782,8 +786,8 @@ fun ConnectionSection(
                 Button(
                     onClick = onConnectClick,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (theme.isDark) Color(0xFF00FF7F) else Color(0xFF007AFF),
-                        contentColor = Color.Black
+                        containerColor = theme.primary,
+                        contentColor = theme.onPrimary
                     ),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
@@ -1016,10 +1020,12 @@ fun DisplaySection(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = stringResource(opt.nameRes).take(6),
+                            text = stringResource(opt.nameRes),
                             fontSize = 11.sp,
-                            color = Color.White,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            color = theme.onPrimary,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1030,6 +1036,7 @@ fun DisplaySection(
 
 @Composable
 fun BrandHeroCard() {
+    val theme = CmuxTheme.colors
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1040,14 +1047,14 @@ fun BrandHeroCard() {
             modifier = Modifier
                 .size(60.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF141E2E))
-                .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(16.dp)),
+                .background(theme.primary.copy(alpha = 0.12f))
+                .border(1.dp, theme.cardBorder, RoundedCornerShape(16.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Terminal,
                 contentDescription = null,
-                tint = Color(0xFF0A84FF),
+                tint = theme.primary,
                 modifier = Modifier.size(34.dp)
             )
         }
@@ -1062,20 +1069,20 @@ fun BrandHeroCard() {
                 text = stringResource(R.string.app_name),
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = theme.onContainer
             )
             Spacer(modifier = Modifier.width(8.dp))
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0x260A84FF))
+                    .background(theme.primary.copy(alpha = 0.15f))
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
                 Text(
                     text = stringResource(R.string.settings_brand_badge),
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0A84FF)
+                    color = theme.primary
                 )
             }
         }
@@ -1083,7 +1090,7 @@ fun BrandHeroCard() {
         Text(
             text = stringResource(R.string.settings_brand_tagline, "0.2.0"),
             fontSize = 12.sp,
-            color = Color(0xFF8E8E93),
+            color = theme.onContainerMuted,
             modifier = Modifier.padding(top = 4.dp)
         )
     }
@@ -1096,10 +1103,11 @@ fun ReleaseSection(
     updateResult: UpdateCheckResult?,
     onCheckClick: () -> Unit
 ) {
+    val theme = CmuxTheme.colors
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -1118,13 +1126,13 @@ fun ReleaseSection(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0xFF0A84FF)),
+                            .background(theme.primary),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.CloudDownload,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = theme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -1136,12 +1144,12 @@ fun ReleaseSection(
                             text = stringResource(R.string.settings_check_update),
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color.White
+                            color = theme.onContainer
                         )
                         Text(
                             text = stringResource(R.string.settings_current_version, currentVersion),
                             fontSize = 11.5.sp,
-                            color = Color(0xFF8E8E93)
+                            color = theme.onContainerMuted
                         )
                     }
                 }
@@ -1151,33 +1159,33 @@ fun ReleaseSection(
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
-                            color = Color(0xFF0A84FF)
+                            color = theme.primary
                         )
                     } else if (updateResult is UpdateCheckResult.UpdateAvailable) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0x33FF9F0A))
+                                .background(theme.accentOrange.copy(alpha = 0.2f))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = stringResource(R.string.settings_update_available_badge),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFF9F0A)
+                                color = theme.accentOrange
                             )
                         }
                     } else {
                         Text(
                             text = stringResource(R.string.settings_check),
                             fontSize = 12.sp,
-                            color = Color(0xFF0A84FF),
+                            color = theme.primary,
                             fontWeight = FontWeight.Medium
                         )
                     }
 
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "›", fontSize = 16.sp, color = Color(0xFF636366))
+                    Text(text = "›", fontSize = 16.sp, color = theme.onContainerMuted)
                 }
             }
         }
@@ -1190,10 +1198,11 @@ fun OpenSourceSection(
     onOpenIssues: () -> Unit,
     onOpenLicenses: () -> Unit
 ) {
+    val theme = CmuxTheme.colors
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -1212,30 +1221,30 @@ fun OpenSourceSection(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0xFF24292E)),
+                            .background(theme.brandGithub),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Code,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = theme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(stringResource(R.string.settings_repo), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text(stringResource(R.string.settings_repo_value), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_repo), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_repo_value), fontSize = 11.5.sp, color = theme.onContainerMuted)
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.settings_star), fontSize = 12.sp, color = Color(0xFF0A84FF), fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_star), fontSize = 12.sp, color = theme.primary, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+                    Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
                 }
             }
 
-            HorizontalDivider(color = Color(0x1AFFFFFF), modifier = Modifier.padding(start = 48.dp))
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 48.dp))
 
             Row(
                 modifier = Modifier
@@ -1253,26 +1262,26 @@ fun OpenSourceSection(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0xFFFF9F0A)),
+                            .background(theme.accentOrange),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.BugReport,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = theme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(stringResource(R.string.settings_feedback), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text(stringResource(R.string.settings_feedback_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_feedback), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_feedback_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
                     }
                 }
-                Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+                Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
             }
 
-            HorizontalDivider(color = Color(0x1AFFFFFF), modifier = Modifier.padding(start = 48.dp))
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 48.dp))
 
             Row(
                 modifier = Modifier
@@ -1290,23 +1299,23 @@ fun OpenSourceSection(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0xFF30D158)),
+                            .background(theme.accentGreen),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Description,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = theme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(stringResource(R.string.settings_licenses), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text(stringResource(R.string.settings_licenses_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_licenses), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_licenses_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
                     }
                 }
-                Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+                Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
             }
         }
     }
@@ -1319,10 +1328,11 @@ fun DiagnosticsSection(
     onViewLogs: () -> Unit,
     onExportBundle: () -> Unit
 ) {
+    val theme = CmuxTheme.colors
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -1341,20 +1351,20 @@ fun DiagnosticsSection(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0xFFBF5AF2)),
+                            .background(theme.accentPurple),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Terminal,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = theme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(stringResource(R.string.settings_diag_toggle), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text(stringResource(if (isEnabled) R.string.settings_diag_enabled_desc else R.string.settings_diag_disabled_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_diag_toggle), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(if (isEnabled) R.string.settings_diag_enabled_desc else R.string.settings_diag_disabled_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
                     }
                 }
 
@@ -1362,15 +1372,15 @@ fun DiagnosticsSection(
                     checked = isEnabled,
                     onCheckedChange = onToggleEnabled,
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF30D158),
-                        uncheckedThumbColor = Color.LightGray,
-                        uncheckedTrackColor = Color(0xFF39393D)
+                        checkedThumbColor = theme.onPrimary,
+                        checkedTrackColor = theme.accentGreen,
+                        uncheckedThumbColor = theme.onSurfaceVariant,
+                        uncheckedTrackColor = theme.surfaceVariant
                     )
                 )
             }
 
-            HorizontalDivider(color = Color(0x1AFFFFFF), modifier = Modifier.padding(start = 48.dp))
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 48.dp))
 
             Row(
                 modifier = Modifier
@@ -1388,32 +1398,31 @@ fun DiagnosticsSection(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0xFF64D2FF)),
+                            .background(theme.accentTeal),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = theme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(stringResource(R.string.settings_diag_export), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text(stringResource(R.string.settings_diag_export_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_diag_export), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_diag_export_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.settings_json_label), fontSize = 12.sp, color = Color(0xFF8E8E93))
+                    Text(stringResource(R.string.settings_json_label), fontSize = 12.sp, color = theme.onContainerMuted)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+                    Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
                 }
             }
         }
     }
 }
-
 @Composable
 fun StorageSection(
     profileCount: Int,
@@ -1421,10 +1430,11 @@ fun StorageSection(
     onImportProfiles: () -> Unit,
     onClearScrollback: () -> Unit
 ) {
+    val theme = CmuxTheme.colors
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -1443,26 +1453,26 @@ fun StorageSection(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0xFF32D74B)),
+                            .background(theme.accentGreen),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.FileDownload,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = theme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(stringResource(R.string.settings_export_profiles), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text(stringResource(R.string.settings_export_profiles_desc, profileCount), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_export_profiles), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_export_profiles_desc, profileCount), fontSize = 11.5.sp, color = theme.onContainerMuted)
                     }
                 }
-                Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+                Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
             }
 
-            HorizontalDivider(color = Color(0x1AFFFFFF), modifier = Modifier.padding(start = 48.dp))
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 48.dp))
 
             Row(
                 modifier = Modifier
@@ -1480,26 +1490,26 @@ fun StorageSection(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0xFFFFD60A)),
+                            .background(theme.accentYellow),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.FileUpload,
                             contentDescription = null,
-                            tint = Color.Black,
+                            tint = theme.onAccentBright,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(stringResource(R.string.settings_import_profiles), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text(stringResource(R.string.settings_import_profiles_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_import_profiles), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_import_profiles_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
                     }
                 }
-                Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+                Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
             }
 
-            HorizontalDivider(color = Color(0x1AFFFFFF), modifier = Modifier.padding(start = 48.dp))
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 48.dp))
 
             Row(
                 modifier = Modifier
@@ -1517,23 +1527,23 @@ fun StorageSection(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0xFFFF453A)),
+                            .background(theme.accentRed),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.CleaningServices,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = theme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(stringResource(R.string.settings_clear_scrollback), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text(stringResource(R.string.settings_clear_scrollback_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_clear_scrollback), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_clear_scrollback_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
                     }
                 }
-                Text("›", fontSize = 16.sp, color = Color(0xFF636366))
+                Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
             }
         }
     }

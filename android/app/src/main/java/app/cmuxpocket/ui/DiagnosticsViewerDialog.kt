@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -40,6 +41,7 @@ fun DiagnosticsViewerDialog(
     connectionStatus: ConnectionStatus,
     onDismissRequest: () -> Unit
 ) {
+    val theme = CmuxTheme.colors
     val context = LocalContext.current
     var logs by remember { mutableStateOf(DiagnosticsManager.getLogs()) }
     val listState = rememberLazyListState()
@@ -59,7 +61,7 @@ fun DiagnosticsViewerDialog(
                 .fillMaxWidth(0.94f)
                 .fillMaxHeight(0.85f)
                 .clip(RoundedCornerShape(20.dp)),
-            color = Color(0xFF1C1C1E),
+            color = theme.containerBg,
             tonalElevation = 6.dp
         ) {
             Column(
@@ -73,19 +75,22 @@ fun DiagnosticsViewerDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = stringResource(R.string.diag_title),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = theme.onContainer,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (DiagnosticsManager.isEnabled) Color(0x3330D158) else Color(0x338E8E93))
+                                    .background(if (DiagnosticsManager.isEnabled) theme.accentGreen.copy(alpha = 0.2f) else theme.controlBg)
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
@@ -96,29 +101,31 @@ fun DiagnosticsViewerDialog(
                                     },
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (DiagnosticsManager.isEnabled) Color(0xFF30D158) else Color(0xFF8E8E93)
+                                    color = if (DiagnosticsManager.isEnabled) theme.accentGreen else theme.onContainerMuted
                                 )
                             }
                         }
                         Text(
                             text = stringResource(R.string.diag_subtitle),
                             fontSize = 11.5.sp,
-                            color = Color(0xFF8E8E93),
+                            color = theme.onContainerMuted,
                             modifier = Modifier.padding(top = 2.dp)
                         )
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     IconButton(
                         onClick = onDismissRequest,
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(Color(0x1FFFFFFF))
+                            .background(theme.controlBg)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = stringResource(R.string.diag_close_button),
-                            tint = Color.White,
+                            tint = theme.onContainer,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -132,8 +139,8 @@ fun DiagnosticsViewerDialog(
                         .fillMaxWidth()
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF000000))
-                        .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(12.dp))
+                        .background(theme.background)
+                        .border(1.dp, theme.cardBorder, RoundedCornerShape(12.dp))
                         .padding(10.dp)
                 ) {
                     if (logs.isEmpty()) {
@@ -149,7 +156,7 @@ fun DiagnosticsViewerDialog(
                                     stringResource(R.string.diag_empty_no_logs)
                                 },
                                 fontSize = 12.sp,
-                                color = Color(0xFF8E8E93),
+                                color = theme.onContainerMuted,
                                 fontFamily = FontFamily.Monospace,
                                 lineHeight = 18.sp,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -163,11 +170,11 @@ fun DiagnosticsViewerDialog(
                         ) {
                             items(logs) { line ->
                                 val color = when {
-                                    line.contains("[AUTH]") -> Color(0xFFFF9F0A)
-                                    line.contains("[RPC]") -> Color(0xFF0A84FF)
-                                    line.contains("error", ignoreCase = true) || line.contains("failed", ignoreCase = true) -> Color(0xFFFF453A)
-                                    line.contains("success", ignoreCase = true) || line.contains("CONNECTED") -> Color(0xFF30D158)
-                                    else -> Color(0xFFE5E5EA)
+                                    line.contains("[AUTH]") -> theme.accentOrange
+                                    line.contains("[RPC]") -> theme.primary
+                                    line.contains("error", ignoreCase = true) || line.contains("failed", ignoreCase = true) -> theme.accentRed
+                                    line.contains("success", ignoreCase = true) || line.contains("CONNECTED") -> theme.accentGreen
+                                    else -> theme.onSurfaceVariant
                                 }
                                 Text(
                                     text = line,
@@ -199,13 +206,13 @@ fun DiagnosticsViewerDialog(
                             .height(44.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color(0xFFFF453A)
+                            contentColor = theme.accentRed
                         ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x33FF453A))
+                        border = androidx.compose.foundation.BorderStroke(1.dp, theme.accentRed.copy(alpha = 0.2f))
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(stringResource(R.string.diag_clear_button), fontSize = 13.sp)
+                        Text(stringResource(R.string.diag_clear_button), fontSize = 13.sp, maxLines = 1)
                     }
 
                     Button(
@@ -220,14 +227,20 @@ fun DiagnosticsViewerDialog(
                             .weight(1.5f)
                             .height(44.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF0A84FF),
-                            contentColor = Color.White
+                            containerColor = theme.primary,
+                            contentColor = theme.onPrimary
                         ),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(stringResource(R.string.diag_export_button), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(R.string.diag_export_button),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }

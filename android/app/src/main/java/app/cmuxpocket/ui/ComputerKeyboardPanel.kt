@@ -15,7 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.annotation.StringRes
@@ -40,6 +39,7 @@ private enum class KeyboardPage(@StringRes val titleRes: Int) {
 fun ComputerKeyboardPanel(
     onSendKey: (String) -> Unit,
     onDismissRequest: () -> Unit,
+    isLandscape: Boolean,
     modifier: Modifier = Modifier
 ) {
     val theme = CmuxTheme.colors
@@ -69,8 +69,6 @@ fun ComputerKeyboardPanel(
         onSendKey(encoded)
     }
 
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,

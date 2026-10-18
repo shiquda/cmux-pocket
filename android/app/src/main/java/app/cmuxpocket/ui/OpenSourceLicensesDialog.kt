@@ -26,6 +26,7 @@ import app.cmuxpocket.R
 fun OpenSourceLicensesDialog(
     onDismissRequest: () -> Unit
 ) {
+    val theme = CmuxTheme.colors
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -35,7 +36,7 @@ fun OpenSourceLicensesDialog(
                 .fillMaxWidth(0.92f)
                 .fillMaxHeight(0.85f)
                 .clip(RoundedCornerShape(20.dp)),
-            color = Color(0xFF1C1C1E),
+            color = theme.containerBg,
             tonalElevation = 6.dp
         ) {
             Column(
@@ -54,12 +55,12 @@ fun OpenSourceLicensesDialog(
                             text = stringResource(R.string.lic_title),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = theme.onContainer
                         )
                         Text(
                             text = stringResource(R.string.lic_subtitle),
                             fontSize = 12.sp,
-                            color = Color(0xFF8E8E93)
+                            color = theme.onContainerMuted
                         )
                     }
 
@@ -68,12 +69,12 @@ fun OpenSourceLicensesDialog(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(Color(0x1FFFFFFF))
+                            .background(theme.controlBg)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = stringResource(R.string.lic_close_button),
-                            tint = Color.White,
+                            tint = theme.onContainer,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -144,8 +145,8 @@ fun OpenSourceLicensesDialog(
                         .fillMaxWidth()
                         .height(44.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF0A84FF),
-                        contentColor = Color.White
+                        containerColor = theme.primary,
+                        contentColor = theme.onPrimary
                     ),
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -162,31 +163,32 @@ private fun LicenseCard(
     license: String,
     description: String
 ) {
+    val theme = CmuxTheme.colors
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF2C2C2E))
+            .background(theme.cardBg)
             .padding(14.dp)
     ) {
         Text(
             text = title,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = theme.onContainer
         )
         Text(
             text = license,
             fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF30D158),
+            color = theme.accentGreen,
             modifier = Modifier.padding(top = 2.dp, bottom = 6.dp)
         )
         Text(
             text = description,
             fontSize = 11.sp,
             lineHeight = 16.sp,
-            color = Color(0xFFE5E5EA),
+            color = theme.onContainer,
             fontFamily = FontFamily.Monospace
         )
     }

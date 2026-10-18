@@ -51,8 +51,8 @@ fun SessionSurfaceDrawer(
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
-        containerColor = Color(0xFF1C1C1E),
-        contentColor = Color.White,
+        containerColor = theme.containerBg,
+        contentColor = theme.onContainer,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -60,7 +60,7 @@ fun SessionSurfaceDrawer(
                     .width(36.dp)
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(Color(0x4DFFFFFF))
+                    .background(theme.controlBorder)
             )
         },
         modifier = modifier
@@ -83,12 +83,12 @@ fun SessionSurfaceDrawer(
                         text = stringResource(R.string.drawer_title),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = theme.onContainer
                     )
                     Text(
                         text = stringResource(R.string.drawer_host_summary, hostLabel, workspaces.size),
                         fontSize = 12.sp,
-                        color = Color(0xFF8E8E93),
+                        color = theme.onContainerMuted,
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
@@ -106,12 +106,12 @@ fun SessionSurfaceDrawer(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(Color(0x1FFFFFFF))
+                            .background(theme.controlBg)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = stringResource(R.string.kb_settings),
-                            tint = Color.White,
+                            tint = theme.onContainer,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -122,12 +122,12 @@ fun SessionSurfaceDrawer(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(Color(0x1FFFFFFF))
+                            .background(theme.controlBg)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = stringResource(R.string.main_close),
-                            tint = Color.White,
+                            tint = theme.onContainer,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -147,7 +147,7 @@ fun SessionSurfaceDrawer(
                             text = stringResource(R.string.drawer_active_surfaces),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF8E8E93),
+                            color = theme.onContainerMuted,
                             letterSpacing = 0.5.sp,
                             modifier = Modifier.padding(bottom = 8.dp, start = 2.dp)
                         )
@@ -219,7 +219,7 @@ fun SessionSurfaceDrawer(
                                 text = stringResource(R.string.drawer_workspace_switcher),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF8E8E93),
+                                color = theme.onContainerMuted,
                                 letterSpacing = 0.5.sp
                             )
 
@@ -227,7 +227,7 @@ fun SessionSurfaceDrawer(
                                 text = stringResource(R.string.drawer_new),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0A84FF),
+                                color = theme.primary,
                                 modifier = Modifier.clickable {
                                     onDismissRequest()
                                     onNewWorkspaceClick()
@@ -265,12 +265,13 @@ private fun SurfaceCard(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val theme = CmuxTheme.colors
     val isWorking = surface.agentState.equals("working", ignoreCase = true) ||
         surface.agentState.equals("busy", ignoreCase = true) ||
         surface.attention
 
-    val cardBg = if (isSelected) Color(0x260A84FF) else Color(0xFF2C2C2E)
-    val cardBorder = if (isSelected) Color(0xFF0A84FF) else Color(0x1FFFFFFF)
+    val cardBg = if (isSelected) theme.primary.copy(alpha = 0.15f) else theme.cardBg
+    val cardBorder = if (isSelected) theme.primary else theme.cardBorder
 
     Box(
         modifier = modifier
@@ -291,7 +292,7 @@ private fun SurfaceCard(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    color = Color.White,
+                    color = theme.onContainer,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
@@ -304,41 +305,41 @@ private fun SurfaceCard(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0x33FF9F0A))
+                            .background(theme.accentOrange.copy(alpha = 0.2f))
                             .padding(horizontal = 6.dp, vertical = 1.dp)
                     ) {
                         Text(
                             text = stringResource(R.string.drawer_state_working),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFFF9F0A)
+                            color = theme.accentOrange
                         )
                     }
                 } else if (surface.dead) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0x33FF453A))
+                            .background(theme.accentRed.copy(alpha = 0.2f))
                             .padding(horizontal = 6.dp, vertical = 1.dp)
                     ) {
                         Text(
                             text = stringResource(R.string.drawer_state_dead),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFFF453A)
+                            color = theme.accentRed
                         )
                     }
                 } else {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0x1AFFFFFF))
+                            .background(theme.controlBg)
                             .padding(horizontal = 6.dp, vertical = 1.dp)
                     ) {
                         Text(
                             text = stringResource(R.string.drawer_state_idle),
                             fontSize = 10.sp,
-                            color = Color(0xFF8E8E93)
+                            color = theme.onContainerMuted
                         )
                     }
                 }
@@ -350,7 +351,7 @@ private fun SurfaceCard(
                 text = previewText,
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
-                color = Color(0xFF9CA3AF),
+                color = theme.onContainerMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -363,12 +364,13 @@ private fun NewSurfaceCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val theme = CmuxTheme.colors
     Box(
         modifier = modifier
             .heightIn(min = 62.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF222224))
-            .border(1.dp, Color(0x330A84FF), RoundedCornerShape(12.dp))
+            .background(theme.cardBg)
+            .border(1.dp, theme.primary.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(10.dp),
         contentAlignment = Alignment.Center
@@ -380,7 +382,7 @@ private fun NewSurfaceCard(
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = null,
-                tint = Color(0xFF0A84FF),
+                tint = theme.primary,
                 modifier = Modifier.size(16.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
@@ -388,7 +390,7 @@ private fun NewSurfaceCard(
                 text = stringResource(R.string.drawer_new_surface),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF0A84FF)
+                color = theme.primary
             )
         }
     }
@@ -400,8 +402,9 @@ private fun WorkspaceCard(
     isCurrent: Boolean,
     onClick: () -> Unit
 ) {
-    val cardBg = if (isCurrent) Color(0x2230D158) else Color(0xFF2C2C2E)
-    val cardBorder = if (isCurrent) Color(0x6630D158) else Color(0x1FFFFFFF)
+    val theme = CmuxTheme.colors
+    val cardBg = if (isCurrent) theme.accentGreen.copy(alpha = 0.13f) else theme.cardBg
+    val cardBorder = if (isCurrent) theme.accentGreen.copy(alpha = 0.4f) else theme.cardBorder
 
     Row(
         modifier = Modifier
@@ -421,7 +424,7 @@ private fun WorkspaceCard(
             Icon(
                 imageVector = Icons.Default.Folder,
                 contentDescription = null,
-                tint = if (isCurrent) Color(0xFF30D158) else Color(0xFF8E8E93),
+                tint = if (isCurrent) theme.accentGreen else theme.onContainerMuted,
                 modifier = Modifier.size(20.dp)
             )
 
@@ -432,7 +435,7 @@ private fun WorkspaceCard(
                     text = if (isCurrent) stringResource(R.string.drawer_workspace_current, workspace.name) else workspace.name,
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    color = theme.onContainer,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -443,7 +446,7 @@ private fun WorkspaceCard(
                         workspace.pathLabel.ifBlank { stringResource(R.string.drawer_default_path) }
                     ),
                     fontSize = 11.sp,
-                    color = Color(0xFF8E8E93),
+                    color = theme.onContainerMuted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -454,14 +457,14 @@ private fun WorkspaceCard(
             Text(
                 text = "● " + stringResource(R.string.drawer_connected),
                 fontSize = 12.sp,
-                color = Color(0xFF30D158),
+                color = theme.accentGreen,
                 fontWeight = FontWeight.Medium
             )
         } else {
             Text(
                 text = stringResource(R.string.drawer_switch),
                 fontSize = 12.sp,
-                color = Color(0xFF0A84FF),
+                color = theme.primary,
                 fontWeight = FontWeight.Medium
             )
         }

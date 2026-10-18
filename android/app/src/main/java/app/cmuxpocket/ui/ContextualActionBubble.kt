@@ -39,13 +39,14 @@ fun ContextualActionBubble(
     modifier: Modifier = Modifier,
     hasSelection: Boolean = false
 ) {
+    val theme = CmuxTheme.colors
     Surface(
         modifier = modifier
             .offset { offset }
             .shadow(elevation = 16.dp, shape = RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(14.dp)),
-        color = Color(0xEE222226),
+            .border(1.dp, theme.controlBorder, RoundedCornerShape(14.dp)),
+        color = theme.bubbleBg,
         tonalElevation = 10.dp
     ) {
         Column(
@@ -55,7 +56,7 @@ fun ContextualActionBubble(
         ) {
             BubbleItem(
                 icon = Icons.Default.ContentCopy,
-                iconTint = Color(0xFF0A84FF),
+                iconTint = theme.primary,
                 text = if (hasSelection) stringResource(R.string.bubble_copy_selection) else stringResource(R.string.bubble_copy_screen),
                 onClick = {
                     onCopy()
@@ -65,7 +66,7 @@ fun ContextualActionBubble(
 
             BubbleItem(
                 icon = Icons.Default.ContentPaste,
-                iconTint = Color(0xFF30D158),
+                iconTint = theme.accentGreen,
                 text = stringResource(R.string.bubble_paste),
                 onClick = {
                     onPaste()
@@ -75,7 +76,7 @@ fun ContextualActionBubble(
 
             BubbleItem(
                 icon = Icons.Default.FlashOn,
-                iconTint = Color(0xFFFF9F0A),
+                iconTint = theme.accentOrange,
                 text = stringResource(R.string.bubble_interrupt),
                 onClick = {
                     onInterrupt()
@@ -85,7 +86,7 @@ fun ContextualActionBubble(
 
             BubbleItem(
                 icon = Icons.Default.CleaningServices,
-                iconTint = Color(0xFFFF453A),
+                iconTint = theme.accentRed,
                 text = stringResource(R.string.bubble_clear),
                 onClick = {
                     onClear()
@@ -103,6 +104,7 @@ private fun BubbleItem(
     text: String,
     onClick: () -> Unit
 ) {
+    val theme = CmuxTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -121,7 +123,7 @@ private fun BubbleItem(
             text = text,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
-            color = Color.White
+            color = theme.onContainer
         )
     }
 }

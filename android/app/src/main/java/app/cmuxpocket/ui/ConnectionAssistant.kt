@@ -79,12 +79,16 @@ fun ConnectionAssistant(
 
 /** Visible in both layouts even if authentication succeeds but bootstrap fails. */
 @Composable
-fun ConnectionReadinessNotice(readiness: ConnectionReadiness, onOpenSettings: () -> Unit) {
+fun ConnectionReadinessNotice(
+    readiness: ConnectionReadiness,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     if (readiness.problem == null) return
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
             Text(readiness.summary, fontSize = 13.sp)

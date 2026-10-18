@@ -27,7 +27,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.BackHandler
@@ -266,8 +265,6 @@ fun CmuxApp(
     }
     val changeTerminalDisplay: (TerminalDisplayPreference) -> Unit = { terminalDisplay = it.normalized() }
 
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     var isSidebarExpanded by remember { mutableStateOf(false) }
     var showSessionSurfaceDrawer by remember { mutableStateOf(false) }
@@ -299,7 +296,11 @@ fun CmuxApp(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Orientation is derived from the real window size rather than LocalConfiguration: the
+    // activity handles configuration changes itself, so a rotation must not depend on the
+    // configuration CompositionLocal being refreshed.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isLandscape = maxWidth > maxHeight
         if (isLandscape) {
             // LANDSCAPE LAYOUT: Collapsible Left Sidebar + Full Height Terminal Stage
             Row(
@@ -324,7 +325,11 @@ fun CmuxApp(
                 )
 
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    ConnectionReadinessNotice(connectionReadiness) { showSettingsDialog = true }
+                    ConnectionReadinessNotice(
+                        readiness = connectionReadiness,
+                        onOpenSettings = { showSettingsDialog = true },
+                        modifier = Modifier.statusBarsPadding()
+                    )
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         TerminalStage(
                             surfaces = activeSurfaces,
@@ -341,14 +346,25 @@ fun CmuxApp(
                             onSendKey = { key -> viewModel.sendInput(key) },
                             onClearScreen = { viewModel.clearScrollback() }
                         )
+
+                        // D2 breadcrumb pill: same entry point in landscape
+                        FloatingIslandPill(
+                            connectionStatus = status,
+                            activeWorkspace = activeWorkspace,
+                            activeSurface = activeSurfaces.firstOrNull { it.id == selectedSurfaceId } ?: activeSurfaces.firstOrNull(),
+                            surfaceCount = activeSurfaces.size,
+                            onClick = { showSessionSurfaceDrawer = true },
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .statusBarsPadding()
+                                .padding(top = 8.dp)
+                        )
                     }
 
                     AccessoryKeyboardBar(
                         onSendKey = { key -> viewModel.sendInput(key) },
                         onOpenKeyboardPanel = { showKeyboardPanel = true },
-                        onTabsClick = { showSessionSurfaceDrawer = true },
-                        onSettingsClick = { showSettingsDialog = true },
-                        surfaceCount = activeSurfaces.size
+                        onSettingsClick = { showSettingsDialog = true }
                     )
                 }
             }
@@ -357,13 +373,11 @@ fun CmuxApp(
             // 0dp fixed top bar consumption: terminal canvas 直接贴顶
             Scaffold(
                 bottomBar = {
-                    AccessoryKeyboardBar(
-                        onSendKey = { key -> viewModel.sendInput(key) },
-                        onOpenKeyboardPanel = { showKeyboardPanel = true },
-                        onTabsClick = { showSessionSurfaceDrawer = true },
-                        onSettingsClick = { showSettingsDialog = true },
-                        surfaceCount = activeSurfaces.size
-                    )
+                        AccessoryKeyboardBar(
+                            onSendKey = { key -> viewModel.sendInput(key) },
+                            onOpenKeyboardPanel = { showKeyboardPanel = true },
+                            onSettingsClick = { showSettingsDialog = true }
+                        )
                 },
                 containerColor = theme.background
             ) { paddingValues ->
@@ -394,6 +408,7 @@ fun CmuxApp(
                         connectionStatus = status,
                         activeWorkspace = activeWorkspace,
                         activeSurface = activeSurfaces.firstOrNull { it.id == selectedSurfaceId } ?: activeSurfaces.firstOrNull(),
+                        surfaceCount = activeSurfaces.size,
                         onClick = { showSessionSurfaceDrawer = true },
                         modifier = Modifier
                             .align(Alignment.TopCenter)
@@ -412,117 +427,119 @@ fun CmuxApp(
             onViewReady = { terminalInputView = it },
             modifier = Modifier.size(1.dp)
         )
-    }
 
-    // Shared Sheets & Dialogs
-    if (showKeyboardPanel) {
-        ComputerKeyboardPanel(
-            onSendKey = { key -> viewModel.sendInput(key) },
-            onDismissRequest = { showKeyboardPanel = false }
-        )
-    }
+        // Shared Sheets & Dialogs
+        if (showKeyboardPanel) {
+            ComputerKeyboardPanel(
+                onSendKey = { key -> viewModel.sendInput(key) },
+                onDismissRequest = { showKeyboardPanel = false },
+                isLandscape = isLandscape
+            )
+        }
 
-    if (showSessionSurfaceDrawer) {
-        SessionSurfaceDrawer(
-            workspaces = workspaces,
-            activeWorkspace = activeWorkspace,
-            surfaces = activeSurfaces,
-            selectedSurfaceId = selectedSurfaceId,
-            hostLabel = hostInput,
-            onSelectSurface = { surfaceId -> viewModel.selectSurface(surfaceId) },
-            onCloseSurface = { surfaceId -> requestCloseSurface(surfaceId) },
-            onNewSurfaceClick = { showNewSurfaceDialog = true },
-            onSelectWorkspace = { key -> viewModel.selectWorkspace(key) },
-            onNewWorkspaceClick = { showNewWorkspaceDialog = true },
-            onSettingsClick = { showSettingsDialog = true },
-            onDismissRequest = { showSessionSurfaceDrawer = false }
-        )
-    }
+        if (showSessionSurfaceDrawer) {
+            SessionSurfaceDrawer(
+                workspaces = workspaces,
+                activeWorkspace = activeWorkspace,
+                surfaces = activeSurfaces,
+                selectedSurfaceId = selectedSurfaceId,
+                hostLabel = hostInput,
+                onSelectSurface = { surfaceId -> viewModel.selectSurface(surfaceId) },
+                onCloseSurface = { surfaceId -> requestCloseSurface(surfaceId) },
+                onNewSurfaceClick = { showNewSurfaceDialog = true },
+                onSelectWorkspace = { key -> viewModel.selectWorkspace(key) },
+                onNewWorkspaceClick = { showNewWorkspaceDialog = true },
+                onSettingsClick = { showSettingsDialog = true },
+                onDismissRequest = { showSessionSurfaceDrawer = false }
+            )
+        }
 
-    if (showNewWorkspaceDialog) {
-        NewWorkspaceDialog(
-            onDismissRequest = { showNewWorkspaceDialog = false },
-            onConfirm = { name, initialTerminal ->
-                showNewWorkspaceDialog = false
-                viewModel.createWorkspace(name, initialTerminal)
-            }
-        )
-    }
-
-    if (showNewSurfaceDialog) {
-        NewSurfaceDialog(
-            workspaceName = activeWorkspace?.name ?: stringResource(R.string.main_workspace_fallback),
-            onDismissRequest = { showNewSurfaceDialog = false },
-            onConfirm = { title ->
-                showNewSurfaceDialog = false
-                viewModel.createSurface(activeWorkspace?.stableKey, title)
-            }
-        )
-    }
-
-    pendingCloseSurface?.let { surface ->
-        val running = surface.agentState == "working" || surface.agentState == "needs_input"
-        AlertDialog(
-            onDismissRequest = { pendingCloseSurface = null },
-            title = { Text(stringResource(R.string.main_close_tab_title)) },
-            text = {
-                Text(
-                    if (running) {
-                        stringResource(R.string.main_close_tab_running, surface.displayTitle)
-                    } else {
-                        stringResource(R.string.main_close_tab_still_running, surface.displayTitle)
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val id = surface.id
-                        pendingCloseSurface = null
-                        viewModel.closeSurface(id)
-                    }
-                ) {
-                    Text(stringResource(R.string.main_close))
+        if (showNewWorkspaceDialog) {
+            NewWorkspaceDialog(
+                onDismissRequest = { showNewWorkspaceDialog = false },
+                onConfirm = { name, initialTerminal ->
+                    showNewWorkspaceDialog = false
+                    viewModel.createWorkspace(name, initialTerminal)
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingCloseSurface = null }) {
-                    Text(stringResource(R.string.main_cancel))
+            )
+        }
+
+        if (showNewSurfaceDialog) {
+            NewSurfaceDialog(
+                workspaceName = activeWorkspace?.name ?: stringResource(R.string.main_workspace_fallback),
+                onDismissRequest = { showNewSurfaceDialog = false },
+                onConfirm = { title ->
+                    showNewSurfaceDialog = false
+                    viewModel.createSurface(activeWorkspace?.stableKey, title)
                 }
-            }
-        )
+            )
+        }
+
+        pendingCloseSurface?.let { surface ->
+            val running = surface.agentState == "working" || surface.agentState == "needs_input"
+            AlertDialog(
+                onDismissRequest = { pendingCloseSurface = null },
+                title = { Text(stringResource(R.string.main_close_tab_title)) },
+                text = {
+                    Text(
+                        if (running) {
+                            stringResource(R.string.main_close_tab_running, surface.displayTitle)
+                        } else {
+                            stringResource(R.string.main_close_tab_still_running, surface.displayTitle)
+                        }
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val id = surface.id
+                            pendingCloseSurface = null
+                            viewModel.closeSurface(id)
+                        }
+                    ) {
+                        Text(stringResource(R.string.main_close))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingCloseSurface = null }) {
+                        Text(stringResource(R.string.main_cancel))
+                    }
+                }
+            )
+        }
+
+        // Full-screen settings page (never a floating overlay over the terminal).
+        if (showSettingsDialog) {
+            BackHandler { showSettingsDialog = false }
+            SettingsScreen(
+                hostInput = hostInput,
+                portInput = portInput,
+                tokenInput = tokenInput,
+                fontSizeSp = terminalDisplay.fontSizeSp,
+                selectedThemeHex = selectedThemeHex,
+                themeMode = themeMode,
+                connectionStatus = status,
+                connectionReadiness = connectionReadiness,
+                settingsManager = settingsManager,
+
+
+                onHostChange = onHostChange,
+                onPortChange = onPortChange,
+                onTokenChange = onTokenChange,
+                onFontSizeChange = {
+                    onFontSizeChange(it)
+                    changeTerminalDisplay(terminalDisplay.copy(fontSizeSp = it, fitWidth = false, panX = 0f, panY = null))
+                },
+                onThemeChange = onThemeHexChange,
+                onThemeModeChange = onThemeModeChange,
+                onConnectClick = {
+                    viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
+                },
+                onScanQrClick = onScanQrClick,
+                onClearScrollback = { viewModel.clearScrollback() },
+                onDismissRequest = { showSettingsDialog = false }
+            )
+        }
     }
 
-    // Full-screen settings page (never a floating overlay over the terminal).
-    if (showSettingsDialog) {
-        BackHandler { showSettingsDialog = false }
-        SettingsScreen(
-            hostInput = hostInput,
-            portInput = portInput,
-            tokenInput = tokenInput,
-            fontSizeSp = terminalDisplay.fontSizeSp,
-            selectedThemeHex = selectedThemeHex,
-            themeMode = themeMode,
-            connectionStatus = status,
-            connectionReadiness = connectionReadiness,
-            settingsManager = settingsManager,
-
-
-            onHostChange = onHostChange,
-            onPortChange = onPortChange,
-            onTokenChange = onTokenChange,
-            onFontSizeChange = {
-                onFontSizeChange(it)
-                changeTerminalDisplay(terminalDisplay.copy(fontSizeSp = it, fitWidth = false, panX = 0f, panY = null))
-            },
-            onThemeChange = onThemeHexChange,
-            onThemeModeChange = onThemeModeChange,
-            onConnectClick = {
-                viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
-            },
-            onScanQrClick = onScanQrClick,
-            onClearScrollback = { viewModel.clearScrollback() },
-            onDismissRequest = { showSettingsDialog = false }
-        )
-    }
 }

@@ -24,21 +24,28 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Proposal C: Minimalist Floating Island Pill (Panic Prompt 3 / Blink Shell style).
- * Overlaid at the top of the terminal viewport with 0dp fixed height consumption.
+ * Proposal D2: breadcrumb pill over the terminal viewport.
+ *
+ * `[status dot] workspace › #N session ▾ [surface count]`, one single tap target that opens the
+ * unified [SessionSurfaceDrawer]. Fixed height consumption stays 0dp; the terminal renders
+ * underneath and the pill floats above it.
  */
 @Composable
 fun FloatingIslandPill(
     connectionStatus: ConnectionStatus,
     activeWorkspace: WorkspaceInfo?,
     activeSurface: SurfaceInfo?,
+    surfaceCount: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val theme = CmuxTheme.colors
+
     val isWorking = connectionStatus == ConnectionStatus.CONNECTED &&
         (activeSurface?.agentState.equals("working", ignoreCase = true) ||
             activeSurface?.agentState.equals("busy", ignoreCase = true) ||
@@ -79,38 +86,40 @@ fun FloatingIslandPill(
     val connectingLabel = stringResource(R.string.island_connecting)
     val disconnectedLabel = stringResource(R.string.island_disconnected)
 
-    val (dotColor, dotAlpha, dotScale, titleText) = when {
-        connectionStatus == ConnectionStatus.CONNECTING || connectionStatus == ConnectionStatus.AUTHENTICATING -> {
-            Quad(Color(0xFFFFD60A), connectingBlinkAlpha, 1.0f, connectingLabel)
+    val workspaceName = activeWorkspace?.name?.takeIf { it.isNotBlank() } ?: "cmux"
+    val surfaceNumber = if (activeSurface != null) "#${activeSurface.tabIndex + 1}" else null
+    val surfaceTitle = activeSurface?.displayTitle ?: "terminal"
+
+    // [dot colour, dot alpha, dot scale, breadcrumb text or status label, status-only]
+    val state = when {
+        connectionStatus == ConnectionStatus.CONNECTING ||
+            connectionStatus == ConnectionStatus.AUTHENTICATING -> {
+            IslandState(theme.accentYellow, connectingBlinkAlpha, 1.0f, connectingLabel, true)
         }
-        connectionStatus == ConnectionStatus.ERROR || connectionStatus == ConnectionStatus.DISCONNECTED -> {
-            Quad(Color(0xFFFF453A), 1.0f, 1.0f, disconnectedLabel)
+        connectionStatus == ConnectionStatus.ERROR ||
+            connectionStatus == ConnectionStatus.DISCONNECTED -> {
+            IslandState(theme.accentRed, 1.0f, 1.0f, disconnectedLabel, true)
         }
         isWorking -> {
-            val wsName = activeWorkspace?.name?.takeIf { it.isNotBlank() } ?: "cmux"
-            val surfNum = if (activeSurface != null) "#${activeSurface.tabIndex + 1} " else ""
-            val surfTitle = activeSurface?.displayTitle ?: "terminal"
-            Quad(Color(0xFFFF9F0A), workingPulseAlpha, workingPulseScale, "$wsName: $surfNum$surfTitle")
+            IslandState(theme.accentOrange, workingPulseAlpha, workingPulseScale, surfaceTitle, false)
         }
         else -> {
-            val wsName = activeWorkspace?.name?.takeIf { it.isNotBlank() } ?: "cmux"
-            val surfNum = if (activeSurface != null) "#${activeSurface.tabIndex + 1} " else ""
-            val surfTitle = activeSurface?.displayTitle ?: "terminal"
-            Quad(Color(0xFF30D158), 1.0f, 1.0f, "$wsName: $surfNum$surfTitle")
+            IslandState(theme.accentGreen, 1.0f, 1.0f, surfaceTitle, false)
         }
     }
 
     Box(
         modifier = modifier
+            .widthIn(max = 268.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xDD1C1C1E))
-            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(20.dp))
+            .background(theme.islandBg)
+            .border(1.dp, theme.islandBorder, RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -120,34 +129,101 @@ fun FloatingIslandPill(
             Box(
                 modifier = Modifier
                     .size(8.dp)
-                    .scale(dotScale)
+                    .scale(state.dotScale)
                     .clip(CircleShape)
-                    .background(dotColor.copy(alpha = dotAlpha))
+                    .background(state.dotColor.copy(alpha = state.dotAlpha))
             )
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Title
-            Text(
-                text = titleText,
-                color = Color.White,
-                fontSize = 12.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = FontFamily.Monospace,
-                maxLines = 1
-            )
+            if (state.statusOnly) {
+                Text(
+                    text = state.title,
+                    color = theme.onIsland,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                // Workspace › #N session
+                Text(
+                    text = workspaceName,
+                    color = theme.onIslandMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+
+                Text(
+                    text = " › ",
+                    color = theme.onIslandMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                if (surfaceNumber != null) {
+                    Text(
+                        text = "$surfaceNumber ",
+                        color = theme.onIsland,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
+                }
+
+                Text(
+                    text = state.title,
+                    color = theme.onIsland,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
 
             Spacer(modifier = Modifier.width(4.dp))
 
             // Dropdown chevron
             Text(
                 text = "▾",
-                color = Color(0xFF8E8E93),
+                color = theme.onIslandMuted,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
             )
+
+            if (surfaceCount > 0) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(theme.primary.copy(alpha = 0.18f))
+                        .padding(horizontal = 6.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        text = surfaceCount.toString(),
+                        color = theme.primary,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+            }
         }
     }
 }
 
-private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+private data class IslandState(
+    val dotColor: Color,
+    val dotAlpha: Float,
+    val dotScale: Float,
+    val title: String,
+    val statusOnly: Boolean
+)

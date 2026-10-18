@@ -14,23 +14,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Proposal C: 48dp single-row compact accessory keyboard bar.
- * Contains: ESC, CTRL, ALT, TAB, ^C, |, /, -, ~, ↑, ↓, ←, →, plus Tabs (N) and Settings shortcut entries.
+ * Proposal C/D2: 48dp single-row compact accessory keyboard bar.
+ * Contains: ESC, CTRL, ALT, TAB, ^C, |, /, -, ~, ↑, ↓, ←, → plus the keyboard-panel and
+ * settings shortcuts. The `Tabs (N)` entry was removed in D2 — session switching lives in the
+ * floating breadcrumb pill — and the reclaimed width is returned to the key row.
  */
 @Composable
 fun AccessoryKeyboardBar(
     onSendKey: (String) -> Unit,
     onOpenKeyboardPanel: () -> Unit,
-    onTabsClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
-    surfaceCount: Int = 1,
     modifier: Modifier = Modifier
 ) {
     val theme = CmuxTheme.colors
@@ -58,8 +57,9 @@ fun AccessoryKeyboardBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .background(theme.accessoryBg)
+            .navigationBarsPadding()
             .height(48.dp)
-            .background(Color(0xFF141416))
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -71,13 +71,13 @@ fun AccessoryKeyboardBar(
             Icon(
                 imageVector = Icons.Default.Keyboard,
                 contentDescription = stringResource(R.string.kb_open_panel),
-                tint = Color(0xFF0A84FF),
+                tint = theme.primary,
                 modifier = Modifier.size(20.dp)
             )
         }
 
         VerticalDivider(
-            color = Color(0x33FFFFFF),
+            color = theme.controlBorder,
             modifier = Modifier
                 .height(20.dp)
                 .padding(horizontal = 3.dp)
@@ -88,7 +88,7 @@ fun AccessoryKeyboardBar(
             modifier = Modifier
                 .weight(1f)
                 .horizontalScroll(scrollState),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             KeyButton(text = "ESC", isPrimary = true) {
@@ -136,48 +136,23 @@ fun AccessoryKeyboardBar(
         }
 
         VerticalDivider(
-            color = Color(0x33FFFFFF),
+            color = theme.controlBorder,
             modifier = Modifier
                 .height(20.dp)
                 .padding(horizontal = 3.dp)
         )
 
-        // Right side double entries: Tabs (N) + Settings
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // Right side: settings only (Tabs (N) removed in D2)
+        IconButton(
+            onClick = onSettingsClick,
+            modifier = Modifier.size(40.dp)
         ) {
-            Button(
-                onClick = onTabsClick,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0x330A84FF),
-                    contentColor = Color(0xFF0A84FF)
-                ),
-                shape = RoundedCornerShape(6.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                modifier = Modifier
-                    .height(34.dp)
-                    .defaultMinSize(minWidth = 54.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.kb_tabs, surfaceCount),
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-
-            IconButton(
-                onClick = onSettingsClick,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = stringResource(R.string.kb_settings),
-                    tint = Color(0xFF8E8E93),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = stringResource(R.string.kb_settings),
+                tint = theme.primary,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -190,18 +165,20 @@ private fun KeyButton(
     isHighlighted: Boolean = false,
     onClick: () -> Unit
 ) {
+    val theme = CmuxTheme.colors
+
     val bg = when {
-        isHighlighted -> Color(0xFF0A84FF)
-        isSpecial -> Color(0x33FF9F0A)
-        isPrimary -> Color(0x260A84FF)
-        else -> Color(0xFF2C2C2E)
+        isHighlighted -> theme.primary
+        isSpecial -> theme.accentOrange.copy(alpha = 0.2f)
+        isPrimary -> theme.primary.copy(alpha = 0.15f)
+        else -> theme.accessoryKeyBg
     }
 
     val textColor = when {
-        isHighlighted -> Color.White
-        isSpecial -> Color(0xFFFF9F0A)
-        isPrimary -> Color(0xFF0A84FF)
-        else -> Color(0xFFE5E5EA)
+        isHighlighted -> theme.onPrimary
+        isSpecial -> theme.accentOrange
+        isPrimary -> theme.primary
+        else -> theme.accessoryKeyText
     }
 
     Button(
@@ -214,7 +191,7 @@ private fun KeyButton(
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
         modifier = Modifier
             .height(34.dp)
-            .defaultMinSize(minWidth = 36.dp)
+            .defaultMinSize(minWidth = 40.dp)
     ) {
         Text(
             text = text,
