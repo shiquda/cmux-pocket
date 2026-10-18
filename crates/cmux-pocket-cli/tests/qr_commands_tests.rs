@@ -32,6 +32,7 @@ async fn qr_with_explicit_cli_endpoint() {
         endpoint: Some("wss://custom.domain.net:8443".to_string()),
         url_only: true,
         name: Some("My Custom Station".to_string()),
+        invert: false,
     };
 
     let result = handle_qr(&paths, &args, false).await;
@@ -51,6 +52,7 @@ async fn qr_precedence_cli_overrides_saved_config() {
         endpoint: Some("wss://override.domain.net".to_string()),
         url_only: true,
         name: None,
+        invert: false,
     };
 
     let result = handle_qr(&paths, &args, false).await;
@@ -70,6 +72,7 @@ async fn qr_uses_saved_config_when_cli_arg_omitted() {
         endpoint: None,
         url_only: false,
         name: None,
+        invert: false,
     };
 
     let result = handle_qr(&paths, &args, true).await;
@@ -85,6 +88,7 @@ async fn qr_rejects_non_loopback_cleartext() {
         endpoint: Some("ws://remote.insecure.com:8088".to_string()),
         url_only: false,
         name: None,
+        invert: false,
     };
 
     let err = handle_qr(&paths, &args, false).await.unwrap_err();
@@ -105,6 +109,7 @@ async fn qr_loopback_explicit_allowed_with_notice() {
         endpoint: Some("ws://127.0.0.1:8088".to_string()),
         url_only: false,
         name: None,
+        invert: false,
     };
 
     let result = handle_qr(&paths, &args, false).await;
@@ -128,4 +133,15 @@ async fn qr_generated_uri_roundtrips_cleanly() {
     assert_eq!(parsed.name, "Pocket Station");
     assert!(!parsed.is_loopback);
     assert_eq!(parsed.masked_token(), "0123••••cdef");
+}
+
+#[test]
+fn qr_ansi_rendering_standard_and_inverted() {
+    let uri = "cmux-pocket://import?v=1&host=test.ts.net&port=443&token=abc";
+    let standard = cmux_pocket_cli::commands::qr::generate_ansi_qr(uri, false).unwrap();
+    let inverted = cmux_pocket_cli::commands::qr::generate_ansi_qr(uri, true).unwrap();
+
+    assert!(!standard.is_empty());
+    assert!(!inverted.is_empty());
+    assert_ne!(standard, inverted);
 }

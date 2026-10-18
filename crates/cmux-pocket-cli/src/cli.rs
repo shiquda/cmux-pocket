@@ -81,6 +81,10 @@ pub struct SetupArgs {
     /// Explicit Gateway phone endpoint URL (e.g. wss://example.ts.net) to use
     #[arg(long, value_name = "URL")]
     pub endpoint: Option<String>,
+
+    /// Invert QR code colors for scanning against dark terminal themes
+    #[arg(long)]
+    pub invert: bool,
 }
 
 /// Arguments for `cmux-pocket status`.
@@ -101,6 +105,11 @@ pub struct QrArgs {
     /// Custom display name for the imported connection profile
     #[arg(long, value_name = "NAME")]
     pub name: Option<String>,
+
+    /// Invert QR code colors (switch foreground and background modules).
+    /// Useful if scanning against dark terminal themes or with scanners requiring dark modules
+    #[arg(long)]
+    pub invert: bool,
 }
 
 /// Arguments for `cmux-pocket doctor`.

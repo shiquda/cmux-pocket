@@ -1,18 +1,21 @@
 package app.cmuxpocket.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import android.util.Log
+import android.view.MotionEvent
 import android.view.ViewGroup
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,6 +23,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +36,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -46,8 +52,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.google.zxing.*
+import com.google.zxing.common.GlobalHistogramBinarizer
 import com.google.zxing.common.HybridBinarizer
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class QrCodeAnalyzer(
@@ -55,7 +63,13 @@ class QrCodeAnalyzer(
 ) : ImageAnalysis.Analyzer {
 
     private val reader = MultiFormatReader().apply {
-        setHints(mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE)))
+        setHints(
+            mapOf(
+                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                DecodeHintType.TRY_HARDER to true,
+                DecodeHintType.CHARACTER_SET to "UTF-8"
+            )
+        )
     }
     private val isScanned = AtomicBoolean(false)
 
@@ -73,20 +87,66 @@ class QrCodeAnalyzer(
             bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
             val source = RGBLuminanceSource(width, height, pixels)
-            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+            val result = decodeSource(source)
 
-            val result = reader.decodeWithState(binaryBitmap)
-            if (isScanned.compareAndSet(false, true)) {
+            if (result != null && isScanned.compareAndSet(false, true)) {
                 onQrCodeScanned(result.text)
             }
-        } catch (_: NotFoundException) {
-            // No barcode found in current frame; continue analyzing
         } catch (e: Exception) {
             Log.d("QrCodeAnalyzer", "Frame analysis exception: ${e.message}")
         } finally {
-            reader.reset()
             image.close()
         }
+    }
+
+    private fun decodeSource(source: LuminanceSource): Result? {
+        // 1. Try center crop first (faster and focuses on user reticle)
+        val cropW = (source.width * 0.75).toInt()
+        val cropH = (source.height * 0.75).toInt()
+        val cropLeft = (source.width - cropW) / 2
+        val cropTop = (source.height - cropH) / 2
+        val cropped = source.crop(cropLeft, cropTop, cropW, cropH)
+
+        decodeWithBinarizers(cropped)?.let { return it }
+
+        // 2. Fallback to full frame
+        return decodeWithBinarizers(source)
+    }
+
+    private fun decodeWithBinarizers(source: LuminanceSource): Result? {
+        // A. Standard HybridBinarizer (light background, dark modules)
+        try {
+            return reader.decodeWithState(BinaryBitmap(HybridBinarizer(source)))
+        } catch (_: NotFoundException) {
+        } finally {
+            reader.reset()
+        }
+
+        // B. Inverted HybridBinarizer (vital for dark-themed terminal QR codes!)
+        try {
+            return reader.decodeWithState(BinaryBitmap(HybridBinarizer(source.invert())))
+        } catch (_: NotFoundException) {
+        } finally {
+            reader.reset()
+        }
+
+        // C. Standard GlobalHistogramBinarizer (fallback for high screen glare/contrast)
+        try {
+            return reader.decodeWithState(BinaryBitmap(GlobalHistogramBinarizer(source)))
+        } catch (_: NotFoundException) {
+        } finally {
+            reader.reset()
+        }
+
+        // D. Inverted GlobalHistogramBinarizer (inverted with glare)
+        try {
+            return reader.decodeWithState(BinaryBitmap(GlobalHistogramBinarizer(source.invert())))
+        } catch (_: NotFoundException) {
+        } finally {
+            reader.reset()
+        }
+
+        return null
     }
 }
 
@@ -130,11 +190,20 @@ fun QrScannerDialog(
         ) {
             when {
                 hasCameraPermission -> {
+                    var isTorchEnabled by remember { mutableStateOf(false) }
+                    var cameraControl by remember { mutableStateOf<CameraControl?>(null) }
+
                     CameraPreviewView(
                         onQrCodeDetected = onQrCodeDetected,
+                        onCameraControlReady = { control -> cameraControl = control },
                         modifier = Modifier.fillMaxSize()
                     )
                     ScannerOverlay(
+                        isTorchEnabled = isTorchEnabled,
+                        onToggleTorch = {
+                            isTorchEnabled = !isTorchEnabled
+                            cameraControl?.enableTorch(isTorchEnabled)
+                        },
                         onClose = onDismiss,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -158,9 +227,11 @@ fun QrScannerDialog(
     }
 }
 
+@SuppressLint("ClickableViewAccessibility")
 @Composable
 fun CameraPreviewView(
     onQrCodeDetected: (String) -> Unit,
+    onCameraControlReady: (CameraControl) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -193,6 +264,7 @@ fun CameraPreviewView(
 
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setTargetResolution(android.util.Size(1280, 720))
                     .build()
                     .also {
                         it.setAnalyzer(cameraExecutor, QrCodeAnalyzer(onQrCodeDetected))
@@ -202,12 +274,28 @@ fun CameraPreviewView(
 
                 try {
                     cameraProvider.unbindAll()
-                    cameraProvider.bindToLifecycle(
+                    val camera = cameraProvider.bindToLifecycle(
                         lifecycleOwner,
                         cameraSelector,
                         preview,
                         imageAnalysis
                     )
+
+                    onCameraControlReady(camera.cameraControl)
+
+                    // Tap-to-focus on preview
+                    previewView.setOnTouchListener { view, event ->
+                        if (event.action == MotionEvent.ACTION_UP) {
+                            val factory = previewView.meteringPointFactory
+                            val point = factory.createPoint(event.x, event.y)
+                            val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+                                .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                                .build()
+                            camera.cameraControl.startFocusAndMetering(action)
+                            view.performClick()
+                        }
+                        true
+                    }
                 } catch (e: Exception) {
                     Log.e("CameraPreviewView", "Camera binding failed", e)
                 }
@@ -221,10 +309,25 @@ fun CameraPreviewView(
 
 @Composable
 fun ScannerOverlay(
+    isTorchEnabled: Boolean,
+    onToggleTorch: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val theme = CmuxTheme.colors
+
+    // Animated scan beam
+    val infiniteTransition = rememberInfiniteTransition(label = "scan_beam")
+    val beamOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "beam_offset"
+    )
+
     Box(modifier = modifier) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val canvasWidth = size.width
@@ -247,7 +350,7 @@ fun ScannerOverlay(
             }
         }
 
-        // Header controls
+        // Header controls with Title, Torch button, and Close button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -271,29 +374,67 @@ fun ScannerOverlay(
                 )
             }
 
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Color.Black.copy(alpha = 0.4f))
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Cancel Scanning",
-                    tint = Color.White
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onToggleTorch,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(if (isTorchEnabled) theme.primary.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.4f))
+                ) {
+                    Icon(
+                        imageVector = if (isTorchEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                        contentDescription = "Toggle Flashlight",
+                        tint = if (isTorchEnabled) theme.primary else Color.White
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Color.Black.copy(alpha = 0.4f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Cancel Scanning",
+                        tint = Color.White
+                    )
+                }
             }
         }
 
-        // Central scan frame with reticle
+        // Central scan frame with reticle and animated beam
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
                 .padding(bottom = 40.dp)
-                .size(270.dp)
+                .size(280.dp)
                 .border(2.dp, theme.primary, RoundedCornerShape(16.dp))
-        )
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            // Animated scan beam inside the frame
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .offset(y = (280.dp * beamOffset) - 1.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                theme.primary,
+                                Color.White,
+                                theme.primary,
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+        }
 
         // Helper guidance text below the scan frame
         Column(
@@ -311,7 +452,7 @@ fun ScannerOverlay(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Run 'cmux-pocket qr' on your computer to display the QR code",
+                text = "Tap screen to focus if blurry · Supports dark terminal screens",
                 color = Color.LightGray,
                 fontSize = 12.sp,
                 textAlign = TextAlign.Center
@@ -338,66 +479,65 @@ fun PermissionDeniedView(
     onDismiss: () -> Unit
 ) {
     val theme = CmuxTheme.colors
-    Box(
+    Card(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
+            .fillMaxWidth(0.9f)
+            .padding(16.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.surface),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
-        Card(
-            colors = CardDefaults.cardColors(containerColor = theme.surface),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+            Icon(
+                imageVector = Icons.Default.QrCodeScanner,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Camera Permission Required",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = theme.onSurface,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Camera access is needed to scan connection QR codes. Please enable it in Settings, or enter connection details manually.",
+                fontSize = 13.sp,
+                color = theme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                lineHeight = 18.sp
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.QrCodeScanner,
-                    contentDescription = null,
-                    tint = theme.primary,
-                    modifier = Modifier.size(48.dp)
-                )
-                Text(
-                    text = "Camera Permission Required",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = theme.onSurface
-                )
-                Text(
-                    text = "Camera access is needed to scan connection QR codes. You can enable it in system Settings, or manually enter your connection host and token.",
-                    fontSize = 13.sp,
-                    color = theme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
-                    ) {
-                        Text("Cancel", fontSize = 13.sp)
-                    }
-                    Button(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = Uri.fromParts("package", context.packageName, null)
-                            }
-                            context.startActivity(intent)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
-                    ) {
-                        Text("Open Settings", fontSize = 13.sp, color = Color.White)
-                    }
+                    Text("Cancel", color = theme.onSurfaceVariant)
+                }
+                Button(
+                    onClick = {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
+                ) {
+                    Text("App Settings", color = Color.White)
                 }
             }
         }
@@ -410,61 +550,57 @@ fun PermissionRequestView(
     onDismiss: () -> Unit
 ) {
     val theme = CmuxTheme.colors
-    Box(
+    Card(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
+            .fillMaxWidth(0.9f)
+            .padding(16.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.surface),
+        shape = RoundedCornerShape(16.dp)
     ) {
-        Card(
-            colors = CardDefaults.cardColors(containerColor = theme.surface),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+            Icon(
+                imageVector = Icons.Default.QrCodeScanner,
+                contentDescription = null,
+                tint = theme.primary,
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Scan Gateway QR Code",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = theme.onSurface,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Grant camera permission to automatically scan and import connection configuration from your computer terminal.",
+                fontSize = 13.sp,
+                color = theme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.QrCodeScanner,
-                    contentDescription = null,
-                    tint = theme.primary,
-                    modifier = Modifier.size(48.dp)
-                )
-                Text(
-                    text = "Scan Gateway QR Code",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = theme.onSurface
-                )
-                Text(
-                    text = "Allow cmux-pocket to use your camera to scan connection QR codes generated by the CLI.",
-                    fontSize = 13.sp,
-                    color = theme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
-                    ) {
-                        Text("Cancel", fontSize = 13.sp)
-                    }
-                    Button(
-                        onClick = onRequestPermission,
-                        colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
-                    ) {
-                        Text("Continue", fontSize = 13.sp, color = Color.White)
-                    }
+                    Text("Cancel", color = theme.onSurfaceVariant)
+                }
+                Button(
+                    onClick = onRequestPermission,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
+                ) {
+                    Text("Allow", color = Color.White)
                 }
             }
         }

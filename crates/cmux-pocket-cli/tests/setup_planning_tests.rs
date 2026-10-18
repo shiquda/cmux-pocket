@@ -15,6 +15,7 @@ async fn test_setup_first_run_no_start() {
         tailscale: false,
         qr: false,
         endpoint: None,
+        invert: false,
     };
 
     let res = handle_setup(&paths, &args, false).await;
@@ -59,6 +60,7 @@ async fn test_setup_idempotency_preserves_token_and_config() {
         tailscale: false,
         qr: false,
         endpoint: None,
+        invert: false,
     };
 
     // First setup run
@@ -72,6 +74,7 @@ async fn test_setup_idempotency_preserves_token_and_config() {
         tailscale: false,
         qr: false,
         endpoint: None,
+        invert: false,
     };
     handle_setup(&paths, &args2, false).await.unwrap();
 

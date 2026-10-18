@@ -23,15 +23,21 @@ pub struct QrData {
 }
 
 /// Renders a string as a Unicode ANSI QR code block.
-pub fn generate_ansi_qr(content: &str) -> Result<String, CliError> {
+pub fn generate_ansi_qr(content: &str, invert: bool) -> Result<String, CliError> {
     let code = QrCode::new(content.as_bytes()).map_err(|e| {
         CliError::RuntimeFailure(format!("Failed to encode content into QR code: {}", e))
     })?;
 
+    let (dark_color, light_color) = if invert {
+        (unicode::Dense1x2::Light, unicode::Dense1x2::Dark)
+    } else {
+        (unicode::Dense1x2::Dark, unicode::Dense1x2::Light)
+    };
+
     let rendered = code
         .render::<unicode::Dense1x2>()
-        .dark_color(unicode::Dense1x2::Dark)
-        .light_color(unicode::Dense1x2::Light)
+        .dark_color(dark_color)
+        .light_color(light_color)
         .build();
 
     Ok(rendered)
@@ -62,7 +68,7 @@ pub async fn handle_qr(
         return Ok(());
     }
 
-    let qr_block = generate_ansi_qr(&uri)?;
+    let qr_block = generate_ansi_qr(&uri, args.invert)?;
 
     let name = args.name.clone().unwrap_or_else(|| {
         if endpoint.is_loopback {
@@ -97,6 +103,8 @@ pub async fn handle_qr(
          Import Link:       {}\n\n\
          Scan this QR code in the Android cmux-pocket app (Settings -> Scan QR),\n\
          or open the import link on an Android device with cmux-pocket installed.\n\n\
+         Tip: If scanning from a dark terminal fails on external scanners,\n\
+         run 'cmux-pocket qr --invert' or use the in-app scanner.\n\n\
          {}\n",
         endpoint.raw, source, fp, uri, SECURITY_WARNING
     ));

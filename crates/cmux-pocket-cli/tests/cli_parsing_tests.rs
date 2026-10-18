@@ -36,6 +36,7 @@ fn test_parse_setup() {
             tailscale: false,
             qr: false,
             endpoint: None,
+            invert: false,
         })
     );
 
@@ -50,6 +51,7 @@ fn test_parse_setup() {
             tailscale: false,
             qr: false,
             endpoint: None,
+            invert: false,
         })
     );
 }
@@ -77,6 +79,7 @@ fn test_parse_qr() {
             endpoint: None,
             url_only: false,
             name: None,
+            invert: false,
         })
     );
 
@@ -88,6 +91,7 @@ fn test_parse_qr() {
             endpoint: None,
             url_only: false,
             name: None,
+            invert: false,
         })
     );
 
@@ -108,6 +112,7 @@ fn test_parse_qr() {
             endpoint: Some("wss://my.tailnet.ts.net".to_string()),
             url_only: true,
             name: Some("My Workstation".to_string()),
+            invert: false,
         })
     );
 
@@ -128,6 +133,7 @@ fn test_parse_qr() {
             tailscale: false,
             qr: true,
             endpoint: Some("wss://custom.net".to_string()),
+            invert: false,
         })
     );
 }

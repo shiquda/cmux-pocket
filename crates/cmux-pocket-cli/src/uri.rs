@@ -114,26 +114,32 @@ pub fn build_import_uri(
     token: &str,
     profile_name: Option<&str>,
 ) -> String {
-    let name = profile_name
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| {
-            if endpoint.is_loopback {
-                "USB / Local"
-            } else {
-                &endpoint.host
-            }
-        });
+    let default_name = if endpoint.is_loopback {
+        "USB / Local"
+    } else {
+        &endpoint.host
+    };
+
+    let explicit_name = profile_name.map(|s| s.trim()).filter(|s| !s.is_empty());
+    let name_to_include = match explicit_name {
+        Some(custom) if custom != default_name => Some(custom),
+        _ => None,
+    };
 
     let mut url = Url::parse("cmux-pocket://import").expect("Valid base URL");
-    url.query_pairs_mut()
-        .append_pair("v", CURRENT_URI_VERSION)
-        .append_pair("host", &endpoint.host)
-        .append_pair("port", &endpoint.port.to_string())
-        .append_pair("tls", if endpoint.is_tls { "true" } else { "false" })
-        .append_pair("token", token)
-        .append_pair("name", name);
+    {
+        let mut query = url.query_pairs_mut();
+        query
+            .append_pair("v", CURRENT_URI_VERSION)
+            .append_pair("host", &endpoint.host)
+            .append_pair("port", &endpoint.port.to_string())
+            .append_pair("tls", if endpoint.is_tls { "true" } else { "false" })
+            .append_pair("token", token);
 
+        if let Some(n) = name_to_include {
+            query.append_pair("name", n);
+        }
+    }
     url.to_string()
 }
 
@@ -203,7 +209,13 @@ pub fn parse_import_uri(uri_str: &str) -> Result<CmuxImportPayload, CmuxUriError
         .filter(|t| !t.trim().is_empty())
         .ok_or(CmuxUriError::MissingParameter("token"))?;
 
-    let name = name.unwrap_or_else(|| host.clone());
+    let name = name.unwrap_or_else(|| {
+        if is_loopback {
+            "USB / Local".to_string()
+        } else {
+            host.clone()
+        }
+    });
 
     Ok(CmuxImportPayload {
         version,
