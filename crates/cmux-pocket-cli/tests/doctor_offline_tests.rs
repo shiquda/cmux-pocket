@@ -37,6 +37,7 @@ async fn test_doctor_offline_with_valid_config_and_token() {
         token_path: None,
         log_dir: None,
         cmux_path: None,
+        endpoint: None,
         extra: toml::Table::new(),
     };
     save_config(&paths.config_file, &config).unwrap();

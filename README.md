@@ -16,6 +16,8 @@ cmux Pocket is an independent Android companion for people who use [cmux](https:
 - Keeps main-screen scrollback local to the phone while alternate-screen/TUI scrolling remains owned by cmux on the Mac.
 - Uses encrypted Android connection profiles and a random Gateway authentication token.
 - Keeps an active Gateway session through Android backgrounding with an ongoing connection notification; Android may still stop it after a force-stop or system policy action.
+- Displays a connection QR code and `cmux-pocket://` import link in the CLI (`cmux-pocket qr`) for one-tap pairing on Android via in-app camera scan or deep link.
+- Supports custom Gateway endpoints (`cmux-pocket config set endpoint <URL>`) and single-use CLI overrides (`--endpoint <URL>`).
 - Provides a compact keyboard with modifiers, navigation keys, and F1–F12.
 
 ## How the connection works
@@ -48,6 +50,33 @@ The app should show the Workspaces and Tabs currently available in cmux. See the
 If you use Tailscale, connect the Mac and phone to the same tailnet and run `cmux-pocket setup --tailscale` on the Mac. The command verifies Gateway workspace access, sets up private HTTPS forwarding, and prints the phone endpoint. It preserves the existing token and reuses a healthy Gateway. Existing conflicting Tailscale routes are left unchanged.
 
 In Android **Settings → Connection & Host**, enter that endpoint and token, then tap **Check connection**. The checklist verifies reachability, authentication, Gateway response, workspace access, and update subscription. **Ready** means the workspace query succeeded; an authenticated socket alone is insufficient. **Host setup** provides the setup command and **Open Tailscale** opens the installed VPN app. See [Tailscale setup and recovery](docs/networking.md#tailscale-connection-assistant).
+
+### One-tap configuration: CLI QR code and Android scan
+
+Instead of manually copying host addresses and tokens, generate a pairing QR code on the Mac:
+
+```bash
+cmux-pocket qr
+```
+
+The CLI discovers your active Tailscale endpoint automatically, or you can specify a custom endpoint or save one in your local configuration:
+
+```bash
+# One-time override:
+cmux-pocket qr --endpoint wss://custom.example.com:8443
+
+# Or save a default endpoint:
+cmux-pocket config set endpoint wss://custom.example.com:8443
+```
+
+**Endpoint resolution priority:**
+1. Explicit CLI argument (`--endpoint <URL>`)
+2. Locally saved endpoint (`config.endpoint`)
+3. Tailscale automatic discovery (`.ts.net` HTTPS route)
+
+In the Android app, open **Settings → Connection & Host** and tap **Scan QR** to scan the code with your phone camera. Or open a `cmux-pocket://` link from a compatible scanner. An **Import Preview** dialog will appear, showing the host, port, security status, and masked token before saving, ensuring existing profiles are never silently overwritten.
+
+> ⚠️ **Credential Security:** The QR code and import URI contain your Gateway bearer authentication token. Do not take screenshots, share in chat channels, or publish online.
 
 ### Temporary development/testing path: ADB reverse
 

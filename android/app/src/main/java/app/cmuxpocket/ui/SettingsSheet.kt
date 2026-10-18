@@ -64,6 +64,7 @@ fun SettingsDialog(
     onThemeChange: (String) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
     onConnectClick: () -> Unit,
+    onScanQrClick: () -> Unit = {},
     onDismissRequest: () -> Unit
 ) {
     val theme = CmuxTheme.colors
@@ -156,7 +157,8 @@ fun SettingsDialog(
                                     onHostChange = onHostChange,
                                     onPortChange = onPortChange,
                                     onTokenChange = onTokenChange,
-                                    onConnectClick = onConnectClick
+                                    onConnectClick = onConnectClick,
+                                    onScanQrClick = onScanQrClick,
                                 )
                             }
                         }
@@ -206,7 +208,8 @@ fun SettingsDialog(
                                 onHostChange = onHostChange,
                                 onPortChange = onPortChange,
                                 onTokenChange = onTokenChange,
-                                onConnectClick = onConnectClick
+                                onConnectClick = onConnectClick,
+                                onScanQrClick = onScanQrClick,
                             )
                         }
 
@@ -318,7 +321,8 @@ fun ConnectionSection(
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onTokenChange: (String) -> Unit,
-    onConnectClick: () -> Unit
+    onConnectClick: () -> Unit,
+    onScanQrClick: () -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
     val scope = rememberCoroutineScope()
@@ -394,6 +398,13 @@ fun ConnectionSection(
                     label = { Text("Add Host", fontSize = 11.sp) },
                     leadingIcon = {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
+                )
+                AssistChip(
+                    onClick = onScanQrClick,
+                    label = { Text("Scan QR", fontSize = 11.sp) },
+                    leadingIcon = {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR Code", modifier = Modifier.size(16.dp))
                     }
                 )
             }
