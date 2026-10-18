@@ -68,7 +68,8 @@ pub async fn handle_qr(
         return Ok(());
     }
 
-    let qr_block = generate_ansi_qr(&uri, args.invert)?;
+    let invert = !args.no_invert;
+    let qr_block = generate_ansi_qr(&uri, invert)?;
 
     let name = args.name.clone().unwrap_or_else(|| {
         if endpoint.is_loopback {
@@ -103,8 +104,7 @@ pub async fn handle_qr(
          Import Link:       {}\n\n\
          Scan this QR code in the Android cmux-pocket app (Settings -> Scan QR),\n\
          or open the import link on an Android device with cmux-pocket installed.\n\n\
-         Tip: If scanning from a dark terminal fails on external scanners,\n\
-         run 'cmux-pocket qr --invert' or use the in-app scanner.\n\n\
+         Tip: Running in a light-themed terminal? Pass '--no-invert' to match your background.\n\n\
          {}\n",
         endpoint.raw, source, fp, uri, SECURITY_WARNING
     ));

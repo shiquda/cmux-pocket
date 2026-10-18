@@ -82,7 +82,11 @@ pub struct SetupArgs {
     #[arg(long, value_name = "URL")]
     pub endpoint: Option<String>,
 
-    /// Invert QR code colors for scanning against dark terminal themes
+    /// Do not invert QR code colors (useful if running in a light-themed terminal)
+    #[arg(long)]
+    pub no_invert: bool,
+
+    /// Explicitly invert QR code colors (enabled by default for dark terminals)
     #[arg(long)]
     pub invert: bool,
 }
@@ -106,8 +110,11 @@ pub struct QrArgs {
     #[arg(long, value_name = "NAME")]
     pub name: Option<String>,
 
-    /// Invert QR code colors (switch foreground and background modules).
-    /// Useful if scanning against dark terminal themes or with scanners requiring dark modules
+    /// Do not invert QR code colors (useful if running in a light-themed terminal)
+    #[arg(long)]
+    pub no_invert: bool,
+
+    /// Explicitly invert QR code colors (enabled by default for dark terminals)
     #[arg(long)]
     pub invert: bool,
 }

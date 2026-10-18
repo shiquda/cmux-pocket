@@ -32,6 +32,7 @@ async fn qr_with_explicit_cli_endpoint() {
         endpoint: Some("wss://custom.domain.net:8443".to_string()),
         url_only: true,
         name: Some("My Custom Station".to_string()),
+        no_invert: false,
         invert: false,
     };
 
@@ -52,6 +53,7 @@ async fn qr_precedence_cli_overrides_saved_config() {
         endpoint: Some("wss://override.domain.net".to_string()),
         url_only: true,
         name: None,
+        no_invert: false,
         invert: false,
     };
 
@@ -72,6 +74,7 @@ async fn qr_uses_saved_config_when_cli_arg_omitted() {
         endpoint: None,
         url_only: false,
         name: None,
+        no_invert: false,
         invert: false,
     };
 
@@ -88,6 +91,7 @@ async fn qr_rejects_non_loopback_cleartext() {
         endpoint: Some("ws://remote.insecure.com:8088".to_string()),
         url_only: false,
         name: None,
+        no_invert: false,
         invert: false,
     };
 
@@ -109,6 +113,7 @@ async fn qr_loopback_explicit_allowed_with_notice() {
         endpoint: Some("ws://127.0.0.1:8088".to_string()),
         url_only: false,
         name: None,
+        no_invert: false,
         invert: false,
     };
 

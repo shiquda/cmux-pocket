@@ -222,7 +222,8 @@ pub async fn handle_setup(
 
     let qr_code = if args.qr {
         if let Some(ref u) = uri {
-            crate::commands::qr::generate_ansi_qr(u, args.invert).ok()
+            let invert = !args.no_invert;
+            crate::commands::qr::generate_ansi_qr(u, invert).ok()
         } else {
             None
         }

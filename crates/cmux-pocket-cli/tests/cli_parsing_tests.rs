@@ -36,6 +36,7 @@ fn test_parse_setup() {
             tailscale: false,
             qr: false,
             endpoint: None,
+            no_invert: false,
             invert: false,
         })
     );
@@ -51,6 +52,7 @@ fn test_parse_setup() {
             tailscale: false,
             qr: false,
             endpoint: None,
+            no_invert: false,
             invert: false,
         })
     );
@@ -79,6 +81,7 @@ fn test_parse_qr() {
             endpoint: None,
             url_only: false,
             name: None,
+            no_invert: false,
             invert: false,
         })
     );
@@ -91,6 +94,7 @@ fn test_parse_qr() {
             endpoint: None,
             url_only: false,
             name: None,
+            no_invert: false,
             invert: false,
         })
     );
@@ -112,6 +116,7 @@ fn test_parse_qr() {
             endpoint: Some("wss://my.tailnet.ts.net".to_string()),
             url_only: true,
             name: Some("My Workstation".to_string()),
+            no_invert: false,
             invert: false,
         })
     );
@@ -133,6 +138,20 @@ fn test_parse_qr() {
             tailscale: false,
             qr: true,
             endpoint: Some("wss://custom.net".to_string()),
+            no_invert: false,
+            invert: false,
+        })
+    );
+
+    // QR with --no-invert
+    let cli = Cli::try_parse_from(["cmux-pocket", "qr", "--no-invert"]).unwrap();
+    assert_eq!(
+        cli.command,
+        Commands::Qr(QrArgs {
+            endpoint: None,
+            url_only: false,
+            name: None,
+            no_invert: true,
             invert: false,
         })
     );

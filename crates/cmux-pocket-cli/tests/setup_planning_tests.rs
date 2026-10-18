@@ -15,6 +15,7 @@ async fn test_setup_first_run_no_start() {
         tailscale: false,
         qr: false,
         endpoint: None,
+        no_invert: false,
         invert: false,
     };
 
@@ -60,6 +61,7 @@ async fn test_setup_idempotency_preserves_token_and_config() {
         tailscale: false,
         qr: false,
         endpoint: None,
+        no_invert: false,
         invert: false,
     };
 
@@ -74,6 +76,7 @@ async fn test_setup_idempotency_preserves_token_and_config() {
         tailscale: false,
         qr: false,
         endpoint: None,
+        no_invert: false,
         invert: false,
     };
     handle_setup(&paths, &args2, false).await.unwrap();
