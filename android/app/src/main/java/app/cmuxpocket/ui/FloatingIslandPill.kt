@@ -94,7 +94,7 @@ fun FloatingIslandPill(
     val state = when {
         connectionStatus == ConnectionStatus.CONNECTING ||
             connectionStatus == ConnectionStatus.AUTHENTICATING -> {
-            IslandState(theme.accentYellow, connectingBlinkAlpha, 1.0f, connectingLabel, true)
+            IslandState(theme.accentBlue, connectingBlinkAlpha, 1.0f, connectingLabel, true)
         }
         connectionStatus == ConnectionStatus.ERROR ||
             connectionStatus == ConnectionStatus.DISCONNECTED -> {

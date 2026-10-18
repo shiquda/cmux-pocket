@@ -25,13 +25,18 @@ enum class ThemeMode {
 /**
  * Single source of truth for every colour rendered by the app.
  *
+ * Values come from the canonical palette **P3 · Neon Grid** documented in `DESIGN.md`; that file
+ * is the reference for the token table and the binding usage rules (semantic accents are
+ * state-only, light mode re-tunes lightness without shifting hue).
+ *
  * UI code MUST read from [CmuxTheme.colors]; a literal `Color(0x…)` in a UI file is a bug,
  * because it silently ignores the light/dark switch. Translucent variants of the semantic
  * accents are derived at the call site with `Color.copy(alpha = …)` so that a single opaque
  * accent value per theme stays authoritative.
  *
- * Terminal canvas colours ([terminalBg]/[terminalFg]) are terminal palette entries, not
- * chrome: they are intentionally identical in both themes.
+ * Terminal canvas colours ([terminalBg]/[terminalFg]) are the theme-side well and default
+ * foreground of the canvas. The live well is currently driven by the user's terminal palette
+ * selection (`terminalBgTheme`), which is independent of the app theme.
  */
 data class CmuxColors(
     val isDark: Boolean,
@@ -42,7 +47,7 @@ data class CmuxColors(
     val onBackground: Color,
     val onSurface: Color,
     val onSurfaceVariant: Color,
-    /** Brand accent blue. Dark `#0A84FF` / light `#007AFF`. */
+    /** Brand accent violet. Dark `#A68CFF` / light `#6D28D9`. */
     val primary: Color,
     val primaryContainer: Color,
     val onPrimary: Color,
@@ -75,108 +80,106 @@ data class CmuxColors(
     val controlBorder: Color,
     /** Dimming layer between the terminal and a modal. */
     val scrim: Color,
-    // --- Semantic accents ---
+    // --- Semantic accents (state only, never decorative) ---
     val accentGreen: Color,
     val accentOrange: Color,
     val accentRed: Color,
-    val accentYellow: Color,
-    /** Decorative category tiles; saturated in both themes because the glyph is white. */
     val accentPurple: Color,
-    val accentTeal: Color,
+    /** Neon cyan: info / in-progress state. */
+    val accentBlue: Color,
     /** GitHub brand tile; light theme uses the brand black, dark theme an inverted light tile. */
     val brandGithub: Color,
     /** Glyph colour for [brandGithub]. */
     val onBrandGithub: Color,
-    /** Content colour for a bright accent fill (yellow tiles), where [onPrimary] would be unreadable. */
+    /** Content colour for a bright accent fill, where [onPrimary] would be unreadable. */
     val onAccentBright: Color
 )
 
+/** Canonical palette P3 · Neon Grid — see `DESIGN.md` for the full table and usage rules. */
 val DarkCmuxColors = CmuxColors(
     isDark = true,
-    background = Color(0xFF141416),
-    surface = Color(0xFF1E1E22),
-    surfaceVariant = Color(0xFF282830),
-    onBackground = Color(0xFFEDEDED),
-    onSurface = Color(0xFFFFFFFF),
-    onSurfaceVariant = Color(0xFFAAAAAA),
-    primary = Color(0xFF0A84FF),
-    primaryContainer = Color(0xFF1976D2),
-    onPrimary = Color.White,
-    terminalBg = "#1E1E1E",
-    terminalFg = "#D4D4D4",
-    tabRowBg = Color(0xFF141416),
-    tabActiveBg = Color(0xFF24242A),
-    divider = Color(0xFF2B2B32),
-    accessoryBg = Color(0xFF1E1E22),
-    accessoryKeyBg = Color(0xFF303036),
-    accessoryKeyText = Color.White,
-    islandBg = Color(0xDD1C1C1E),
-    islandBorder = Color(0x33FFFFFF),
-    onIsland = Color.White,
-    onIslandMuted = Color(0xFF8E8E93),
-    containerBg = Color(0xFF1C1C1E),
-    containerBorder = Color(0x33FFFFFF),
-    onContainer = Color.White,
-    onContainerMuted = Color(0xFF8E8E93),
-    bubbleBg = Color(0xEE222226),
-    cardBg = Color(0xFF2C2C2E),
-    cardBorder = Color(0x1FFFFFFF),
-    controlBg = Color(0x1FFFFFFF),
-    controlBorder = Color(0x33FFFFFF),
-    scrim = Color(0xB3212121),
-    accentGreen = Color(0xFF30D158),
-    accentOrange = Color(0xFFFF9F0A),
-    accentRed = Color(0xFFFF453A),
-    accentYellow = Color(0xFFFFD60A),
-    accentPurple = Color(0xFFBF5AF2),
-    accentTeal = Color(0xFF64D2FF),
+    background = Color(0xFF090911),
+    surface = Color(0xFF12121E),
+    surfaceVariant = Color(0xFF1A1A2B),
+    onBackground = Color(0xFFF0F0F8),
+    onSurface = Color(0xFFF0F0F8),
+    onSurfaceVariant = Color(0xFF8888A3),
+    primary = Color(0xFFA68CFF),
+    primaryContainer = Color(0xFF3D2E73),
+    onPrimary = Color(0xFF150B33),
+    terminalBg = "#0C0C16",
+    terminalFg = "#CDCDDE",
+    tabRowBg = Color(0xFF1A1A2B),
+    tabActiveBg = Color(0xFF12121E),
+    divider = Color(0xFF242438),
+    accessoryBg = Color(0xFF12121E),
+    accessoryKeyBg = Color(0xFF202033),
+    accessoryKeyText = Color(0xFFDBDBEA),
+    islandBg = Color(0xD912121E),
+    islandBorder = Color(0xFF2E2E48),
+    onIsland = Color(0xFFF0F0F8),
+    onIslandMuted = Color(0xFF8888A3),
+    containerBg = Color(0xFF12121E),
+    containerBorder = Color(0xFF242438),
+    onContainer = Color(0xFFF0F0F8),
+    onContainerMuted = Color(0xFF8888A3),
+    bubbleBg = Color(0xF212121E),
+    cardBg = Color(0xFF1A1A2B),
+    cardBorder = Color(0xFF242438),
+    controlBg = Color(0x14FFFFFF),
+    controlBorder = Color(0xFF2E2E48),
+    scrim = Color(0xB3090911),
+    accentGreen = Color(0xFFA6E22E),
+    accentOrange = Color(0xFFFFC857),
+    accentRed = Color(0xFFFF6E7F),
+    accentPurple = Color(0xFFA68CFF),
+    accentBlue = Color(0xFF3EE6D8),
     brandGithub = Color(0xFFE8EAED),
     onBrandGithub = Color(0xFF1C1C1E),
-    onAccentBright = Color(0xFF1C1C1E)
+    onAccentBright = Color(0xFF150B33)
 )
 
 val LightCmuxColors = CmuxColors(
     isDark = false,
-    background = Color(0xFFF5F5F7),
+    background = Color(0xFFF5F5FA),
     surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFE5E5EA),
-    onBackground = Color(0xFF1C1C1E),
-    onSurface = Color(0xFF1C1C1E),
-    onSurfaceVariant = Color(0xFF636366),
-    primary = Color(0xFF007AFF),
-    primaryContainer = Color(0xFF007AFF),
+    surfaceVariant = Color(0xFFE8E8F2),
+    onBackground = Color(0xFF14141F),
+    onSurface = Color(0xFF14141F),
+    onSurfaceVariant = Color(0xFF5C5C75),
+    primary = Color(0xFF6D28D9),
+    primaryContainer = Color(0xFFE6DCFB),
     onPrimary = Color.White,
-    terminalBg = "#FAFAFC",
-    terminalFg = "#1C1C1E",
-    tabRowBg = Color(0xFFE5E5EA),
+    terminalBg = "#FBFBFE",
+    terminalFg = "#1A1A26",
+    tabRowBg = Color(0xFFE8E8F2),
     tabActiveBg = Color(0xFFFFFFFF),
-    divider = Color(0xFFD1D1D6),
-    accessoryBg = Color(0xFFE5E5EA),
+    divider = Color(0xFFD8D8E5),
+    accessoryBg = Color(0xFFE8E8F2),
     accessoryKeyBg = Color(0xFFFFFFFF),
-    accessoryKeyText = Color(0xFF1C1C1E),
+    accessoryKeyText = Color(0xFF1A1A26),
     islandBg = Color(0xE6FFFFFF),
-    islandBorder = Color(0x1A000000),
-    onIsland = Color(0xFF1C1C1E),
-    onIslandMuted = Color(0xFF636366),
-    containerBg = Color(0xFFF7F7FA),
-    containerBorder = Color(0x1A000000),
-    onContainer = Color(0xFF1C1C1E),
-    onContainerMuted = Color(0xFF636366),
+    islandBorder = Color(0xFFD8D8E5),
+    onIsland = Color(0xFF14141F),
+    onIslandMuted = Color(0xFF5C5C75),
+    containerBg = Color(0xFFF5F5FA),
+    containerBorder = Color(0xFFD8D8E5),
+    onContainer = Color(0xFF14141F),
+    onContainerMuted = Color(0xFF5C5C75),
     bubbleBg = Color(0xF2FFFFFF),
     cardBg = Color(0xFFFFFFFF),
-    cardBorder = Color(0xFFE5E5EA),
+    cardBorder = Color(0xFFE8E8F2),
     controlBg = Color(0x14000000),
-    controlBorder = Color(0x1A000000),
+    controlBorder = Color(0xFFD8D8E5),
     scrim = Color(0x66000000),
-    accentGreen = Color(0xFF34C759),
-    accentOrange = Color(0xFFFF9500),
-    accentRed = Color(0xFFFF3B30),
-    accentYellow = Color(0xFFFFCC00),
-    accentPurple = Color(0xFFAF52DE),
-    accentTeal = Color(0xFF00A3C4),
+    accentGreen = Color(0xFF5A9E2E),
+    accentOrange = Color(0xFFB97F0E),
+    accentRed = Color(0xFFD43D51),
+    accentPurple = Color(0xFF6D28D9),
+    accentBlue = Color(0xFF0D9488),
     brandGithub = Color(0xFF24292E),
     onBrandGithub = Color.White,
-    onAccentBright = Color(0xFF1C1C1E)
+    onAccentBright = Color(0xFF1A1A26)
 )
 
 val LocalCmuxColors = staticCompositionLocalOf { DarkCmuxColors }
@@ -202,7 +205,7 @@ private fun CmuxColors.toMaterialScheme(): ColorScheme {
         onPrimaryContainer = onPrimary,
         secondary = accentGreen,
         onSecondary = Color.White,
-        tertiary = accentTeal,
+        tertiary = accentBlue,
         onTertiary = if (isDark) Color.Black else Color.White,
         background = background,
         onBackground = onBackground,
@@ -217,7 +220,7 @@ private fun CmuxColors.toMaterialScheme(): ColorScheme {
         error = accentRed,
         onError = Color.White,
         errorContainer = accentRed.copy(alpha = if (isDark) 0.24f else 0.14f),
-        onErrorContainer = if (isDark) accentRed else Color(0xFF8A1F17)
+        onErrorContainer = accentRed
     )
 }
 
