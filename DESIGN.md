@@ -2,7 +2,7 @@
 
 Unified color system for the cmux Pocket Android app. This file is the **canonical design reference** for every color used in the app; the single source of truth in code is `CmuxColors` in `android/app/src/main/java/app/cmuxpocket/ui/CmuxTheme.kt`.
 
-> **Status: CANDIDATE SELECTION PENDING.** Three candidate palettes (P1 / P2 / P3) are proposed below. Once the owner picks one, this section will be updated to mark the chosen palette as canonical and the other two as rejected alternatives.
+> **Status: FINAL.** The owner selected **P3 · Neon Grid** as the canonical palette (2026-10-18). P1 and P2 are kept below as rejected alternatives for historical reference; only P3 token values may be used in code.
 
 ## Design principles
 
@@ -27,9 +27,9 @@ Unified color system for the cmux Pocket Android app. This file is the **canonic
 | `islandBg` / `islandBorder` | Floating island pill (frosted; includes alpha) |
 | `scrim` | Modal overlay dimming |
 
-## Candidate palettes
+## Palettes
 
-### P1 · Deep Space Console（深空终端）
+### P1 · Deep Space Console（深空终端）— REJECTED alternative
 
 Cool graphite-navy base with a signal-cyan primary. A neutralized evolution of the Warp / Blink Shell cool-dark school — restrained, low-noise, easy on the eyes during long sessions. The safest option; the least distinctive.
 
@@ -59,7 +59,7 @@ Cool graphite-navy base with a signal-cyan primary. A neutralized evolution of t
 | `islandBg` | `#131A22D9` | `#FFFFFFE6` |
 | `islandBorder` | `#2A3745` | `#D3DCE3` |
 
-### P2 · Phosphor Amber（琥珀磷光）
+### P2 · Phosphor Amber（琥珀磷光）— REJECTED alternative
 
 A warm homage to CRT amber monochrome terminals: amber primary over warm-black. Fully warm-toned, instantly recognizable, and almost unused among contemporary terminal apps — the strongest identity of the three. Light mode becomes warm paper.
 
@@ -89,7 +89,7 @@ A warm homage to CRT amber monochrome terminals: amber primary over warm-black. 
 | `islandBg` | `#1A1610D9` | `#FFFFFFE6` |
 | `islandBorder` | `#3A3222` | `#E2D7BE` |
 
-### P3 · Neon Grid（像素霓虹）
+### P3 · Neon Grid（像素霓虹）— ✅ CANONICAL
 
 Night-ops neon: violet primary with a neon-cyan secondary accent and a Monokai-lime nod for success. The most overtly "hacker" of the three, with semantic accents deliberately desaturated enough to avoid eye-searing. Light mode subdues the neon into violet/teal ink.
 
