@@ -65,6 +65,10 @@ pub struct SetupArgs {
     /// Do not start or bootstrap the launchd service after configuration
     #[arg(long)]
     pub no_start: bool,
+
+    /// Configure private Tailscale HTTPS forwarding after verifying Gateway workspace access
+    #[arg(long, conflicts_with = "no_start")]
+    pub tailscale: bool,
 }
 
 /// Arguments for `cmux-pocket status`.

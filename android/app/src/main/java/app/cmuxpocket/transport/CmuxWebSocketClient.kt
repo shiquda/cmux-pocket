@@ -26,6 +26,14 @@ enum class ConnectionStatus {
     ERROR
 }
 
+enum class ConnectionFailure {
+    NETWORK,
+    AUTHENTICATION,
+    AUTHENTICATION_TIMEOUT,
+    TLS,
+    DNS,
+}
+
 class CmuxWebSocketClient(
     private val scope: CoroutineScope,
     private val json: Json = Json {
@@ -46,6 +54,8 @@ class CmuxWebSocketClient(
 
     private val _statusFlow = MutableStateFlow<ConnectionStatus>(ConnectionStatus.DISCONNECTED)
     val statusFlow: StateFlow<ConnectionStatus> = _statusFlow.asStateFlow()
+    var connectionFailure: ConnectionFailure? = null
+        private set
 
     private val _renderGridEvents = MutableSharedFlow<RenderFrameEnvelope>(extraBufferCapacity = 128)
     val renderGridEvents: SharedFlow<RenderFrameEnvelope> = _renderGridEvents.asSharedFlow()
@@ -56,6 +66,7 @@ class CmuxWebSocketClient(
     val agentCompletionEvents: SharedFlow<JsonObject> = _agentCompletionEvents.asSharedFlow()
 
     private data class InboundMessage(
+        val socket: WebSocket,
         val text: String,
         val receivedNanos: Long
     )
@@ -66,6 +77,7 @@ class CmuxWebSocketClient(
     init {
         scope.launch(Dispatchers.Default) {
             for (msg in inboundChannel) {
+                if (msg.socket !== webSocket) continue
                 processInboundMessage(msg.text, msg.receivedNanos)
             }
         }
@@ -73,20 +85,38 @@ class CmuxWebSocketClient(
 
     private var authToken: String = ""
     private var isAuthCompleted = false
+    private var connectionTimeoutJob: Job? = null
 
     fun connect(url: String, token: String) {
         // Validate before publishing CONNECTING so rejected URLs remain disconnected.
         val request = Request.Builder().url(url).build()
         this.authToken = token
         this.isAuthCompleted = false
+        connectionFailure = null
         _statusFlow.value = ConnectionStatus.CONNECTING
         Log.i(tag, "Connecting to gateway...")
 
         webSocket = okHttpClient.newWebSocket(request, this)
+        connectionTimeoutJob?.cancel()
+        connectionTimeoutJob = scope.launch {
+            delay(10_000)
+            if (!isAuthCompleted) {
+                val stage = if (_statusFlow.value == ConnectionStatus.AUTHENTICATING) {
+                    ConnectionFailure.AUTHENTICATION_TIMEOUT
+                } else {
+                    ConnectionFailure.NETWORK
+                }
+                webSocket?.cancel()
+                webSocket = null
+                connectionFailure = stage
+                _statusFlow.value = ConnectionStatus.ERROR
+            }
+        }
     }
 
     fun disconnect() {
         Log.i(tag, "Disconnecting...")
+        connectionTimeoutJob?.cancel()
         webSocket?.close(1000, "Normal Closure")
         webSocket = null
         isAuthCompleted = false
@@ -110,7 +140,7 @@ class CmuxWebSocketClient(
         if (this.webSocket !== webSocket) return
         val receivedNanos = System.nanoTime()
         runBlocking {
-            inboundChannel.send(InboundMessage(text, receivedNanos))
+            inboundChannel.send(InboundMessage(webSocket, text, receivedNanos))
         }
     }
 
@@ -124,13 +154,17 @@ class CmuxWebSocketClient(
                 val msgType = jsonObject["type"]?.jsonPrimitive?.content
                 if (msgType == "auth_ok") {
                     isAuthCompleted = true
+                    connectionTimeoutJob?.cancel()
                     Log.i(tag, "Auth success! Changing status to CONNECTED")
                     _statusFlow.value = ConnectionStatus.CONNECTED
                     return
                 } else if (msgType == "auth_error") {
                     Log.e(tag, "Auth error received from server")
+                    connectionTimeoutJob?.cancel()
+                    webSocket?.close(1008, "Authentication failed")
+                    webSocket = null
+                    connectionFailure = ConnectionFailure.AUTHENTICATION
                     _statusFlow.value = ConnectionStatus.ERROR
-                    disconnect()
                     return
                 }
             }
@@ -192,6 +226,12 @@ class CmuxWebSocketClient(
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
         if (this.webSocket !== webSocket) return
         Log.e(tag, "onFailure: WebSocket error", t)
+        connectionTimeoutJob?.cancel()
+        connectionFailure = when (t) {
+            is javax.net.ssl.SSLException -> ConnectionFailure.TLS
+            is java.net.UnknownHostException -> ConnectionFailure.DNS
+            else -> ConnectionFailure.NETWORK
+        }
         _statusFlow.value = ConnectionStatus.ERROR
         pendingRequests.forEach { (_, deferred) ->
             deferred.completeExceptionally(t)
@@ -202,6 +242,16 @@ class CmuxWebSocketClient(
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
         if (this.webSocket !== webSocket) return
         Log.i(tag, "onClosed: code=$code, reason=$reason")
+        connectionTimeoutJob?.cancel()
+        pendingRequests.forEach { (_, deferred) ->
+            deferred.completeExceptionally(Exception("Gateway disconnected"))
+        }
+        pendingRequests.clear()
+        if (!isAuthCompleted && code == 1008) {
+            connectionFailure = ConnectionFailure.AUTHENTICATION
+            _statusFlow.value = ConnectionStatus.ERROR
+            return
+        }
         _statusFlow.value = ConnectionStatus.DISCONNECTED
     }
 
@@ -219,8 +269,11 @@ class CmuxWebSocketClient(
             throw Exception("Failed to send RPC request: WebSocket not connected")
         }
 
-        return withTimeout(5000) {
-            deferred.await()
+        return try {
+            withTimeoutOrNull(5000) { deferred.await() }
+                ?: throw java.io.IOException("Gateway request timed out")
+        } finally {
+            pendingRequests.remove(reqId)
         }
     }
 

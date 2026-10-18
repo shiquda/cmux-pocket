@@ -155,6 +155,7 @@ fun CmuxApp(
     val activeScreenState by viewModel.activeScreenState.collectAsState()
     val status by viewModel.connectionStatus.collectAsState(initial = ConnectionStatus.DISCONNECTED)
     val statusMsg by viewModel.statusMessage.collectAsState()
+    val connectionReadiness by viewModel.connectionReadiness.collectAsState()
     val workspaces by viewModel.workspaces.collectAsState()
     val activeWorkspace by viewModel.activeWorkspace.collectAsState()
     val activeSurfaces by viewModel.activeSurfaces.collectAsState()
@@ -236,6 +237,7 @@ fun CmuxApp(
                 )
 
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    ConnectionReadinessNotice(connectionReadiness) { showSettingsDialog = true }
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         TerminalStage(
                             surfaces = activeSurfaces,
@@ -275,6 +277,7 @@ fun CmuxApp(
                             }
                         )
 
+                        ConnectionReadinessNotice(connectionReadiness) { showSettingsDialog = true }
                         SurfaceTabBar(
                             surfaces = activeSurfaces,
                             selectedSurfaceId = selectedSurfaceId,
@@ -406,6 +409,7 @@ fun CmuxApp(
             selectedThemeHex = selectedThemeHex,
             themeMode = themeMode,
             connectionStatus = status,
+            connectionReadiness = connectionReadiness,
             isLandscape = isLandscape,
             settingsManager = settingsManager,
 

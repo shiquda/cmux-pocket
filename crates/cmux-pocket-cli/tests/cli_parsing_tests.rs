@@ -32,6 +32,7 @@ fn test_parse_setup() {
         Commands::Setup(SetupArgs {
             port: None,
             no_start: false,
+            tailscale: false,
         })
     );
 
@@ -43,8 +44,22 @@ fn test_parse_setup() {
         Commands::Setup(SetupArgs {
             port: Some(9090),
             no_start: true,
+            tailscale: false,
         })
     );
+}
+
+#[test]
+fn test_tailscale_setup_requires_gateway_verification() {
+    let cli = Cli::try_parse_from(["cmux-pocket", "setup", "--tailscale"]).unwrap();
+    assert!(matches!(
+        cli.command,
+        Commands::Setup(SetupArgs {
+            tailscale: true,
+            ..
+        })
+    ));
+    assert!(Cli::try_parse_from(["cmux-pocket", "setup", "--tailscale", "--no-start"]).is_err());
 }
 
 #[test]

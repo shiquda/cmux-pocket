@@ -12,6 +12,7 @@ async fn test_setup_first_run_no_start() {
     let args = SetupArgs {
         port: Some(8089),
         no_start: true,
+        tailscale: false,
     };
 
     let res = handle_setup(&paths, &args, false).await;
@@ -53,6 +54,7 @@ async fn test_setup_idempotency_preserves_token_and_config() {
     let args1 = SetupArgs {
         port: Some(8090),
         no_start: true,
+        tailscale: false,
     };
 
     // First setup run
@@ -63,6 +65,7 @@ async fn test_setup_idempotency_preserves_token_and_config() {
     let args2 = SetupArgs {
         port: None,
         no_start: true,
+        tailscale: false,
     };
     handle_setup(&paths, &args2, false).await.unwrap();
 
