@@ -1,5 +1,6 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -16,6 +17,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.app.Activity
+import androidx.annotation.StringRes
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -31,29 +37,27 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 
 
 data class ThemeOption(
     val id: String,
-    val name: String,
+    @StringRes val nameRes: Int,
     val hexColor: String
 )
 
 val AVAILABLE_THEMES = listOf(
-    ThemeOption("dark", "Default Dark", "#1E1E1E"),
-    ThemeOption("oled", "OLED Black", "#000000"),
-    ThemeOption("tokyo", "Tokyo Night", "#1A1B26"),
-    ThemeOption("dracula", "Dracula Dark", "#282A36")
+    ThemeOption("dark", R.string.settings_theme_option_dark, "#1E1E1E"),
+    ThemeOption("oled", R.string.settings_theme_option_oled, "#000000"),
+    ThemeOption("tokyo", R.string.settings_theme_option_tokyo, "#1A1B26"),
+    ThemeOption("dracula", R.string.settings_theme_option_dracula, "#282A36")
 )
 
 private const val SOURCE_URL = "https://github.com/shiquda/cmux-pocket"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsDialog(
+fun SettingsScreen(
     hostInput: String,
     portInput: String,
     tokenInput: String,
@@ -62,7 +66,6 @@ fun SettingsDialog(
     themeMode: ThemeMode,
     connectionStatus: ConnectionStatus,
     connectionReadiness: ConnectionReadiness,
-    isLandscape: Boolean,
     settingsManager: SettingsManager,
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
@@ -87,83 +90,78 @@ fun SettingsDialog(
     var showLicensesDialog by remember { mutableStateOf(false) }
     var showDiagnosticsDialog by remember { mutableStateOf(false) }
     var isDiagnosticsEnabled by remember { mutableStateOf(settingsManager.isDiagnosticsEnabled) }
-    Dialog(
-        onDismissRequest = onDismissRequest,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        val dialogWidth = if (isLandscape) 0.88f else 0.94f
-        val dialogHeight = if (isLandscape) 0.92f else 0.88f
+    // Ordinal rather than the enum itself so the page survives the activity recreation that a
+    // language switch triggers.
+    var selectedSectionOrdinal by rememberSaveable { mutableStateOf(SettingsSection.GENERAL.ordinal) }
+    val selectedSection = SettingsSection.entries[selectedSectionOrdinal]
+    var appLanguage by remember { mutableStateOf(settingsManager.appLanguage) }
 
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(dialogWidth)
-                .fillMaxHeight(dialogHeight)
-                .clip(RoundedCornerShape(18.dp)),
-            color = theme.surface,
-            tonalElevation = 6.dp
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Header Bar with >=48dp close button
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(theme.surfaceVariant)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = null,
-                            tint = theme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Preferences & Connection",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = theme.onSurface
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onDismissRequest,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = theme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+    Surface(modifier = Modifier.fillMaxSize(), color = theme.background) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(theme.surfaceVariant)
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = theme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = stringResource(R.string.settings_title),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.onSurface
+                    )
                 }
 
-                HorizontalDivider(color = theme.divider)
+                IconButton(onClick = onDismissRequest, modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.settings_close),
+                        tint = theme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
 
-                // Body: 2-Column in Landscape, 1-Column in Portrait
-                if (isLandscape) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+            HorizontalDivider(color = theme.divider)
+
+            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                SettingsSectionRail(
+                    selectedSection = selectedSection,
+                    onSelect = { selectedSectionOrdinal = it.ordinal }
+                )
+
+                VerticalDivider(color = theme.divider)
+
+                Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        // Left Column: Connection & Gateway
-                        // Left Column: Connection & Gateway + Display
-                        LazyColumn(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            item {
-                                SectionHeader(title = "CONNECTION & HOST", icon = Icons.Default.Cast, color = theme.primary)
+                        item {
+                            SectionHeader(
+                                title = stringResource(selectedSection.labelRes),
+                                icon = selectedSection.icon,
+                                color = theme.primary
+                            )
+                        }
+                        when (selectedSection) {
+                            SettingsSection.GENERAL -> item {
+                                BrandHeroCard()
                             }
-                            item {
+
+                            SettingsSection.CONNECTION -> item {
                                 ConnectionSection(
                                     hostInput = hostInput,
                                     portInput = portInput,
@@ -178,13 +176,8 @@ fun SettingsDialog(
                                     onScanQrClick = onScanQrClick,
                                 )
                             }
-                            item {
-                                HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
-                            }
-                            item {
-                                SectionHeader(title = "DISPLAY & TERMINAL", icon = Icons.Default.TextFields, color = theme.primary)
-                            }
-                            item {
+
+                            SettingsSection.DISPLAY -> item {
                                 DisplaySection(
                                     fontSizeSp = fontSizeSp,
                                     selectedThemeHex = selectedThemeHex,
@@ -194,21 +187,19 @@ fun SettingsDialog(
                                     onThemeModeChange = onThemeModeChange,
                                 )
                             }
-                        }
 
-                        // Right Column: App Hub, Releases, Community, Diagnostics, Storage
-                        LazyColumn(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            item {
-                                BrandHeroCard()
+                            SettingsSection.LANGUAGE -> item {
+                                LanguageSection(
+                                    language = appLanguage,
+                                    onLanguageChange = { language ->
+                                        appLanguage = language
+                                        settingsManager.appLanguage = language
+                                        (context as? Activity)?.recreate()
+                                    }
+                                )
                             }
-                            item {
-                                SectionHeader(title = "应用版本与更新 (RELEASE LIFECYCLE)", icon = Icons.Default.CloudDownload, color = theme.primary)
-                                Spacer(modifier = Modifier.height(4.dp))
+
+                            SettingsSection.UPDATES -> item {
                                 ReleaseSection(
                                     currentVersion = currentVersion,
                                     isChecking = isCheckingUpdate,
@@ -224,28 +215,34 @@ fun SettingsDialog(
                                                     showUpdateDialog = true
                                                 }
                                                 is UpdateCheckResult.UpToDate -> {
-                                                    Toast.makeText(context, "当前已是最新版本 (v$currentVersion)", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(
+                                                        context,
+                                                        context.getString(R.string.settings_up_to_date, currentVersion),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
                                                 }
                                                 is UpdateCheckResult.Error -> {
-                                                    Toast.makeText(context, "检查更新失败: ${res.message}", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(
+                                                        context,
+                                                        context.getString(R.string.settings_update_failed, res.message),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
                                                 }
                                             }
                                         }
                                     }
                                 )
                             }
-                            item {
-                                SectionHeader(title = "开源社区与许可 (OPEN SOURCE & COMMUNITY)", icon = Icons.Default.Code, color = theme.primary)
-                                Spacer(modifier = Modifier.height(4.dp))
+
+                            SettingsSection.OPENSOURCE -> item {
                                 OpenSourceSection(
                                     onOpenRepo = { uriHandler.openUri(SOURCE_URL) },
                                     onOpenIssues = { uriHandler.openUri("$SOURCE_URL/issues") },
                                     onOpenLicenses = { showLicensesDialog = true }
                                 )
                             }
-                            item {
-                                SectionHeader(title = "开发者诊断与排查 (DIAGNOSTICS & LOGS)", icon = Icons.Default.BugReport, color = theme.primary)
-                                Spacer(modifier = Modifier.height(4.dp))
+
+                            SettingsSection.DIAGNOSTICS -> item {
                                 DiagnosticsSection(
                                     isEnabled = isDiagnosticsEnabled,
                                     onToggleEnabled = {
@@ -254,233 +251,128 @@ fun SettingsDialog(
                                     },
                                     onViewLogs = { showDiagnosticsDialog = true },
                                     onExportBundle = {
-                                        val bundle = DiagnosticsManager.exportDiagnosticsBundle(context, settingsManager, connectionStatus)
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket diagnostics", bundle))
-                                        Toast.makeText(context, "已复制脱敏诊断包至剪贴板", Toast.LENGTH_SHORT).show()
+                                        val bundle = DiagnosticsManager.exportDiagnosticsBundle(
+                                            context,
+                                            settingsManager,
+                                            connectionStatus
+                                        )
+                                        val clipboard =
+                                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(
+                                            ClipData.newPlainText("cmux pocket diagnostics", bundle)
+                                        )
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.settings_diag_copied),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
                                 )
                             }
-                            item {
-                                SectionHeader(title = "配置备份与存储 (PROFILES & STORAGE)", icon = Icons.Default.Save, color = theme.primary)
-                                Spacer(modifier = Modifier.height(4.dp))
+
+                            SettingsSection.STORAGE -> item {
                                 StorageSection(
                                     profileCount = settingsManager.profiles.size,
                                     onExportProfiles = {
                                         val json = settingsManager.exportProfilesJson()
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket host profiles", json))
-                                        Toast.makeText(context, "已导出 ${settingsManager.profiles.size} 个 Host Profiles 到剪贴板", Toast.LENGTH_SHORT).show()
+                                        val clipboard =
+                                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(
+                                            ClipData.newPlainText("cmux pocket host profiles", json)
+                                        )
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(
+                                                R.string.settings_exported_toast,
+                                                settingsManager.profiles.size
+                                            ),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     },
                                     onImportProfiles = {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clipboard =
+                                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                         val clip = clipboard.primaryClip
-                                        val text = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString().orEmpty() else ""
-                                        val count = settingsManager.importProfilesJson(text)
-                                        if (count > 0) {
-                                            Toast.makeText(context, "成功导入并合并 $count 个 Host Profiles", Toast.LENGTH_SHORT).show()
+                                        val text = if (clip != null && clip.itemCount > 0) {
+                                            clip.getItemAt(0).text?.toString().orEmpty()
                                         } else {
-                                            Toast.makeText(context, "剪贴板中无有效的 Host Profiles JSON", Toast.LENGTH_SHORT).show()
+                                            ""
                                         }
+                                        val count = settingsManager.importProfilesJson(text)
+                                        val message = if (count > 0) {
+                                            context.getString(R.string.settings_imported_toast, count)
+                                        } else {
+                                            context.getString(R.string.settings_import_empty_toast)
+                                        }
+                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     },
                                     onClearScrollback = {
                                         onClearScrollback()
-                                        Toast.makeText(context, "已清空终端回滚历史缓冲区并释放显存", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.settings_scrollback_cleared_toast),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
                                 )
                             }
                         }
                     }
-                } else {
-                    // Portrait: Vertical Scrollable List
-                    LazyColumn(
+
+                    HorizontalDivider(color = theme.divider)
+
+                    // AGPL-required source/license notice and the explicit apply action.
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                            .background(theme.surfaceVariant)
+                            .navigationBarsPadding()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        item {
-                            BrandHeroCard()
+                        TextButton(
+                            onClick = { uriHandler.openUri(SOURCE_URL) },
+                            modifier = Modifier.heightIn(min = 48.dp)
+                        ) {
+                            Column {
+                                Text(
+                                    text = stringResource(R.string.settings_footer_version, currentVersion),
+                                    fontSize = 11.sp,
+                                    color = theme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = stringResource(R.string.settings_footer_license),
+                                    fontSize = 9.sp,
+                                    color = theme.onSurfaceVariant
+                                )
+                            }
                         }
-                        item {
-                            SectionHeader(title = "应用版本与更新 (RELEASE LIFECYCLE)", icon = Icons.Default.CloudDownload, color = theme.primary)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            ReleaseSection(
-                                currentVersion = currentVersion,
-                                isChecking = isCheckingUpdate,
-                                updateResult = updateResult,
-                                onCheckClick = {
-                                    isCheckingUpdate = true
-                                    scope.launch {
-                                        val res = ReleaseUpdateChecker.check(currentVersion)
-                                        isCheckingUpdate = false
-                                        updateResult = res
-                                        when (res) {
-                                            is UpdateCheckResult.UpdateAvailable -> {
-                                                showUpdateDialog = true
-                                            }
-                                            is UpdateCheckResult.UpToDate -> {
-                                                Toast.makeText(context, "当前已是最新版本 (v$currentVersion)", Toast.LENGTH_SHORT).show()
-                                            }
-                                            is UpdateCheckResult.Error -> {
-                                                Toast.makeText(context, "检查更新失败: ${res.message}", Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
-                                    }
-                                }
-                            )
-                        }
-                        item {
-                            HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
-                        }
-                        item {
-                            SectionHeader(title = "开源社区与许可 (OPEN SOURCE & COMMUNITY)", icon = Icons.Default.Code, color = theme.primary)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            OpenSourceSection(
-                                onOpenRepo = { uriHandler.openUri(SOURCE_URL) },
-                                onOpenIssues = { uriHandler.openUri("$SOURCE_URL/issues") },
-                                onOpenLicenses = { showLicensesDialog = true }
-                            )
-                        }
-                        item {
-                            HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
-                        }
-                        item {
-                            SectionHeader(title = "开发者诊断与排查 (DIAGNOSTICS & LOGS)", icon = Icons.Default.BugReport, color = theme.primary)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            DiagnosticsSection(
-                                isEnabled = isDiagnosticsEnabled,
-                                onToggleEnabled = {
-                                    isDiagnosticsEnabled = it
-                                    settingsManager.isDiagnosticsEnabled = it
-                                },
-                                onViewLogs = { showDiagnosticsDialog = true },
-                                onExportBundle = {
-                                    val bundle = DiagnosticsManager.exportDiagnosticsBundle(context, settingsManager, connectionStatus)
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket diagnostics", bundle))
-                                    Toast.makeText(context, "已复制脱敏诊断包至剪贴板", Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                        }
-                        item {
-                            HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
-                        }
-                        item {
-                            SectionHeader(title = "配置备份与存储 (PROFILES & STORAGE)", icon = Icons.Default.Save, color = theme.primary)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            StorageSection(
-                                profileCount = settingsManager.profiles.size,
-                                onExportProfiles = {
-                                    val json = settingsManager.exportProfilesJson()
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket host profiles", json))
-                                    Toast.makeText(context, "已导出 ${settingsManager.profiles.size} 个 Host Profiles 到剪贴板", Toast.LENGTH_SHORT).show()
-                                },
-                                onImportProfiles = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = clipboard.primaryClip
-                                    val text = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString().orEmpty() else ""
-                                    val count = settingsManager.importProfilesJson(text)
-                                    if (count > 0) {
-                                        Toast.makeText(context, "成功导入并合并 $count 个 Host Profiles", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "剪贴板中无有效的 Host Profiles JSON", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                onClearScrollback = {
-                                    onClearScrollback()
-                                    Toast.makeText(context, "已清空终端回滚历史缓冲区并释放显存", Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                        }
-                        item {
-                            HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
-                        }
-                        item {
-                            SectionHeader(title = "CONNECTION & HOST", icon = Icons.Default.Cast, color = theme.primary)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            ConnectionSection(
-                                hostInput = hostInput,
-                                portInput = portInput,
-                                tokenInput = tokenInput,
-                                connectionStatus = connectionStatus,
-                                connectionReadiness = connectionReadiness,
-                                settingsManager = settingsManager,
-                                onHostChange = onHostChange,
-                                onPortChange = onPortChange,
-                                onTokenChange = onTokenChange,
-                                onConnectClick = onConnectClick,
-                                onScanQrClick = onScanQrClick,
-                            )
-                        }
-                        item {
-                            HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
-                        }
-                        item {
-                            SectionHeader(title = "DISPLAY & TERMINAL", icon = Icons.Default.TextFields, color = theme.primary)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            DisplaySection(
-                                fontSizeSp = fontSizeSp,
-                                selectedThemeHex = selectedThemeHex,
-                                themeMode = themeMode,
-                                onFontSizeChange = onFontSizeChange,
-                                onThemeChange = onThemeChange,
-                                onThemeModeChange = onThemeModeChange,
-                            )
-                        }
-                    }
-                }
 
-                HorizontalDivider(color = theme.divider)
-
-                // Footer actions and AGPL-required source/license notice.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(theme.surfaceVariant)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(
-                        onClick = { uriHandler.openUri(SOURCE_URL) },
-                        modifier = Modifier.heightIn(min = 48.dp)
-                    ) {
-                        Column {
+                        Button(
+                            onClick = {
+                                onConnectClick()
+                                onDismissRequest()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = theme.primary,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "cmux Pocket • v2.0",
-                                fontSize = 11.sp,
-                                color = theme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "AGPL-3.0 • No warranty • Source & license",
-                                fontSize = 9.sp,
-                                color = theme.onSurfaceVariant
+                                text = stringResource(R.string.settings_apply_save),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
-                    }
-
-                    Button(
-                        onClick = {
-                            onConnectClick()
-                            onDismissRequest()
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = theme.primary,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Apply & Save", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -506,10 +398,13 @@ fun SettingsDialog(
         AlertDialog(
             onDismissRequest = { showUpdateDialog = false },
             title = {
-                Text("发现新版本 ${info.latestVersion}", fontWeight = FontWeight.Bold)
+                Text(
+                    text = stringResource(R.string.settings_update_dialog_title, info.latestVersion),
+                    fontWeight = FontWeight.Bold
+                )
             },
             text = {
-                Text("当前版本 v${info.currentVersion}，官方最新发布已就绪。点击前往下载 APK。")
+                Text(stringResource(R.string.settings_update_dialog_body, info.currentVersion))
             },
             confirmButton = {
                 Button(
@@ -519,12 +414,12 @@ fun SettingsDialog(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0A84FF))
                 ) {
-                    Text("前往下载 APK")
+                    Text(stringResource(R.string.settings_update_download))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showUpdateDialog = false }) {
-                    Text("稍后")
+                    Text(stringResource(R.string.settings_update_later))
                 }
             },
             containerColor = Color(0xFF2C2C2E),
@@ -533,6 +428,131 @@ fun SettingsDialog(
         )
     }
 }
+
+/** Sections listed in the settings navigation rail. Labels stay short so they fit the rail width. */
+enum class SettingsSection(@StringRes val labelRes: Int, val icon: ImageVector) {
+    GENERAL(R.string.settings_section_general, Icons.Default.Tune),
+    CONNECTION(R.string.settings_section_connection, Icons.Default.Cast),
+    DISPLAY(R.string.settings_section_display, Icons.Default.TextFields),
+    LANGUAGE(R.string.settings_section_language, Icons.Default.Translate),
+    UPDATES(R.string.settings_section_updates, Icons.Default.CloudDownload),
+    OPENSOURCE(R.string.settings_section_opensource, Icons.Default.Code),
+    DIAGNOSTICS(R.string.settings_section_diagnostics, Icons.Default.BugReport),
+    STORAGE(R.string.settings_section_storage, Icons.Default.Save)
+}
+
+@Composable
+private fun SettingsSectionRail(
+    selectedSection: SettingsSection,
+    onSelect: (SettingsSection) -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Column(
+        modifier = Modifier
+            .width(112.dp)
+            .fillMaxHeight()
+            .background(theme.surfaceVariant)
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+    ) {
+        SettingsSection.entries.forEach { section ->
+            val selected = section == selectedSection
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .background(if (selected) theme.primary.copy(alpha = 0.16f) else Color.Transparent)
+                    .clickable { onSelect(section) }
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = section.icon,
+                    contentDescription = null,
+                    tint = if (selected) theme.primary else theme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(section.labelRes),
+                    fontSize = 12.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (selected) theme.primary else theme.onSurface,
+                    maxLines = 2
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LanguageSection(
+    language: AppLanguage,
+    onLanguageChange: (AppLanguage) -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Translate,
+                    contentDescription = null,
+                    tint = Color(0xFF8E8E93),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = stringResource(R.string.settings_language_title),
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_language_desc),
+                        fontSize = 11.5.sp,
+                        color = Color(0xFF8E8E93)
+                    )
+                }
+            }
+
+            AppLanguage.entries.forEach { option ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onLanguageChange(option) }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = when (option) {
+                            AppLanguage.ENGLISH -> stringResource(R.string.settings_language_english)
+                            AppLanguage.CHINESE -> stringResource(R.string.settings_language_chinese)
+                        },
+                        fontSize = 14.sp,
+                        color = Color.White
+                    )
+                    RadioButton(
+                        selected = option == language,
+                        onClick = { onLanguageChange(option) },
+                        colors = RadioButtonDefaults.colors(selectedColor = theme.primary)
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 fun SectionHeader(title: String, icon: ImageVector, color: Color) {
@@ -573,6 +593,7 @@ fun ConnectionSection(
 ) {
     val theme = CmuxTheme.colors
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var isTokenVisible by remember { mutableStateOf(false) }
     var profiles by remember { mutableStateOf(settingsManager.profiles) }
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -598,7 +619,7 @@ fun ConnectionSection(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Profiles", fontSize = 11.sp, color = theme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.settings_profiles_title), fontSize = 11.sp, color = theme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
             Text(
                 text = if (connectionStatus == ConnectionStatus.CONNECTED) connectionReadiness.summary else connectionStatus.name.lowercase().replaceFirstChar { it.uppercase() },
                 fontSize = 11.sp,
@@ -626,7 +647,7 @@ fun ConnectionSection(
                             {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Delete ${profile.name}",
+                                    contentDescription = stringResource(R.string.settings_profile_delete, profile.name),
                                     modifier = Modifier
                                         .size(16.dp)
                                         .clickable {
@@ -642,16 +663,16 @@ fun ConnectionSection(
                         profileName = ""
                         showSaveDialog = true
                     },
-                    label = { Text("Add Host", fontSize = 11.sp) },
+                    label = { Text(stringResource(R.string.settings_add_host), fontSize = 11.sp) },
                     leadingIcon = {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     }
                 )
                 AssistChip(
                     onClick = onScanQrClick,
-                    label = { Text("Scan QR", fontSize = 11.sp) },
+                    label = { Text(stringResource(R.string.settings_scan_qr), fontSize = 11.sp) },
                     leadingIcon = {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR Code", modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = stringResource(R.string.settings_scan_qr_desc), modifier = Modifier.size(16.dp))
                     }
                 )
             }
@@ -660,8 +681,8 @@ fun ConnectionSection(
                 value = hostInput,
                 onValueChange = onHostChange,
                 enabled = activeProfileId != ConnectionProfile.USB_ID,
-                label = { Text("Host or URL", fontSize = 12.sp) },
-                placeholder = { Text("IP or https://tunnel.example.com", fontSize = 12.sp, color = Color.Gray) },
+                label = { Text(stringResource(R.string.settings_host_or_url), fontSize = 12.sp) },
+                placeholder = { Text(stringResource(R.string.settings_host_placeholder), fontSize = 12.sp, color = Color.Gray) },
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = theme.onSurface,
@@ -677,7 +698,7 @@ fun ConnectionSection(
                     value = portInput,
                     onValueChange = onPortChange,
                     enabled = activeProfileId != ConnectionProfile.USB_ID,
-                    label = { Text("Port", fontSize = 12.sp) },
+                    label = { Text(stringResource(R.string.settings_port), fontSize = 12.sp) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = theme.onSurface,
@@ -691,14 +712,14 @@ fun ConnectionSection(
                 OutlinedTextField(
                     value = tokenInput,
                     onValueChange = onTokenChange,
-                    label = { Text("Auth Token", fontSize = 12.sp) },
+                    label = { Text(stringResource(R.string.settings_auth_token), fontSize = 12.sp) },
                     singleLine = true,
                     visualTransformation = if (isTokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { isTokenVisible = !isTokenVisible }, modifier = Modifier.size(36.dp)) {
                             Icon(
                                 imageVector = if (isTokenVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                contentDescription = "Toggle Token Visibility",
+                                contentDescription = stringResource(R.string.settings_toggle_token),
                                 tint = theme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -730,9 +751,14 @@ fun ConnectionSection(
                             scanResults = found
                             isScanning = false
                             scanMessage = if (found.isEmpty()) {
-                                "No open gateway ports found on this subnet"
+                                context.getString(R.string.settings_scan_none_found)
                             } else {
-                                "Found ${found.size} host${if (found.size == 1) "" else "s"}"
+                                val hostCountStr = if (found.size == 1) {
+                                    context.getString(R.string.settings_scan_host_one)
+                                } else {
+                                    context.getString(R.string.settings_scan_host_many, found.size)
+                                }
+                                context.getString(R.string.settings_scan_found, hostCountStr)
                             }
                         }
                     },
@@ -745,11 +771,11 @@ fun ConnectionSection(
                     if (isScanning) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Scanning…", fontSize = 13.sp)
+                        Text(stringResource(R.string.settings_scanning), fontSize = 13.sp)
                     } else {
                         Icon(Icons.Default.WifiFind, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Scan Wi-Fi", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.settings_scan_wifi), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
 
@@ -770,7 +796,7 @@ fun ConnectionSection(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Reconnect", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_reconnect), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -804,9 +830,9 @@ fun ConnectionSection(
                         ) {
                             Column {
                                 Text(result.endpointLabel(), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = theme.onSurface)
-                                Text("${result.source} • ${result.latencyMs} ms", fontSize = 11.sp, color = theme.onSurfaceVariant)
+                                Text(stringResource(R.string.settings_latency, result.source, result.latencyMs), fontSize = 11.sp, color = theme.onSurfaceVariant)
                             }
-                            Text("Use", fontSize = 12.sp, color = theme.primary, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.settings_use), fontSize = 12.sp, color = theme.primary, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -820,32 +846,32 @@ fun ConnectionSection(
         var newToken by remember { mutableStateOf(tokenInput) }
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
-            title = { Text("Add Host") },
+            title = { Text(stringResource(R.string.settings_add_host)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = profileName,
                         onValueChange = { profileName = it },
-                        label = { Text("Name") },
+                        label = { Text(stringResource(R.string.settings_name)) },
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = newHost,
                         onValueChange = { newHost = it },
-                        label = { Text("Host or URL") },
-                        placeholder = { Text("host.example or https://tunnel.example") },
+                        label = { Text(stringResource(R.string.settings_host_or_url)) },
+                        placeholder = { Text(stringResource(R.string.settings_host_placeholder_short)) },
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = newPort,
                         onValueChange = { newPort = it },
-                        label = { Text("Port") },
+                        label = { Text(stringResource(R.string.settings_port)) },
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = newToken,
                         onValueChange = { newToken = it },
-                        label = { Text("Auth Token") },
+                        label = { Text(stringResource(R.string.settings_auth_token)) },
                         singleLine = true
                     )
                 }
@@ -870,12 +896,12 @@ fun ConnectionSection(
                         showSaveDialog = false
                     }
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.settings_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSaveDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.settings_cancel))
                 }
             }
         )
@@ -906,22 +932,22 @@ fun DisplaySection(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Theme Mode Selection (System / Dark / Light)
-            Text("App Theme Mode", fontSize = 12.sp, color = theme.onSurface, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.settings_theme_mode_title), fontSize = 12.sp, color = theme.onSurface, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(
                     selected = themeMode == ThemeMode.SYSTEM,
                     onClick = { onThemeModeChange(ThemeMode.SYSTEM) },
-                    label = { Text("System", fontSize = 11.sp) }
+                    label = { Text(stringResource(R.string.settings_theme_system), fontSize = 11.sp) }
                 )
                 FilterChip(
                     selected = themeMode == ThemeMode.DARK,
                     onClick = { onThemeModeChange(ThemeMode.DARK) },
-                    label = { Text("Dark", fontSize = 11.sp) }
+                    label = { Text(stringResource(R.string.settings_theme_dark), fontSize = 11.sp) }
                 )
                 FilterChip(
                     selected = themeMode == ThemeMode.LIGHT,
                     onClick = { onThemeModeChange(ThemeMode.LIGHT) },
-                    label = { Text("Light", fontSize = 11.sp) }
+                    label = { Text(stringResource(R.string.settings_theme_light), fontSize = 11.sp) }
                 )
             }
 
@@ -931,8 +957,8 @@ fun DisplaySection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Font Size · This Terminal", fontSize = 13.sp, color = theme.onSurface)
-                Text("${fontSizeSp.toInt()} sp", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.primary)
+                Text(stringResource(R.string.settings_font_size_title), fontSize = 13.sp, color = theme.onSurface)
+                Text(stringResource(R.string.font_size_sp_value, fontSizeSp.toInt()), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.primary)
             }
 
             Slider(
@@ -964,13 +990,13 @@ fun DisplaySection(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
-                    Text("Maple Mono NF (Built-in)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.onSurface)
-                    Text("Nerd Font v3 Icons + CJK Monospace", fontSize = 10.sp, color = theme.onSurfaceVariant)
+                    Text(stringResource(R.string.settings_font_builtin), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.onSurface)
+                    Text(stringResource(R.string.settings_font_builtin_desc), fontSize = 10.sp, color = theme.onSurfaceVariant)
                 }
             }
 
             // Terminal Background Theme Options
-            Text("Terminal Canvas Palette", fontSize = 12.sp, color = theme.onSurface, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.settings_terminal_palette), fontSize = 12.sp, color = theme.onSurface, fontWeight = FontWeight.SemiBold)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -990,7 +1016,7 @@ fun DisplaySection(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = opt.name.take(6),
+                            text = stringResource(opt.nameRes).take(6),
                             fontSize = 11.sp,
                             color = Color.White,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
@@ -1033,7 +1059,7 @@ fun BrandHeroCard() {
             horizontalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "cmux pocket",
+                text = stringResource(R.string.app_name),
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -1046,7 +1072,7 @@ fun BrandHeroCard() {
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
                 Text(
-                    text = "Open Source",
+                    text = stringResource(R.string.settings_brand_badge),
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF0A84FF)
@@ -1055,7 +1081,7 @@ fun BrandHeroCard() {
         }
 
         Text(
-            text = "cmux companion • multi-surface terminal client • v0.2.0",
+            text = stringResource(R.string.settings_brand_tagline, "0.2.0"),
             fontSize = 12.sp,
             color = Color(0xFF8E8E93),
             modifier = Modifier.padding(top = 4.dp)
@@ -1107,13 +1133,13 @@ fun ReleaseSection(
 
                     Column {
                         Text(
-                            text = "检查官网更新",
+                            text = stringResource(R.string.settings_check_update),
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color.White
                         )
                         Text(
-                            text = "当前版本 v$currentVersion",
+                            text = stringResource(R.string.settings_current_version, currentVersion),
                             fontSize = 11.5.sp,
                             color = Color(0xFF8E8E93)
                         )
@@ -1135,7 +1161,7 @@ fun ReleaseSection(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "有新版",
+                                text = stringResource(R.string.settings_update_available_badge),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFFF9F0A)
@@ -1143,7 +1169,7 @@ fun ReleaseSection(
                         }
                     } else {
                         Text(
-                            text = "检查",
+                            text = stringResource(R.string.settings_check),
                             fontSize = 12.sp,
                             color = Color(0xFF0A84FF),
                             fontWeight = FontWeight.Medium
@@ -1198,12 +1224,12 @@ fun OpenSourceSection(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("GitHub 源码仓库", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text("shiquda/cmux-pocket", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_repo), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text(stringResource(R.string.settings_repo_value), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("★ Star", fontSize = 12.sp, color = Color(0xFF0A84FF), fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_star), fontSize = 12.sp, color = Color(0xFF0A84FF), fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("›", fontSize = 16.sp, color = Color(0xFF636366))
                 }
@@ -1239,8 +1265,8 @@ fun OpenSourceSection(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("问题反馈与功能提议", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text("提交 GitHub Issue 报告", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_feedback), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text(stringResource(R.string.settings_feedback_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
                     }
                 }
                 Text("›", fontSize = 16.sp, color = Color(0xFF636366))
@@ -1276,8 +1302,8 @@ fun OpenSourceSection(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("开源协议与依赖声明", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text("GNU AGPL-3.0 及三方库许可", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_licenses), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text(stringResource(R.string.settings_licenses_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
                     }
                 }
                 Text("›", fontSize = 16.sp, color = Color(0xFF636366))
@@ -1327,8 +1353,8 @@ fun DiagnosticsSection(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("实时网关连接诊断日志", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text(if (isEnabled) "查看 WebSocket & RPC 诊断帧" else "未开启日志记录 (点击查看)", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_diag_toggle), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text(stringResource(if (isEnabled) R.string.settings_diag_enabled_desc else R.string.settings_diag_disabled_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
                     }
                 }
 
@@ -1374,12 +1400,12 @@ fun DiagnosticsSection(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("一键导出故障诊断包", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text("脱敏配置与近 500 行网络诊断 (JSON)", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_diag_export), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text(stringResource(R.string.settings_diag_export_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("JSON", fontSize = 12.sp, color = Color(0xFF8E8E93))
+                    Text(stringResource(R.string.settings_json_label), fontSize = 12.sp, color = Color(0xFF8E8E93))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("›", fontSize = 16.sp, color = Color(0xFF636366))
                 }
@@ -1429,8 +1455,8 @@ fun StorageSection(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("导出 Host 配置与预设", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text("备份全部 $profileCount 个 Profiles (JSON 复制到剪贴板)", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_export_profiles), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text(stringResource(R.string.settings_export_profiles_desc, profileCount), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
                     }
                 }
                 Text("›", fontSize = 16.sp, color = Color(0xFF636366))
@@ -1466,8 +1492,8 @@ fun StorageSection(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("导入配置 (从剪贴板)", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text("从剪贴板读取 JSON 并合并入现有配置", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_import_profiles), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text(stringResource(R.string.settings_import_profiles_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
                     }
                 }
                 Text("›", fontSize = 16.sp, color = Color(0xFF636366))
@@ -1503,8 +1529,8 @@ fun StorageSection(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("清空终端历史回滚缓冲区", fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text("重置 Scrollback 缓冲区并释放显存", fontSize = 11.5.sp, color = Color(0xFF8E8E93))
+                        Text(stringResource(R.string.settings_clear_scrollback), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text(stringResource(R.string.settings_clear_scrollback_desc), fontSize = 11.5.sp, color = Color(0xFF8E8E93))
                     }
                 }
                 Text("›", fontSize = 16.sp, color = Color(0xFF636366))

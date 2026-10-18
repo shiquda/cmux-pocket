@@ -26,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import app.cmuxpocket.R
 
 @Composable
 fun LandscapeSidebar(
@@ -92,14 +94,14 @@ fun LandscapeSidebar(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ChevronLeft,
-                                    contentDescription = "Collapse Sidebar",
+                                    contentDescription = stringResource(R.string.sidebar_collapse),
                                     tint = theme.primary,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "cmux Pocket",
+                                text = stringResource(R.string.sidebar_brand),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = theme.onSurface
@@ -127,7 +129,7 @@ fun LandscapeSidebar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Menu,
-                            contentDescription = "Expand Sidebar",
+                            contentDescription = stringResource(R.string.sidebar_expand),
                             tint = theme.onSurface,
                             modifier = Modifier.size(26.dp)
                         )
@@ -158,9 +160,9 @@ fun LandscapeSidebar(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("WORKSPACES", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.onSurfaceVariant)
+                                    Text(stringResource(R.string.sidebar_workspaces_header), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.onSurfaceVariant)
                                     IconButton(onClick = onNewWorkspace, modifier = Modifier.size(32.dp)) {
-                                        Icon(Icons.Default.Add, contentDescription = "New Workspace", tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.sidebar_new_workspace), tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -212,9 +214,9 @@ fun LandscapeSidebar(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("TABS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.onSurfaceVariant)
+                                    Text(stringResource(R.string.sidebar_tabs_header), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.onSurfaceVariant)
                                     IconButton(onClick = onNewSurface, modifier = Modifier.size(32.dp)) {
-                                        Icon(Icons.Default.Add, contentDescription = "New Tab", tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.sidebar_new_tab), tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -272,7 +274,7 @@ fun LandscapeSidebar(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.Close,
-                                                contentDescription = "Close",
+                                                contentDescription = stringResource(R.string.sidebar_close_tab),
                                                 tint = theme.onSurfaceVariant,
                                                 modifier = Modifier.size(14.dp)
                                             )
@@ -332,7 +334,7 @@ fun LandscapeSidebar(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Add,
-                                        contentDescription = "Add Tab",
+                                        contentDescription = stringResource(R.string.sidebar_add_tab),
                                         tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32),
                                         modifier = Modifier.size(22.dp)
                                     )
@@ -352,11 +354,49 @@ fun LandscapeSidebar(
             ) {
                 Icon(
                     imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
+                    contentDescription = stringResource(R.string.sidebar_settings),
                     tint = theme.onSurfaceVariant,
                     modifier = Modifier.size(22.dp)
                 )
             }
+        }
+    }
+}
+
+/** Compact "N tabs · path" line shown under a workspace name in the rail. */
+@Composable
+private fun WorkspaceMetaLine(
+    tabCount: Int,
+    path: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = if (tabCount == 1) {
+                stringResource(R.string.sidebar_tab_count_one)
+            } else {
+                stringResource(R.string.sidebar_tab_count_many, tabCount)
+            },
+            fontSize = 10.sp,
+            color = color,
+            maxLines = 1
+        )
+        if (path.isNotBlank()) {
+            Text(
+                text = path,
+                fontSize = 10.sp,
+                color = color,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .weight(1f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.End
+            )
         }
     }
 }

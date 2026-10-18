@@ -1,5 +1,7 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
+import androidx.compose.ui.res.stringResource
 import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.protocol.WorkspaceInfo
 import androidx.compose.foundation.background
@@ -78,13 +80,13 @@ fun SessionSurfaceDrawer(
             ) {
                 Column {
                     Text(
-                        text = "会话与 Surface 管理",
+                        text = stringResource(R.string.drawer_title),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                     Text(
-                        text = "Host: $hostLabel · ${workspaces.size} 个工作区",
+                        text = stringResource(R.string.drawer_host_summary, hostLabel, workspaces.size),
                         fontSize = 12.sp,
                         color = Color(0xFF8E8E93),
                         modifier = Modifier.padding(top = 2.dp)
@@ -108,7 +110,7 @@ fun SessionSurfaceDrawer(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
+                            contentDescription = stringResource(R.string.kb_settings),
                             tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
@@ -124,7 +126,7 @@ fun SessionSurfaceDrawer(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
+                            contentDescription = stringResource(R.string.main_close),
                             tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
@@ -142,7 +144,7 @@ fun SessionSurfaceDrawer(
                 item {
                     Column {
                         Text(
-                            text = "活跃 SURFACE 标签 (SURFACES)",
+                            text = stringResource(R.string.drawer_active_surfaces),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF8E8E93),
@@ -214,7 +216,7 @@ fun SessionSurfaceDrawer(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "切换工作区 (WORKSPACE SWITCHER)",
+                                text = stringResource(R.string.drawer_workspace_switcher),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF8E8E93),
@@ -222,7 +224,7 @@ fun SessionSurfaceDrawer(
                             )
 
                             Text(
-                                text = "+ 新建",
+                                text = stringResource(R.string.drawer_new),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF0A84FF),
@@ -306,7 +308,7 @@ private fun SurfaceCard(
                             .padding(horizontal = 6.dp, vertical = 1.dp)
                     ) {
                         Text(
-                            text = "Working",
+                            text = stringResource(R.string.drawer_state_working),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFFF9F0A)
@@ -320,7 +322,7 @@ private fun SurfaceCard(
                             .padding(horizontal = 6.dp, vertical = 1.dp)
                     ) {
                         Text(
-                            text = "Dead",
+                            text = stringResource(R.string.drawer_state_dead),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFFF453A)
@@ -334,7 +336,7 @@ private fun SurfaceCard(
                             .padding(horizontal = 6.dp, vertical = 1.dp)
                     ) {
                         Text(
-                            text = "Idle",
+                            text = stringResource(R.string.drawer_state_idle),
                             fontSize = 10.sp,
                             color = Color(0xFF8E8E93)
                         )
@@ -383,7 +385,7 @@ private fun NewSurfaceCard(
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "新建 Surface",
+                text = stringResource(R.string.drawer_new_surface),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color(0xFF0A84FF)
@@ -427,7 +429,7 @@ private fun WorkspaceCard(
 
             Column {
                 Text(
-                    text = if (isCurrent) "${workspace.name} (当前)" else workspace.name,
+                    text = if (isCurrent) stringResource(R.string.drawer_workspace_current, workspace.name) else workspace.name,
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
@@ -435,7 +437,11 @@ private fun WorkspaceCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${workspace.surfaces.size} 个 Surface · ${workspace.pathLabel.ifBlank { "默认路径" }}",
+                    text = stringResource(
+                        R.string.drawer_workspace_meta,
+                        workspace.surfaces.size,
+                        workspace.pathLabel.ifBlank { stringResource(R.string.drawer_default_path) }
+                    ),
                     fontSize = 11.sp,
                     color = Color(0xFF8E8E93),
                     maxLines = 1,
@@ -446,14 +452,14 @@ private fun WorkspaceCard(
 
         if (isCurrent) {
             Text(
-                text = "● 已连接",
+                text = "● " + stringResource(R.string.drawer_connected),
                 fontSize = 12.sp,
                 color = Color(0xFF30D158),
                 fontWeight = FontWeight.Medium
             )
         } else {
             Text(
-                text = "切换",
+                text = stringResource(R.string.drawer_switch),
                 fontSize = 12.sp,
                 color = Color(0xFF0A84FF),
                 fontWeight = FontWeight.Medium

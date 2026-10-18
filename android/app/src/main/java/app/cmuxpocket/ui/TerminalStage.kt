@@ -1,5 +1,7 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
+import androidx.compose.ui.res.stringResource
 import app.cmuxpocket.engine.TerminalScreenState
 import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.transport.ConnectionStatus
@@ -62,14 +64,14 @@ fun TerminalStage(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "No Active Terminal Tabs",
+                    text = stringResource(R.string.stage_no_tabs),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = theme.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Create a new tab to start running commands",
+                    text = stringResource(R.string.stage_no_tabs_hint),
                     fontSize = 13.sp,
                     color = theme.onSurfaceVariant
                 )
@@ -89,7 +91,7 @@ fun TerminalStage(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add Terminal Tab", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.stage_add_tab), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
         } else {
@@ -127,7 +129,7 @@ fun TerminalStage(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Syncing with cmux host...",
+                        text = stringResource(R.string.stage_syncing),
                         fontSize = 11.sp,
                         color = Color(0xFFFFB300)
                     )

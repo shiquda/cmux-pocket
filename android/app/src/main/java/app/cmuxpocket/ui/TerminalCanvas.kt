@@ -1,5 +1,8 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
+import androidx.compose.ui.res.stringResource
+
 import app.cmuxpocket.engine.NumericTraceHelper
 import app.cmuxpocket.engine.TerminalCell
 import app.cmuxpocket.engine.TerminalScreenState
@@ -25,7 +28,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -182,6 +184,10 @@ fun TerminalCanvas(
     onClearScreen: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val readyLabel = stringResource(R.string.canvas_ready)
+    val connectingLabel = stringResource(R.string.canvas_connecting)
+    val startHandleLabel = stringResource(R.string.canvas_selection_start_handle)
+    val endHandleLabel = stringResource(R.string.canvas_selection_end_handle)
     val density = LocalDensity.current
     val requestedFontSizePx = with(density) { displayPreference.fontSizeSp.sp.toPx() }
     val panOffset = Offset(displayPreference.panX, displayPreference.panY ?: 0f)
@@ -455,9 +461,9 @@ fun TerminalCanvas(
             if (activeGrid.isEmpty()) {
                 textPaint.color = Color.parseColor("#888888")
                 textPaint.textSize = 34f
-                nativeCanvas.drawText("cmux Pocket Ready", 40f, 100f, textPaint)
+                nativeCanvas.drawText(readyLabel, 40f, 100f, textPaint)
                 textPaint.textSize = 26f
-                nativeCanvas.drawText("Connecting to session...", 40f, 150f, textPaint)
+                nativeCanvas.drawText(connectingLabel, 40f, 150f, textPaint)
                 return@Canvas
             }
 
@@ -639,7 +645,7 @@ fun TerminalCanvas(
                         )
                     }
                     .size(48.dp)
-                    .semantics { contentDescription = "Selection start handle" }
+                    .semantics { contentDescription = startHandleLabel }
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragStart = {
@@ -669,7 +675,7 @@ fun TerminalCanvas(
                         )
                     }
                     .size(48.dp)
-                    .semantics { contentDescription = "Selection end handle" }
+                    .semantics { contentDescription = endHandleLabel }
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragStart = {
@@ -688,68 +694,6 @@ fun TerminalCanvas(
                     }
             )
 
-            // Floating Copy Action
-            val startCellTopY = currentGeom.originY + normStart.row * currentGeom.rowHeight
-            val selectionMinX = minOf(startCellLeftX, endCellRightX)
-            val selectionMaxX = maxOf(startCellLeftX, endCellRightX)
-
-            val toolbarWidthPx = with(density) { 100.dp.toPx() }
-            val toolbarHeightPx = with(density) { 48.dp.toPx() }
-            val marginPx = with(density) { 8.dp.toPx() }
-
-            val preferredAboveY = startCellTopY - toolbarHeightPx - marginPx
-            val preferredBelowY = endCellBottomY + marginPx
-
-            val toolbarY = if (preferredAboveY >= marginPx) {
-                preferredAboveY
-            } else if (preferredBelowY + toolbarHeightPx <= canvasSizePx.height - marginPx) {
-                preferredBelowY
-            } else {
-                preferredAboveY.coerceIn(marginPx, (canvasSizePx.height - toolbarHeightPx - marginPx).coerceAtLeast(marginPx))
-            }
-
-            val centerX = (selectionMinX + selectionMaxX) / 2f
-            val preferredX = centerX - (toolbarWidthPx / 2f)
-            val toolbarX = preferredX.coerceIn(marginPx, (canvasSizePx.width - toolbarWidthPx - marginPx).coerceAtLeast(marginPx))
-
-            Surface(
-                modifier = Modifier
-                    .offset { IntOffset(toolbarX.roundToInt(), toolbarY.roundToInt()) }
-                    .clip(RoundedCornerShape(24.dp))
-                    .border(1.dp, ComposeColor(0x55FFFFFF), RoundedCornerShape(24.dp))
-                    .clickable {
-                        val text = extractSelectedText(activeSelection)
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("cmux terminal selection", text)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                        clearSelection()
-                    },
-                color = ComposeColor(0xEE222226),
-                tonalElevation = 8.dp,
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "Copy",
-                        tint = ComposeColor(0xFF00FF7F),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "Copy",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ComposeColor.White
-                    )
-                }
-            }
         }
 
         val bubblePos = contextualBubbleOffset
@@ -778,7 +722,7 @@ fun TerminalCanvas(
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         val clip = ClipData.newPlainText("cmux terminal content", textToCopy)
                         clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "已复制选中终端内容", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.canvas_copied_selection), Toast.LENGTH_SHORT).show()
                     }
                     clearSelection()
                     contextualBubbleOffset = null
@@ -790,20 +734,20 @@ fun TerminalCanvas(
                         val pasteText = clip.getItemAt(0).text?.toString().orEmpty()
                         if (pasteText.isNotEmpty()) {
                             onSendKey(pasteText)
-                            Toast.makeText(context, "已粘贴剪贴板内容", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.canvas_pasted), Toast.LENGTH_SHORT).show()
                         }
                     }
                     contextualBubbleOffset = null
                 },
                 onInterrupt = {
                     onSendKey("\u0003")
-                    Toast.makeText(context, "已发送中断 (Ctrl+C)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.canvas_interrupt_sent), Toast.LENGTH_SHORT).show()
                     contextualBubbleOffset = null
                 },
                 onClear = {
                     onClearScreen()
                     onSendKey("\u000c")
-                    Toast.makeText(context, "终端画布已清屏", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.canvas_cleared), Toast.LENGTH_SHORT).show()
                     clearSelection()
                     contextualBubbleOffset = null
                 },
@@ -857,6 +801,8 @@ private fun TerminalTextControls(
 ) {
     val canDecrease = enabled && !preference.fitWidth && preference.fontSizeSp > 2f
     val canIncrease = enabled && !preference.fitWidth && preference.fontSizeSp < 48f
+    val decreaseLabel = stringResource(R.string.canvas_decrease_text_size)
+    val increaseLabel = stringResource(R.string.canvas_increase_text_size)
     Surface(modifier = modifier, color = ComposeColor(0xFF222226)) {
         Row(
             modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp),
@@ -870,16 +816,16 @@ private fun TerminalTextControls(
                     },
                     enabled = canDecrease,
                     modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                        .semantics { contentDescription = "Decrease terminal text size" }
+                        .semantics { contentDescription = decreaseLabel }
                 ) { Text("A−", color = if (canDecrease) ComposeColor.White else ComposeColor.Gray) }
-                Text("${(renderedFontSizeSp * 10).roundToInt() / 10f} sp", color = ComposeColor(0xFFCCCCCC), fontSize = 12.sp)
+                Text(stringResource(R.string.font_size_sp_value, ((renderedFontSizeSp * 10).roundToInt() / 10f).toString()), color = ComposeColor(0xFFCCCCCC), fontSize = 12.sp)
                 TextButton(
                     onClick = {
                         onChange(preference.copy(fontSizeSp = (preference.fontSizeSp + 1f).coerceAtMost(48f), panX = 0f, panY = null))
                     },
                     enabled = canIncrease,
                     modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                        .semantics { contentDescription = "Increase terminal text size" }
+                        .semantics { contentDescription = increaseLabel }
                 ) { Text("A+", color = if (canIncrease) ComposeColor.White else ComposeColor.Gray) }
             }
             TextButton(
@@ -889,7 +835,7 @@ private fun TerminalTextControls(
             ) {
                 Icon(Icons.Default.FitScreen, contentDescription = null, tint = ComposeColor(0xFF00FF7F), modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(if (preference.fitWidth) "Readable" else "Fit Width", color = ComposeColor.White, fontSize = 12.sp)
+                Text(if (preference.fitWidth) stringResource(R.string.canvas_readable) else stringResource(R.string.canvas_fit_width), color = ComposeColor.White, fontSize = 12.sp)
             }
         }
     }

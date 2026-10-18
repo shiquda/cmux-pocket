@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.res.stringResource
+import app.cmuxpocket.R
 
 @Composable
 fun DiagnosticsViewerDialog(
@@ -74,7 +76,7 @@ fun DiagnosticsViewerDialog(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "实时网关连接诊断日志",
+                                text = stringResource(R.string.diag_title),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -87,7 +89,11 @@ fun DiagnosticsViewerDialog(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = if (DiagnosticsManager.isEnabled) "已开启" else "已禁用",
+                                    text = if (DiagnosticsManager.isEnabled) {
+                                        stringResource(R.string.diag_status_enabled)
+                                    } else {
+                                        stringResource(R.string.diag_status_disabled)
+                                    },
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (DiagnosticsManager.isEnabled) Color(0xFF30D158) else Color(0xFF8E8E93)
@@ -95,7 +101,7 @@ fun DiagnosticsViewerDialog(
                             }
                         }
                         Text(
-                            text = "循环缓存最近 500 行握手与 RPC 诊断帧",
+                            text = stringResource(R.string.diag_subtitle),
                             fontSize = 11.5.sp,
                             color = Color(0xFF8E8E93),
                             modifier = Modifier.padding(top = 2.dp)
@@ -111,7 +117,7 @@ fun DiagnosticsViewerDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
+                            contentDescription = stringResource(R.string.diag_close_button),
                             tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
@@ -138,9 +144,9 @@ fun DiagnosticsViewerDialog(
                         ) {
                             Text(
                                 text = if (!DiagnosticsManager.isEnabled) {
-                                    "诊断日志已关闭\n请在设置中开启「实时网关连接诊断日志」"
+                                    stringResource(R.string.diag_empty_disabled)
                                 } else {
-                                    "尚无诊断日志记录\n发起连接或执行操作后将在此显示"
+                                    stringResource(R.string.diag_empty_no_logs)
                                 },
                                 fontSize = 12.sp,
                                 color = Color(0xFF8E8E93),
@@ -186,7 +192,7 @@ fun DiagnosticsViewerDialog(
                         onClick = {
                             DiagnosticsManager.clear()
                             logs = emptyList()
-                            Toast.makeText(context, "已清空诊断日志", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.diag_toast_cleared), Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier
                             .weight(1f)
@@ -199,16 +205,16 @@ fun DiagnosticsViewerDialog(
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("清空", fontSize = 13.sp)
+                        Text(stringResource(R.string.diag_clear_button), fontSize = 13.sp)
                     }
 
                     Button(
                         onClick = {
                             val bundle = DiagnosticsManager.exportDiagnosticsBundle(context, settingsManager, connectionStatus)
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            val clip = ClipData.newPlainText("cmux pocket diagnostics", bundle)
+                            val clip = ClipData.newPlainText(context.getString(R.string.diag_clip_label), bundle)
                             clipboard.setPrimaryClip(clip)
-                            Toast.makeText(context, "已复制脱敏诊断包至剪贴板", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.diag_toast_copied), Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier
                             .weight(1.5f)
@@ -221,7 +227,7 @@ fun DiagnosticsViewerDialog(
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("导出脱敏诊断包", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.diag_export_button), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

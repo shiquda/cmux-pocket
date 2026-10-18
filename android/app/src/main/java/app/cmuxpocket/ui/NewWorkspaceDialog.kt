@@ -8,6 +8,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import app.cmuxpocket.R
 
 @Composable
 fun NewWorkspaceDialog(
@@ -16,20 +18,20 @@ fun NewWorkspaceDialog(
 ) {
     var nameInput by remember { mutableStateOf("") }
     var createInitialTerminal by remember { mutableStateOf(true) }
-
+    val defaultWorkspaceName = stringResource(R.string.dlg_new_workspace_default_name)
     AlertDialog(
         onDismissRequest = onDismissRequest,
         containerColor = Color(0xFF222228),
         titleContentColor = Color.White,
         textContentColor = Color.White,
-        title = { Text("New Workspace", fontSize = 18.sp) },
+        title = { Text(stringResource(R.string.dlg_new_workspace_title), fontSize = 18.sp) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = nameInput,
                     onValueChange = { nameInput = it },
-                    label = { Text("Workspace Name") },
-                    placeholder = { Text("e.g. backend-api, my-feature") },
+                    label = { Text(stringResource(R.string.dlg_new_workspace_name_label)) },
+                    placeholder = { Text(stringResource(R.string.dlg_new_workspace_name_placeholder)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -53,14 +55,14 @@ fun NewWorkspaceDialog(
                         )
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Create initial terminal tab", fontSize = 13.sp, color = Color(0xFFDDDDDD))
+                    Text(stringResource(R.string.dlg_new_workspace_create_initial_tab), fontSize = 13.sp, color = Color(0xFFDDDDDD))
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val finalName = nameInput.trim().ifEmpty { "New Workspace" }
+                    val finalName = nameInput.trim().ifEmpty { defaultWorkspaceName }
                     onConfirm(finalName, createInitialTerminal)
                 },
                 colors = ButtonDefaults.buttonColors(
@@ -68,7 +70,7 @@ fun NewWorkspaceDialog(
                     contentColor = Color.White
                 )
             ) {
-                Text("Create")
+                Text(stringResource(R.string.dlg_new_workspace_create))
             }
         },
         dismissButton = {
@@ -76,7 +78,7 @@ fun NewWorkspaceDialog(
                 onClick = onDismissRequest,
                 colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFAAAAAA))
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.dlg_new_workspace_cancel))
             }
         }
     )
@@ -95,19 +97,19 @@ fun NewSurfaceDialog(
         containerColor = Color(0xFF222228),
         titleContentColor = Color.White,
         textContentColor = Color.White,
-        title = { Text("New Terminal Tab", fontSize = 18.sp) },
+        title = { Text(stringResource(R.string.dlg_new_surface_title), fontSize = 18.sp) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Add a new terminal session in '$workspaceName'",
+                    text = stringResource(R.string.dlg_new_surface_desc, workspaceName),
                     fontSize = 13.sp,
                     color = Color(0xFFAAAAAA)
                 )
                 OutlinedTextField(
                     value = titleInput,
                     onValueChange = { titleInput = it },
-                    label = { Text("Tab Title (Optional)") },
-                    placeholder = { Text("e.g. zsh, logs, tests") },
+                    label = { Text(stringResource(R.string.dlg_new_surface_title_label)) },
+                    placeholder = { Text(stringResource(R.string.dlg_new_surface_title_placeholder)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -130,7 +132,7 @@ fun NewSurfaceDialog(
                     contentColor = Color.White
                 )
             ) {
-                Text("Add Tab")
+                Text(stringResource(R.string.dlg_new_surface_add))
             }
         },
         dismissButton = {
@@ -138,7 +140,7 @@ fun NewSurfaceDialog(
                 onClick = onDismissRequest,
                 colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFAAAAAA))
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.dlg_new_surface_cancel))
             }
         }
     )

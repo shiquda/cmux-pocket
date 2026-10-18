@@ -50,6 +50,17 @@ class SettingsManager(context: Context) {
             app.cmuxpocket.diagnostics.DiagnosticsManager.isEnabled = value
         }
 
+    /**
+     * Dictionary used for every user-facing string. Defaults to [AppLanguage.DEFAULT] (English) so a
+     * fresh install never starts in Chinese, regardless of the device locale.
+     */
+    var appLanguage: AppLanguage
+        get() = AppLanguage.fromTag(prefs.getString(KEY_APP_LANGUAGE, null))
+        set(value) {
+            prefs.edit().putString(KEY_APP_LANGUAGE, value.tag).apply()
+            AppLanguageStore.current = value
+        }
+
     fun exportProfilesJson(): String {
         val prettyJson = Json { prettyPrint = true; encodeDefaults = true }
         return prettyJson.encodeToString(profiles)
@@ -184,6 +195,7 @@ class SettingsManager(context: Context) {
         private const val KEY_PROFILES = "connection_profiles"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
         private const val KEY_DIAGNOSTICS_ENABLED = "diagnostics_enabled"
+        private const val KEY_APP_LANGUAGE = "app_language"
     }
 
         private fun createEncryptedPreferences(context: Context): SharedPreferences {

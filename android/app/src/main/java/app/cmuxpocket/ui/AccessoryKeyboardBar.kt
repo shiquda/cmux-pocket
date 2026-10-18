@@ -1,5 +1,7 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -68,7 +70,7 @@ fun AccessoryKeyboardBar(
         ) {
             Icon(
                 imageVector = Icons.Default.Keyboard,
-                contentDescription = "Open Keyboard Panel",
+                contentDescription = stringResource(R.string.kb_open_panel),
                 tint = Color(0xFF0A84FF),
                 modifier = Modifier.size(20.dp)
             )
@@ -158,7 +160,7 @@ fun AccessoryKeyboardBar(
                     .defaultMinSize(minWidth = 54.dp)
             ) {
                 Text(
-                    text = "Tabs ($surfaceCount)",
+                    text = stringResource(R.string.kb_tabs, surfaceCount),
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -171,7 +173,7 @@ fun AccessoryKeyboardBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
+                    contentDescription = stringResource(R.string.kb_settings),
                     tint = Color(0xFF8E8E93),
                     modifier = Modifier.size(18.dp)
                 )

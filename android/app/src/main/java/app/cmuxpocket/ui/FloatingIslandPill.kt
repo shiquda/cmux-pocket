@@ -1,5 +1,7 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
+import androidx.compose.ui.res.stringResource
 import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.transport.ConnectionStatus
@@ -74,12 +76,15 @@ fun FloatingIslandPill(
         label = "blink_alpha"
     )
 
+    val connectingLabel = stringResource(R.string.island_connecting)
+    val disconnectedLabel = stringResource(R.string.island_disconnected)
+
     val (dotColor, dotAlpha, dotScale, titleText) = when {
         connectionStatus == ConnectionStatus.CONNECTING || connectionStatus == ConnectionStatus.AUTHENTICATING -> {
-            Quad(Color(0xFFFFD60A), connectingBlinkAlpha, 1.0f, "正在连接...")
+            Quad(Color(0xFFFFD60A), connectingBlinkAlpha, 1.0f, connectingLabel)
         }
         connectionStatus == ConnectionStatus.ERROR || connectionStatus == ConnectionStatus.DISCONNECTED -> {
-            Quad(Color(0xFFFF453A), 1.0f, 1.0f, "已断开")
+            Quad(Color(0xFFFF453A), 1.0f, 1.0f, disconnectedLabel)
         }
         isWorking -> {
             val wsName = activeWorkspace?.name?.takeIf { it.isNotBlank() } ?: "cmux"

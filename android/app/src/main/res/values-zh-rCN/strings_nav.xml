@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Landscape sidebar navigation -->
+    <string name="sidebar_collapse">收起侧边栏</string>
+    <string name="sidebar_brand">cmux Pocket</string>
+    <string name="sidebar_expand">展开侧边栏</string>
+    <string name="sidebar_workspaces_header">工作区</string>
+    <string name="sidebar_new_workspace">新建工作区</string>
+    <string name="sidebar_tabs_header">标签页</string>
+    <string name="sidebar_new_tab">新建标签页</string>
+    <string name="sidebar_close_tab">关闭</string>
+    <string name="sidebar_add_tab">添加标签页</string>
+    <string name="sidebar_settings">设置</string>
+    <string name="sidebar_tab_count_one">1 个标签</string>
+    <string name="sidebar_tab_count_many">%1$d 个标签</string>
+
+    <!-- Open source licenses dialog -->
+    <string name="lic_title">开源协议与依赖声明</string>
+    <string name="lic_subtitle">Open Source Licenses &amp; Notices</string>
+    <string name="lic_close_button">关闭</string>
+    <string name="lic_card_cmux_pocket_title">cmux pocket</string>
+    <string name="lic_card_cmux_pocket_license">GNU Affero General Public License v3.0 (AGPL-3.0)</string>
+    <string name="lic_card_cmux_pocket_desc">cmux pocket is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.\n\nThis program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.</string>
+    <string name="lic_card_compose_title">Jetpack Compose &amp; AndroidX Libraries</string>
+    <string name="lic_card_compose_license">Apache License 2.0</string>
+    <string name="lic_card_compose_desc">Copyright (C) The Android Open Source Project. Licensed under the Apache License, Version 2.0.</string>
+    <string name="lic_card_okhttp_title">OkHttp &amp; Okio</string>
+    <string name="lic_card_okhttp_license">Apache License 2.0</string>
+    <string name="lic_card_okhttp_desc">Copyright 2019 Square, Inc. Licensed under the Apache License, Version 2.0.</string>
+    <string name="lic_card_kotlin_title">Kotlin &amp; KotlinX (Coroutines, Serialization)</string>
+    <string name="lic_card_kotlin_license">Apache License 2.0</string>
+    <string name="lic_card_kotlin_desc">Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors.</string>
+    <string name="lic_card_camerax_title">CameraX &amp; ZXing Core</string>
+    <string name="lic_card_camerax_license">Apache License 2.0</string>
+    <string name="lic_card_camerax_desc">ZXing: Copyright (C) 2008 ZXing authors. Licensed under the Apache License, Version 2.0.</string>
+    <string name="lic_card_maple_title">Maple Mono Font</string>
+    <string name="lic_card_maple_license">SIL Open Font License 1.1</string>
+    <string name="lic_card_maple_desc">Copyright (c) 2021-2024 Subframe &amp; Maple Mono Project Contributors. Licensed under SIL Open Font License, Version 1.1.</string>
+    <string name="lic_dismiss">关闭</string>
+
+    <!-- Diagnostics viewer dialog -->
+    <string name="diag_title">实时网关连接诊断日志</string>
+    <string name="diag_status_enabled">已开启</string>
+    <string name="diag_status_disabled">已禁用</string>
+    <string name="diag_subtitle">循环缓存最近 500 行握手与 RPC 诊断帧</string>
+    <string name="diag_close_button">关闭</string>
+    <string name="diag_empty_disabled">诊断日志已关闭\n请在设置中开启「实时网关连接诊断日志」</string>
+    <string name="diag_empty_no_logs">尚无诊断日志记录\n发起连接或执行操作后将在此显示</string>
+    <string name="diag_clear_button">清空</string>
+    <string name="diag_toast_cleared">已清空诊断日志</string>
+    <string name="diag_clip_label">cmux pocket diagnostics</string>
+    <string name="diag_toast_copied">已复制脱敏诊断包至剪贴板</string>
+    <string name="diag_export_button">导出脱敏诊断包</string>
+</resources>

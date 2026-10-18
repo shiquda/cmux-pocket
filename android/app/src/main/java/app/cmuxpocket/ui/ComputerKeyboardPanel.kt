@@ -18,10 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import app.cmuxpocket.R
 
-private enum class KeyboardPage(val title: String) {
-    QWERTY("QWERTY"),
-    SPECIAL("Special")
+private enum class KeyboardPage(@StringRes val titleRes: Int) {
+    QWERTY(R.string.panel_tab_qwerty),
+    SPECIAL(R.string.panel_tab_special)
 }
 
 /**
@@ -101,7 +104,7 @@ fun ComputerKeyboardPanel(
                             modifier = Modifier.height(48.dp),
                             text = {
                                 Text(
-                                    text = entry.title,
+                                    text = stringResource(entry.titleRes),
                                     color = if (page == entry) theme.primary else theme.onSurfaceVariant
                                 )
                             }
@@ -114,7 +117,7 @@ fun ComputerKeyboardPanel(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Close Keyboard",
+                        contentDescription = stringResource(R.string.panel_close_keyboard),
                         tint = theme.onSurfaceVariant
                     )
                 }
@@ -154,7 +157,7 @@ fun ComputerKeyboardPanel(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "Combo",
+                            text = stringResource(R.string.panel_combo),
                             fontSize = 12.sp,
                             color = theme.onSurfaceVariant
                         )
@@ -180,7 +183,7 @@ fun ComputerKeyboardPanel(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Combination Mode",
+                        text = stringResource(R.string.panel_combination_mode),
                         fontSize = 13.sp,
                         color = theme.onSurfaceVariant
                     )

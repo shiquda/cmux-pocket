@@ -4,6 +4,7 @@ import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.transport.ConnectionStatus
 import app.cmuxpocket.ui.*
 import android.content.res.Configuration
+import android.content.Context
 import android.os.Bundle
 import android.Manifest
 import android.content.Intent
@@ -23,10 +24,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
@@ -35,6 +39,14 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
+
+    /**
+     * Applies the in-app dictionary choice to every resource lookup in this activity. The stored
+     * choice is read once in [CmuxPocketApp] so this never touches the keystore on the startup path.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withAppLanguage(AppLanguageStore.current))
+    }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -95,7 +107,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CmuxAppRoot(viewModel: TerminalViewModel) {
     val context = LocalContext.current
-    val settingsManager = remember { SettingsManager(context) }
+    val settingsManager = remember { CmuxPocketApp.settingsManager }
     val pendingImportUri by viewModel.pendingImportUri.collectAsState()
     var importPayload by remember { mutableStateOf<CmuxImportPayload?>(null) }
     var importErrorMessage by remember { mutableStateOf<String?>(null) }
@@ -109,7 +121,7 @@ fun CmuxAppRoot(viewModel: TerminalViewModel) {
                 importErrorMessage = null
             } catch (e: Exception) {
                 importPayload = null
-                importErrorMessage = e.message ?: "Invalid cmux-pocket configuration link"
+                importErrorMessage = e.message ?: context.getString(R.string.main_invalid_config_link)
             }
         }
     }
@@ -258,11 +270,10 @@ fun CmuxApp(
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     var isSidebarExpanded by remember { mutableStateOf(false) }
-    var showWorkspaceSheet by remember { mutableStateOf(false) }
     var showSessionSurfaceDrawer by remember { mutableStateOf(false) }
     var showNewWorkspaceDialog by remember { mutableStateOf(false) }
     var showNewSurfaceDialog by remember { mutableStateOf(false) }
-    var showSettingsDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
     var showKeyboardPanel by remember { mutableStateOf(false) }
     var pendingCloseSurface by remember { mutableStateOf<SurfaceInfo?>(null) }
 
@@ -284,7 +295,7 @@ fun CmuxApp(
 
     LaunchedEffect(status) {
         if (status == ConnectionStatus.ERROR) {
-            Toast.makeText(context, "Connection Error: Check IP or start Gateway", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.main_connection_error), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -411,15 +422,6 @@ fun CmuxApp(
         )
     }
 
-    if (showWorkspaceSheet) {
-        WorkspaceBottomSheet(
-            workspaces = workspaces,
-            selectedWorkspaceKey = activeWorkspace?.stableKey,
-            onSelectWorkspace = { key -> viewModel.selectWorkspace(key) },
-            onNewWorkspaceClick = { showNewWorkspaceDialog = true },
-            onDismissRequest = { showWorkspaceSheet = false }
-        )
-    }
     if (showSessionSurfaceDrawer) {
         SessionSurfaceDrawer(
             workspaces = workspaces,
@@ -449,7 +451,7 @@ fun CmuxApp(
 
     if (showNewSurfaceDialog) {
         NewSurfaceDialog(
-            workspaceName = activeWorkspace?.name ?: "Current Workspace",
+            workspaceName = activeWorkspace?.name ?: stringResource(R.string.main_workspace_fallback),
             onDismissRequest = { showNewSurfaceDialog = false },
             onConfirm = { title ->
                 showNewSurfaceDialog = false
@@ -462,13 +464,13 @@ fun CmuxApp(
         val running = surface.agentState == "working" || surface.agentState == "needs_input"
         AlertDialog(
             onDismissRequest = { pendingCloseSurface = null },
-            title = { Text("Close tab?") },
+            title = { Text(stringResource(R.string.main_close_tab_title)) },
             text = {
                 Text(
                     if (running) {
-                        "${surface.displayTitle} has a running process. Close it anyway?"
+                        stringResource(R.string.main_close_tab_running, surface.displayTitle)
                     } else {
-                        "${surface.displayTitle} is still running. Close it anyway?"
+                        stringResource(R.string.main_close_tab_still_running, surface.displayTitle)
                     }
                 )
             },
@@ -480,20 +482,21 @@ fun CmuxApp(
                         viewModel.closeSurface(id)
                     }
                 ) {
-                    Text("Close")
+                    Text(stringResource(R.string.main_close))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingCloseSurface = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.main_cancel))
                 }
             }
         )
     }
 
-    // Dedicated Settings Dialog
+    // Full-screen settings page (never a floating overlay over the terminal).
     if (showSettingsDialog) {
-        SettingsDialog(
+        BackHandler { showSettingsDialog = false }
+        SettingsScreen(
             hostInput = hostInput,
             portInput = portInput,
             tokenInput = tokenInput,
@@ -502,7 +505,6 @@ fun CmuxApp(
             themeMode = themeMode,
             connectionStatus = status,
             connectionReadiness = connectionReadiness,
-            isLandscape = isLandscape,
             settingsManager = settingsManager,
 
 

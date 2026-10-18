@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.res.stringResource
+import app.cmuxpocket.R
 
 @Composable
 fun ImportPreviewDialog(
@@ -78,7 +80,7 @@ fun ImportPreviewDialog(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Import Gateway Profile",
+                            text = stringResource(R.string.dlg_import_title),
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = theme.onSurface
@@ -88,7 +90,7 @@ fun ImportPreviewDialog(
                     IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Cancel",
+                            contentDescription = stringResource(R.string.dlg_import_cancel),
                             tint = theme.onSurfaceVariant
                         )
                     }
@@ -115,14 +117,19 @@ fun ImportPreviewDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Existing Profile Found",
+                                    text = stringResource(R.string.dlg_import_existing_found),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (theme.isDark) Color(0xFFFFE082) else Color(0xFFB78103)
                                 )
                             }
                             Text(
-                                text = "A saved profile '${existingProfile.name}' already uses this endpoint (${existingProfile.host}:${existingProfile.port}).",
+                                text = stringResource(
+                                    R.string.dlg_import_existing_desc,
+                                    existingProfile.name,
+                                    existingProfile.host,
+                                    existingProfile.port
+                                ),
                                 fontSize = 12.sp,
                                 color = if (theme.isDark) Color(0xFFFFECB3) else Color(0xFF664D03)
                             )
@@ -133,7 +140,7 @@ fun ImportPreviewDialog(
                                 FilterChip(
                                     selected = updateExisting,
                                     onClick = { updateExisting = true },
-                                    label = { Text("Update '${existingProfile.name}'", fontSize = 11.sp) },
+                                    label = { Text(stringResource(R.string.dlg_import_update_profile, existingProfile.name), fontSize = 11.sp) },
                                     leadingIcon = if (updateExisting) {
                                         { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
                                     } else null
@@ -141,7 +148,7 @@ fun ImportPreviewDialog(
                                 FilterChip(
                                     selected = !updateExisting,
                                     onClick = { updateExisting = false },
-                                    label = { Text("Save as New", fontSize = 11.sp) },
+                                    label = { Text(stringResource(R.string.dlg_import_save_as_new), fontSize = 11.sp) },
                                     leadingIcon = if (!updateExisting) {
                                         { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
                                     } else null
@@ -155,7 +162,7 @@ fun ImportPreviewDialog(
                 OutlinedTextField(
                     value = profileName,
                     onValueChange = { profileName = it },
-                    label = { Text("Profile Name", fontSize = 12.sp) },
+                    label = { Text(stringResource(R.string.dlg_import_profile_name), fontSize = 12.sp) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = theme.onSurface,
@@ -179,7 +186,7 @@ fun ImportPreviewDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "CONNECTION DETAILS",
+                            text = stringResource(R.string.dlg_import_connection_details),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = theme.onSurfaceVariant
@@ -191,11 +198,11 @@ fun ImportPreviewDialog(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column {
-                                Text("Host / Address", fontSize = 11.sp, color = theme.onSurfaceVariant)
+                                Text(stringResource(R.string.dlg_import_host_address), fontSize = 11.sp, color = theme.onSurfaceVariant)
                                 Text(payload.host, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = theme.onSurface)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text("Port", fontSize = 11.sp, color = theme.onSurfaceVariant)
+                                Text(stringResource(R.string.dlg_import_port), fontSize = 11.sp, color = theme.onSurfaceVariant)
                                 Text(payload.port.toString(), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = theme.onSurface)
                             }
                         }
@@ -206,7 +213,7 @@ fun ImportPreviewDialog(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column {
-                                Text("Protocol & Security", fontSize = 11.sp, color = theme.onSurfaceVariant)
+                                Text(stringResource(R.string.dlg_import_protocol_security), fontSize = 11.sp, color = theme.onSurfaceVariant)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = if (payload.tls) Icons.Default.Lock else Icons.Default.LockOpen,
@@ -216,7 +223,7 @@ fun ImportPreviewDialog(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = if (payload.tls) "WSS (TLS Encrypted)" else "WS (Loopback Cleartext)",
+                                        text = stringResource(if (payload.tls) R.string.dlg_import_protocol_wss else R.string.dlg_import_protocol_ws),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = theme.onSurface
@@ -227,7 +234,7 @@ fun ImportPreviewDialog(
                             if (payload.isLoopback) {
                                 SuggestionChip(
                                     onClick = {},
-                                    label = { Text("USB / Local", fontSize = 10.sp) },
+                                    label = { Text(stringResource(R.string.dlg_import_usb_local), fontSize = 10.sp) },
                                     modifier = Modifier.height(28.dp)
                                 )
                             }
@@ -242,13 +249,13 @@ fun ImportPreviewDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Gateway Auth Token", fontSize = 11.sp, color = theme.onSurfaceVariant)
+                                Text(stringResource(R.string.dlg_import_gateway_auth_token), fontSize = 11.sp, color = theme.onSurfaceVariant)
                                 TextButton(
                                     onClick = { isTokenVisible = !isTokenVisible },
                                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                                     modifier = Modifier.height(24.dp)
                                 ) {
-                                    Text(if (isTokenVisible) "Hide" else "Show", fontSize = 11.sp)
+                                    Text(stringResource(if (isTokenVisible) R.string.dlg_import_token_hide else R.string.dlg_import_token_show), fontSize = 11.sp)
                                 }
                             }
                             Text(
@@ -263,7 +270,7 @@ fun ImportPreviewDialog(
 
                 // Security reminder
                 Text(
-                    text = "Importing will save this host configuration to your Pocket profiles.",
+                    text = stringResource(R.string.dlg_import_security_reminder),
                     fontSize = 11.sp,
                     color = theme.onSurfaceVariant
                 )
@@ -280,7 +287,7 @@ fun ImportPreviewDialog(
                             .height(44.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Cancel", fontSize = 13.sp)
+                        Text(stringResource(R.string.dlg_import_cancel), fontSize = 13.sp)
                     }
 
                     Button(
@@ -312,7 +319,7 @@ fun ImportPreviewDialog(
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Import & Connect", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.dlg_import_confirm), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -337,7 +344,7 @@ fun ImportErrorDialog(
             )
         },
         title = {
-            Text("Invalid Import Configuration", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.dlg_import_error_title), fontSize = 16.sp, fontWeight = FontWeight.Bold)
         },
         text = {
             Text(errorMessage, fontSize = 13.sp, color = theme.onSurfaceVariant)
@@ -347,7 +354,7 @@ fun ImportErrorDialog(
                 onClick = onDismiss,
                 colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
             ) {
-                Text("OK", color = Color.White)
+                Text(stringResource(R.string.dlg_import_error_ok), color = Color.White)
             }
         }
     )

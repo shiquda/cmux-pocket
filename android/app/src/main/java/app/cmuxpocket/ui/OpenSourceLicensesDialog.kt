@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.res.stringResource
+import app.cmuxpocket.R
 
 @Composable
 fun OpenSourceLicensesDialog(
@@ -49,13 +51,13 @@ fun OpenSourceLicensesDialog(
                 ) {
                     Column {
                         Text(
-                            text = "开源协议与依赖声明",
+                            text = stringResource(R.string.lic_title),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "Open Source Licenses & Notices",
+                            text = stringResource(R.string.lic_subtitle),
                             fontSize = 12.sp,
                             color = Color(0xFF8E8E93)
                         )
@@ -70,7 +72,7 @@ fun OpenSourceLicensesDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
+                            contentDescription = stringResource(R.string.lic_close_button),
                             tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
@@ -87,49 +89,49 @@ fun OpenSourceLicensesDialog(
                 ) {
                     item {
                         LicenseCard(
-                            title = "cmux pocket",
-                            license = "GNU Affero General Public License v3.0 (AGPL-3.0)",
-                            description = "cmux pocket is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.\n\nThis program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+                            title = stringResource(R.string.lic_card_cmux_pocket_title),
+                            license = stringResource(R.string.lic_card_cmux_pocket_license),
+                            description = stringResource(R.string.lic_card_cmux_pocket_desc)
                         )
                     }
 
                     item {
                         LicenseCard(
-                            title = "Jetpack Compose & AndroidX Libraries",
-                            license = "Apache License 2.0",
-                            description = "Copyright (C) The Android Open Source Project. Licensed under the Apache License, Version 2.0."
+                            title = stringResource(R.string.lic_card_compose_title),
+                            license = stringResource(R.string.lic_card_compose_license),
+                            description = stringResource(R.string.lic_card_compose_desc)
                         )
                     }
 
                     item {
                         LicenseCard(
-                            title = "OkHttp & Okio",
-                            license = "Apache License 2.0",
-                            description = "Copyright 2019 Square, Inc. Licensed under the Apache License, Version 2.0."
+                            title = stringResource(R.string.lic_card_okhttp_title),
+                            license = stringResource(R.string.lic_card_okhttp_license),
+                            description = stringResource(R.string.lic_card_okhttp_desc)
                         )
                     }
 
                     item {
                         LicenseCard(
-                            title = "Kotlin & KotlinX (Coroutines, Serialization)",
-                            license = "Apache License 2.0",
-                            description = "Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors."
+                            title = stringResource(R.string.lic_card_kotlin_title),
+                            license = stringResource(R.string.lic_card_kotlin_license),
+                            description = stringResource(R.string.lic_card_kotlin_desc)
                         )
                     }
 
                     item {
                         LicenseCard(
-                            title = "CameraX & ZXing Core",
-                            license = "Apache License 2.0",
-                            description = "ZXing: Copyright (C) 2008 ZXing authors. Licensed under the Apache License, Version 2.0."
+                            title = stringResource(R.string.lic_card_camerax_title),
+                            license = stringResource(R.string.lic_card_camerax_license),
+                            description = stringResource(R.string.lic_card_camerax_desc)
                         )
                     }
 
                     item {
                         LicenseCard(
-                            title = "Maple Mono Font",
-                            license = "SIL Open Font License 1.1",
-                            description = "Copyright (c) 2021-2024 Subframe & Maple Mono Project Contributors. Licensed under SIL Open Font License, Version 1.1."
+                            title = stringResource(R.string.lic_card_maple_title),
+                            license = stringResource(R.string.lic_card_maple_license),
+                            description = stringResource(R.string.lic_card_maple_desc)
                         )
                     }
                 }
@@ -147,7 +149,7 @@ fun OpenSourceLicensesDialog(
                     ),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("关闭", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.lic_dismiss), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

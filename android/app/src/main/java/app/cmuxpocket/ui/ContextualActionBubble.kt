@@ -1,5 +1,7 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -54,7 +56,7 @@ fun ContextualActionBubble(
             BubbleItem(
                 icon = Icons.Default.ContentCopy,
                 iconTint = Color(0xFF0A84FF),
-                text = if (hasSelection) "复制选中内容" else "复制屏幕内容",
+                text = if (hasSelection) stringResource(R.string.bubble_copy_selection) else stringResource(R.string.bubble_copy_screen),
                 onClick = {
                     onCopy()
                     onDismiss()
@@ -64,7 +66,7 @@ fun ContextualActionBubble(
             BubbleItem(
                 icon = Icons.Default.ContentPaste,
                 iconTint = Color(0xFF30D158),
-                text = "粘贴至光标处",
+                text = stringResource(R.string.bubble_paste),
                 onClick = {
                     onPaste()
                     onDismiss()
@@ -74,7 +76,7 @@ fun ContextualActionBubble(
             BubbleItem(
                 icon = Icons.Default.FlashOn,
                 iconTint = Color(0xFFFF9F0A),
-                text = "发送中断 (Ctrl+C)",
+                text = stringResource(R.string.bubble_interrupt),
                 onClick = {
                     onInterrupt()
                     onDismiss()
@@ -84,7 +86,7 @@ fun ContextualActionBubble(
             BubbleItem(
                 icon = Icons.Default.CleaningServices,
                 iconTint = Color(0xFFFF453A),
-                text = "清空屏幕 (Clear)",
+                text = stringResource(R.string.bubble_clear),
                 onClick = {
                     onClear()
                     onDismiss()
