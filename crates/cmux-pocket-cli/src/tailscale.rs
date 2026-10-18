@@ -39,6 +39,9 @@ fn tailnet_host(status: &Value) -> Result<String, CliError> {
 
 /// Returns true only when the existing HTTPS root already targets this Gateway.
 fn inspect_route(config: &Value, host: &str, upstream: &str) -> Result<bool, CliError> {
+    if config.is_null() {
+        return Ok(false);
+    }
     if !config.is_object() {
         return Err(dependency("Tailscale returned an unsupported Serve configuration. Existing forwarding was preserved."));
     }
@@ -147,14 +150,25 @@ mod tests {
         config["AllowFunnel"] = json!({"mac.example.ts.net:443": true});
         assert!(inspect_route(&config, "mac.example.ts.net", "http://127.0.0.1:8088").is_err());
         assert!(!inspect_route(&json!({}), "mac.example.ts.net", "http://127.0.0.1:8088").unwrap());
+        assert!(
+            !inspect_route(&Value::Null, "mac.example.ts.net", "http://127.0.0.1:8088").unwrap()
+        );
         assert!(inspect_route(
             &json!({"TCP": {"443": {"TCPForward": "localhost:22"}}}),
             "mac.example.ts.net",
             "http://127.0.0.1:8088"
         )
         .is_err());
+        assert!(inspect_route(
+            &json!("string"),
+            "mac.example.ts.net",
+            "http://127.0.0.1:8088"
+        )
+        .is_err());
+        assert!(inspect_route(&json!(42), "mac.example.ts.net", "http://127.0.0.1:8088").is_err());
+        assert!(inspect_route(&json!([]), "mac.example.ts.net", "http://127.0.0.1:8088").is_err());
         assert!(
-            inspect_route(&Value::Null, "mac.example.ts.net", "http://127.0.0.1:8088").is_err()
+            inspect_route(&json!(true), "mac.example.ts.net", "http://127.0.0.1:8088").is_err()
         );
     }
 
@@ -184,6 +198,27 @@ esac
     #[tokio::test]
     async fn setup_creates_and_confirms_a_route_once() {
         let (temp, tailscale) = fake_tailscale(&json!({}));
+        let endpoint = tailscale.setup("127.0.0.1", 8088).await.unwrap();
+        assert_eq!(endpoint.host, "mac.example.ts.net");
+        assert_eq!(endpoint.port, 443);
+        assert!(endpoint.route_created);
+        assert!(
+            !tailscale
+                .setup("127.0.0.1", 8088)
+                .await
+                .unwrap()
+                .route_created
+        );
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("changes")).unwrap(),
+            "configured\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn setup_creates_and_confirms_a_route_from_unconfigured_null() {
+        let (temp, tailscale) = fake_tailscale(&Value::Null);
         let endpoint = tailscale.setup("127.0.0.1", 8088).await.unwrap();
         assert_eq!(endpoint.host, "mac.example.ts.net");
         assert_eq!(endpoint.port, 443);
