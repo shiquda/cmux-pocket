@@ -65,9 +65,15 @@
 
     <!-- Settings page shell -->
     <string name="settings_title">Settings</string>
+    <string name="settings_back">Back</string>
     <string name="settings_close">Close settings</string>
     <string name="settings_apply_save">Apply &amp; Save</string>
-    <string name="settings_section_general">General</string>
+    <string name="settings_group_appearance">Appearance</string>
+    <string name="settings_group_support">Support</string>
+    <string name="settings_group_data">Data</string>
+    <string name="settings_row_profiles">%1$d profiles</string>
+    <string name="settings_row_diagnostics_on">On</string>
+    <string name="settings_row_diagnostics_off">Off</string>
     <string name="settings_section_connection">Connection</string>
     <string name="settings_section_display">Display</string>
     <string name="settings_section_language">Language</string>

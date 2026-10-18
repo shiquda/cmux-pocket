@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.shape.CircleShape
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.platform.LocalContext
 import app.cmuxpocket.diagnostics.DiagnosticsManager
 import app.cmuxpocket.transport.ConnectionStatus
@@ -19,7 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.app.Activity
 import androidx.annotation.StringRes
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.Icons
@@ -92,10 +93,12 @@ fun SettingsScreen(
     var showDiagnosticsDialog by remember { mutableStateOf(false) }
     var isDiagnosticsEnabled by remember { mutableStateOf(settingsManager.isDiagnosticsEnabled) }
     // Ordinal rather than the enum itself so the page survives the activity recreation that a
-    // language switch triggers.
-    var selectedSectionOrdinal by rememberSaveable { mutableStateOf(SettingsSection.GENERAL.ordinal) }
-    val selectedSection = SettingsSection.entries[selectedSectionOrdinal]
+    // language switch triggers; [ROOT_MENU] means the root list is showing.
+    var openSectionOrdinal by rememberSaveable { mutableStateOf(ROOT_MENU) }
+    val openSection = SettingsSection.entries.getOrNull(openSectionOrdinal)
     var appLanguage by remember { mutableStateOf(settingsManager.appLanguage) }
+
+    BackHandler(enabled = openSection != null) { openSectionOrdinal = ROOT_MENU }
 
     Surface(modifier = Modifier.fillMaxSize(), color = theme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -108,16 +111,35 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = null,
-                        tint = theme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    if (openSection == null) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = theme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                    } else {
+                        IconButton(
+                            onClick = { openSectionOrdinal = ROOT_MENU },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.settings_back),
+                                tint = theme.onSurface,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     Text(
-                        text = stringResource(R.string.settings_title),
+                        text = openSection?.let { stringResource(it.labelRes) }
+                            ?: stringResource(R.string.settings_title),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = theme.onSurface
@@ -136,190 +158,240 @@ fun SettingsScreen(
 
             HorizontalDivider(color = theme.divider)
 
-            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                SettingsSectionRail(
-                    selectedSection = selectedSection,
-                    onSelect = { selectedSectionOrdinal = it.ordinal }
-                )
+            if (openSection == null) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    item { BrandHeroCard() }
 
-                VerticalDivider(color = theme.divider)
-
-                Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        item {
-                            SectionHeader(
-                                title = stringResource(selectedSection.labelRes),
-                                icon = selectedSection.icon,
-                                color = theme.primary
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_section_connection)) {
+                            SettingsNavRow(
+                                section = SettingsSection.CONNECTION,
+                                summary = "$hostInput:$portInput",
+                                onClick = { openSectionOrdinal = SettingsSection.CONNECTION.ordinal }
                             )
-                        }
-                        when (selectedSection) {
-                            SettingsSection.GENERAL -> item {
-                                BrandHeroCard()
-                            }
-
-                            SettingsSection.CONNECTION -> item {
-                                ConnectionSection(
-                                    hostInput = hostInput,
-                                    portInput = portInput,
-                                    tokenInput = tokenInput,
-                                    connectionStatus = connectionStatus,
-                                    connectionReadiness = connectionReadiness,
-                                    settingsManager = settingsManager,
-                                    onHostChange = onHostChange,
-                                    onPortChange = onPortChange,
-                                    onTokenChange = onTokenChange,
-                                    onConnectClick = onConnectClick,
-                                    onScanQrClick = onScanQrClick,
-                                )
-                            }
-
-                            SettingsSection.DISPLAY -> item {
-                                DisplaySection(
-                                    fontSizeSp = fontSizeSp,
-                                    selectedThemeHex = selectedThemeHex,
-                                    themeMode = themeMode,
-                                    onFontSizeChange = onFontSizeChange,
-                                    onThemeChange = onThemeChange,
-                                    onThemeModeChange = onThemeModeChange,
-                                )
-                            }
-
-                            SettingsSection.LANGUAGE -> item {
-                                LanguageSection(
-                                    language = appLanguage,
-                                    onLanguageChange = { language ->
-                                        appLanguage = language
-                                        settingsManager.appLanguage = language
-                                        (context as? Activity)?.recreate()
-                                    }
-                                )
-                            }
-
-                            SettingsSection.UPDATES -> item {
-                                ReleaseSection(
-                                    currentVersion = currentVersion,
-                                    isChecking = isCheckingUpdate,
-                                    updateResult = updateResult,
-                                    onCheckClick = {
-                                        isCheckingUpdate = true
-                                        scope.launch {
-                                            val res = ReleaseUpdateChecker.check(currentVersion)
-                                            isCheckingUpdate = false
-                                            updateResult = res
-                                            when (res) {
-                                                is UpdateCheckResult.UpdateAvailable -> {
-                                                    showUpdateDialog = true
-                                                }
-                                                is UpdateCheckResult.UpToDate -> {
-                                                    Toast.makeText(
-                                                        context,
-                                                        context.getString(R.string.settings_up_to_date, currentVersion),
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                                is UpdateCheckResult.Error -> {
-                                                    Toast.makeText(
-                                                        context,
-                                                        context.getString(R.string.settings_update_failed, res.message),
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-
-                            SettingsSection.OPENSOURCE -> item {
-                                OpenSourceSection(
-                                    onOpenRepo = { uriHandler.openUri(SOURCE_URL) },
-                                    onOpenIssues = { uriHandler.openUri("$SOURCE_URL/issues") },
-                                    onOpenLicenses = { showLicensesDialog = true }
-                                )
-                            }
-
-                            SettingsSection.DIAGNOSTICS -> item {
-                                DiagnosticsSection(
-                                    isEnabled = isDiagnosticsEnabled,
-                                    onToggleEnabled = {
-                                        isDiagnosticsEnabled = it
-                                        settingsManager.isDiagnosticsEnabled = it
-                                    },
-                                    onViewLogs = { showDiagnosticsDialog = true },
-                                    onExportBundle = {
-                                        val bundle = DiagnosticsManager.exportDiagnosticsBundle(
-                                            context,
-                                            settingsManager,
-                                            connectionStatus
-                                        )
-                                        val clipboard =
-                                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        clipboard.setPrimaryClip(
-                                            ClipData.newPlainText("cmux pocket diagnostics", bundle)
-                                        )
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.settings_diag_copied),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                )
-                            }
-
-                            SettingsSection.STORAGE -> item {
-                                StorageSection(
-                                    profileCount = settingsManager.profiles.size,
-                                    onExportProfiles = {
-                                        val json = settingsManager.exportProfilesJson()
-                                        val clipboard =
-                                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        clipboard.setPrimaryClip(
-                                            ClipData.newPlainText("cmux pocket host profiles", json)
-                                        )
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(
-                                                R.string.settings_exported_toast,
-                                                settingsManager.profiles.size
-                                            ),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    },
-                                    onImportProfiles = {
-                                        val clipboard =
-                                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        val clip = clipboard.primaryClip
-                                        val text = if (clip != null && clip.itemCount > 0) {
-                                            clip.getItemAt(0).text?.toString().orEmpty()
-                                        } else {
-                                            ""
-                                        }
-                                        val count = settingsManager.importProfilesJson(text)
-                                        val message = if (count > 0) {
-                                            context.getString(R.string.settings_imported_toast, count)
-                                        } else {
-                                            context.getString(R.string.settings_import_empty_toast)
-                                        }
-                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                                    },
-                                    onClearScrollback = {
-                                        onClearScrollback()
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.settings_scrollback_cleared_toast),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                )
-                            }
                         }
                     }
 
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_group_appearance)) {
+                            SettingsNavRow(
+                                section = SettingsSection.DISPLAY,
+                                summary = stringResource(themeModeLabelRes(themeMode)),
+                                onClick = { openSectionOrdinal = SettingsSection.DISPLAY.ordinal }
+                            )
+                            SettingsRowDivider()
+                            SettingsNavRow(
+                                section = SettingsSection.LANGUAGE,
+                                summary = appLanguage.nativeName,
+                                onClick = { openSectionOrdinal = SettingsSection.LANGUAGE.ordinal }
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_group_support)) {
+                            SettingsNavRow(
+                                section = SettingsSection.UPDATES,
+                                summary = "v$currentVersion",
+                                onClick = { openSectionOrdinal = SettingsSection.UPDATES.ordinal }
+                            )
+                            SettingsRowDivider()
+                            SettingsNavRow(
+                                section = SettingsSection.OPENSOURCE,
+                                onClick = { openSectionOrdinal = SettingsSection.OPENSOURCE.ordinal }
+                            )
+                            SettingsRowDivider()
+                            SettingsNavRow(
+                                section = SettingsSection.DIAGNOSTICS,
+                                summary = stringResource(
+                                    if (isDiagnosticsEnabled) R.string.settings_row_diagnostics_on
+                                    else R.string.settings_row_diagnostics_off
+                                ),
+                                onClick = { openSectionOrdinal = SettingsSection.DIAGNOSTICS.ordinal }
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_group_data)) {
+                            SettingsNavRow(
+                                section = SettingsSection.STORAGE,
+                                summary = stringResource(
+                                    R.string.settings_row_profiles,
+                                    settingsManager.profiles.size
+                                ),
+                                onClick = { openSectionOrdinal = SettingsSection.STORAGE.ordinal }
+                            )
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    when (openSection) {
+                        SettingsSection.CONNECTION -> item {
+                            ConnectionSection(
+                                hostInput = hostInput,
+                                portInput = portInput,
+                                tokenInput = tokenInput,
+                                connectionStatus = connectionStatus,
+                                connectionReadiness = connectionReadiness,
+                                settingsManager = settingsManager,
+                                onHostChange = onHostChange,
+                                onPortChange = onPortChange,
+                                onTokenChange = onTokenChange,
+                                onConnectClick = onConnectClick,
+                                onScanQrClick = onScanQrClick,
+                            )
+                        }
+
+                        SettingsSection.DISPLAY -> item {
+                            DisplaySection(
+                                fontSizeSp = fontSizeSp,
+                                selectedThemeHex = selectedThemeHex,
+                                themeMode = themeMode,
+                                onFontSizeChange = onFontSizeChange,
+                                onThemeChange = onThemeChange,
+                                onThemeModeChange = onThemeModeChange,
+                            )
+                        }
+
+                        SettingsSection.LANGUAGE -> item {
+                            LanguageSection(
+                                language = appLanguage,
+                                onLanguageChange = { language ->
+                                    appLanguage = language
+                                    settingsManager.appLanguage = language
+                                    (context as? Activity)?.recreate()
+                                }
+                            )
+                        }
+
+                        SettingsSection.UPDATES -> item {
+                            ReleaseSection(
+                                currentVersion = currentVersion,
+                                isChecking = isCheckingUpdate,
+                                updateResult = updateResult,
+                                onCheckClick = {
+                                    isCheckingUpdate = true
+                                    scope.launch {
+                                        val res = ReleaseUpdateChecker.check(currentVersion)
+                                        isCheckingUpdate = false
+                                        updateResult = res
+                                        when (res) {
+                                            is UpdateCheckResult.UpdateAvailable -> {
+                                                showUpdateDialog = true
+                                            }
+                                            is UpdateCheckResult.UpToDate -> {
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.settings_up_to_date, currentVersion),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                            is UpdateCheckResult.Error -> {
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.settings_update_failed, res.message),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        }
+
+                        SettingsSection.OPENSOURCE -> item {
+                            OpenSourceSection(
+                                onOpenRepo = { uriHandler.openUri(SOURCE_URL) },
+                                onOpenIssues = { uriHandler.openUri("$SOURCE_URL/issues") },
+                                onOpenLicenses = { showLicensesDialog = true }
+                            )
+                        }
+
+                        SettingsSection.DIAGNOSTICS -> item {
+                            DiagnosticsSection(
+                                isEnabled = isDiagnosticsEnabled,
+                                onToggleEnabled = {
+                                    isDiagnosticsEnabled = it
+                                    settingsManager.isDiagnosticsEnabled = it
+                                },
+                                onViewLogs = { showDiagnosticsDialog = true },
+                                onExportBundle = {
+                                    val bundle = DiagnosticsManager.exportDiagnosticsBundle(
+                                        context,
+                                        settingsManager,
+                                        connectionStatus
+                                    )
+                                    val clipboard =
+                                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(
+                                        ClipData.newPlainText("cmux pocket diagnostics", bundle)
+                                    )
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.settings_diag_copied),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            )
+                        }
+
+                        SettingsSection.STORAGE -> item {
+                            StorageSection(
+                                profileCount = settingsManager.profiles.size,
+                                onExportProfiles = {
+                                    val json = settingsManager.exportProfilesJson()
+                                    val clipboard =
+                                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(
+                                        ClipData.newPlainText("cmux pocket host profiles", json)
+                                    )
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(
+                                            R.string.settings_exported_toast,
+                                            settingsManager.profiles.size
+                                        ),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                },
+                                onImportProfiles = {
+                                    val clipboard =
+                                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = clipboard.primaryClip
+                                    val text = if (clip != null && clip.itemCount > 0) {
+                                        clip.getItemAt(0).text?.toString().orEmpty()
+                                    } else {
+                                        ""
+                                    }
+                                    val count = settingsManager.importProfilesJson(text)
+                                    val message = if (count > 0) {
+                                        context.getString(R.string.settings_imported_toast, count)
+                                    } else {
+                                        context.getString(R.string.settings_import_empty_toast)
+                                    }
+                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                },
+                                onClearScrollback = {
+                                    onClearScrollback()
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.settings_scrollback_cleared_toast),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            )
+                        }
+                    }
                 }
             }
             HorizontalDivider(color = theme.divider)
@@ -433,9 +505,11 @@ fun SettingsScreen(
     }
 }
 
-/** Sections listed in the settings navigation rail. Labels stay short so they fit the rail width. */
+/** Ordinal stored when the root menu is showing instead of a section page. */
+private const val ROOT_MENU = -1
+
+/** Sections reachable from the settings root menu. */
 enum class SettingsSection(@StringRes val labelRes: Int, val icon: ImageVector) {
-    GENERAL(R.string.settings_section_general, Icons.Default.Tune),
     CONNECTION(R.string.settings_section_connection, Icons.Default.Cast),
     DISPLAY(R.string.settings_section_display, Icons.Default.TextFields),
     LANGUAGE(R.string.settings_section_language, Icons.Default.Translate),
@@ -445,47 +519,109 @@ enum class SettingsSection(@StringRes val labelRes: Int, val icon: ImageVector) 
     STORAGE(R.string.settings_section_storage, Icons.Default.Save)
 }
 
+@StringRes
+private fun themeModeLabelRes(mode: ThemeMode): Int = when (mode) {
+    ThemeMode.SYSTEM -> R.string.settings_theme_system
+    ThemeMode.DARK -> R.string.settings_theme_dark
+    ThemeMode.LIGHT -> R.string.settings_theme_light
+}
+
+/** A titled group of rows on the settings root menu. */
 @Composable
-private fun SettingsSectionRail(
-    selectedSection: SettingsSection,
-    onSelect: (SettingsSection) -> Unit
+private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    val theme = CmuxTheme.colors
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title.uppercase(),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+            color = theme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = theme.cardBg)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth(), content = content)
+        }
+    }
+}
+
+@Composable
+private fun SettingsRowDivider() {
+    HorizontalDivider(
+        color = CmuxTheme.colors.cardBorder,
+        modifier = Modifier.padding(start = 56.dp)
+    )
+}
+
+/** One entry on the settings root menu: icon, name, current value and a chevron. */
+@Composable
+private fun SettingsNavRow(
+    section: SettingsSection,
+    onClick: () -> Unit,
+    summary: String? = null
 ) {
     val theme = CmuxTheme.colors
-    Column(
+    Row(
         modifier = Modifier
-            .width(144.dp)
-            .fillMaxHeight()
-            .background(theme.surfaceVariant)
-            .verticalScroll(rememberScrollState())
-            .navigationBarsPadding()
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        SettingsSection.entries.forEach { section ->
-            val selected = section == selectedSection
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .background(if (selected) theme.primary.copy(alpha = 0.16f) else Color.Transparent)
-                    .clickable { onSelect(section) }
-                    .padding(horizontal = 10.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = section.icon,
-                    contentDescription = null,
-                    tint = if (selected) theme.primary else theme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+        SettingsIconTile(icon = section.icon)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(section.labelRes),
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = theme.onContainer
+            )
+            if (!summary.isNullOrBlank()) {
                 Text(
-                    text = stringResource(section.labelRes),
+                    text = summary,
                     fontSize = 11.5.sp,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selected) theme.primary else theme.onSurface,
-                    maxLines = 2
+                    color = theme.onContainerMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
+    }
+}
+
+/**
+ * Rounded tile behind a settings row glyph.
+ *
+ * [container]/[tint] default to the primary accent: DESIGN.md reserves the semantic accents for
+ * state, so a tile only takes one of them when the row itself is stateful (destructive, warning).
+ */
+@Composable
+fun SettingsIconTile(
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    container: Color = CmuxTheme.colors.primary.copy(alpha = 0.14f),
+    tint: Color = CmuxTheme.colors.primary
+) {
+    Box(
+        modifier = modifier
+            .size(30.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(container),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(17.dp)
+        )
     }
 }
 
@@ -557,28 +693,6 @@ fun LanguageSection(
     }
 }
 
-
-@Composable
-fun SectionHeader(title: String, icon: ImageVector, color: Color) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 4.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = title,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1244,7 +1358,7 @@ fun OpenSourceSection(
                 }
             }
 
-            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 48.dp))
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 56.dp))
 
             Row(
                 modifier = Modifier
@@ -1258,20 +1372,7 @@ fun OpenSourceSection(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(theme.accentOrange),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BugReport,
-                            contentDescription = null,
-                            tint = theme.onPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    SettingsIconTile(icon = Icons.Default.BugReport)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(stringResource(R.string.settings_feedback), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
@@ -1281,7 +1382,7 @@ fun OpenSourceSection(
                 Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
             }
 
-            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 48.dp))
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 56.dp))
 
             Row(
                 modifier = Modifier
@@ -1295,20 +1396,7 @@ fun OpenSourceSection(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(theme.accentGreen),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Description,
-                            contentDescription = null,
-                            tint = theme.onPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    SettingsIconTile(icon = Icons.Default.Description)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(stringResource(R.string.settings_licenses), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
@@ -1347,20 +1435,7 @@ fun DiagnosticsSection(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(theme.accentPurple),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Terminal,
-                            contentDescription = null,
-                            tint = theme.onPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    SettingsIconTile(icon = Icons.Default.Terminal)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(stringResource(R.string.settings_diag_toggle), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
@@ -1380,7 +1455,7 @@ fun DiagnosticsSection(
                 )
             }
 
-            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 48.dp))
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 56.dp))
 
             Row(
                 modifier = Modifier
@@ -1394,20 +1469,7 @@ fun DiagnosticsSection(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(theme.accentTeal),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = null,
-                            tint = theme.onPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    SettingsIconTile(icon = Icons.Default.Share)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(stringResource(R.string.settings_diag_export), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
@@ -1449,20 +1511,7 @@ fun StorageSection(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(theme.accentGreen),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FileDownload,
-                            contentDescription = null,
-                            tint = theme.onPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    SettingsIconTile(icon = Icons.Default.FileDownload)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(stringResource(R.string.settings_export_profiles), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
@@ -1472,7 +1521,7 @@ fun StorageSection(
                 Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
             }
 
-            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 48.dp))
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 56.dp))
 
             Row(
                 modifier = Modifier
@@ -1486,20 +1535,7 @@ fun StorageSection(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(theme.accentYellow),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FileUpload,
-                            contentDescription = null,
-                            tint = theme.onAccentBright,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    SettingsIconTile(icon = Icons.Default.FileUpload)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(stringResource(R.string.settings_import_profiles), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
@@ -1509,7 +1545,7 @@ fun StorageSection(
                 Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
             }
 
-            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 48.dp))
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 56.dp))
 
             Row(
                 modifier = Modifier
@@ -1523,20 +1559,11 @@ fun StorageSection(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(theme.accentRed),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CleaningServices,
-                            contentDescription = null,
-                            tint = theme.onPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    SettingsIconTile(
+                        icon = Icons.Default.CleaningServices,
+                        container = theme.accentRed.copy(alpha = 0.16f),
+                        tint = theme.accentRed
+                    )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(stringResource(R.string.settings_clear_scrollback), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
