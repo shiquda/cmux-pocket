@@ -740,17 +740,26 @@ fun TerminalCanvas(
                 }
             }
     ) {
+        // The transform layer exists only while a gesture is live. Keeping a graphicsLayer on the
+        // full-screen canvas permanently turns the terminal into a separate composited RenderNode,
+        // which costs bandwidth on every screen update (tile-based mobile GPUs) even when the
+        // transform is the identity.
+        val gestureLayer = if (gestureActiveGeom != null) {
+            Modifier.graphicsLayer {
+                scaleX = transientScale
+                scaleY = transientScale
+                translationX = transientTranslation.x
+                translationY = transientTranslation.y
+                transformOrigin = TransformOrigin(0f, 0f)
+            }
+        } else {
+            Modifier
+        }
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = 48.dp)
-                .graphicsLayer {
-                    scaleX = transientScale
-                    scaleY = transientScale
-                    translationX = transientTranslation.x
-                    translationY = transientTranslation.y
-                    transformOrigin = TransformOrigin(0f, 0f)
-                }
+                .then(gestureLayer)
                 .onSizeChanged {
                     canvasSizePx = Size(it.width.toFloat(), it.height.toFloat())
                 }
@@ -826,47 +835,67 @@ fun TerminalCanvas(
                     )
                 }
             } else {
-                // Normal mode: dirty-row cached rendering
-                rowCache.prepare(
-                    surfaceId = surfaceId,
-                    epoch = screenState.renderEpoch,
-                    rows = activeRows,
-                    cols = activeSourceCols,
-                    cellWidth = activeGeom.cellWidth,
-                    rowHeight = activeGeom.rowHeight,
-                    fontSizePx = activeGeom.fontSizePx,
-                    letterSpacingEm = activeGeom.letterSpacingEm,
-                    originX = activeGeom.originX,
-                    originY = activeGeom.originY,
-                    defaultBg = defaultBgColor,
-                    effectiveOffset = effectiveOffset,
-                    dirtyRows = screenState.dirtyRows
-                )
+                // Recording a row into a Picture only pays off when a small part of the grid
+                // changed. When everything is dirty (baseline, viewport move, resize) recording and
+                // replaying every row costs more than drawing the viewport once, so the cache is
+                // only engaged for genuinely partial updates.
+                val dirtyRows = screenState.dirtyRows
+                val useRowCache = dirtyRows != null && dirtyRows.size <= (activeRows / 2).coerceAtLeast(1)
+                if (useRowCache) {
+                    rowCache.prepare(
+                        surfaceId = surfaceId,
+                        epoch = screenState.renderEpoch,
+                        rows = activeRows,
+                        cols = activeSourceCols,
+                        cellWidth = activeGeom.cellWidth,
+                        rowHeight = activeGeom.rowHeight,
+                        fontSizePx = activeGeom.fontSizePx,
+                        letterSpacingEm = activeGeom.letterSpacingEm,
+                        originX = activeGeom.originX,
+                        originY = activeGeom.originY,
+                        defaultBg = defaultBgColor,
+                        effectiveOffset = effectiveOffset,
+                        dirtyRows = dirtyRows
+                    )
+                } else {
+                    rowCache.invalidateAll()
+                }
 
                 val runBuffer = StringBuilder(activeSourceCols.coerceAtLeast(1))
                 for (r in 0 until minOf(activeRows, activeGrid.size)) {
-                    val cached = rowCache.get(r)
+                    val cached = if (useRowCache) rowCache.get(r) else null
                     if (cached != null) {
                         nativeCanvas.drawPicture(cached)
                     } else {
                         val rowCells = activeGrid[r]
                         val y = r * activeGeom.rowHeight
-                        val picture = Picture()
-                        val recordingHeight = (y + activeGeom.rowHeight).toInt().coerceAtLeast(1)
-                        val pCanvas = picture.beginRecording(recordingWidth, recordingHeight)
+                        if (!useRowCache) {
+                            renderRowBackgrounds(
+                                nativeCanvas, rowCells, y, activeGeom.rowHeight, activeGeom.cellWidth,
+                                colorCache, activeDefaultBgColor, defaultBgColor, bgPaint
+                            )
+                            renderRowGlyphs(
+                                nativeCanvas, rowCells, y + activeGeom.baselineOffset, activeGeom.cellWidth,
+                                colorCache, textPaint, runBuffer
+                            )
+                        } else {
+                            val picture = Picture()
+                            val recordingHeight = (y + activeGeom.rowHeight).toInt().coerceAtLeast(1)
+                            val pCanvas = picture.beginRecording(recordingWidth, recordingHeight)
 
-                        renderRowBackgrounds(
-                            pCanvas, rowCells, y, activeGeom.rowHeight, activeGeom.cellWidth,
-                            colorCache, activeDefaultBgColor, defaultBgColor, bgPaint
-                        )
-                        renderRowGlyphs(
-                            pCanvas, rowCells, y + activeGeom.baselineOffset, activeGeom.cellWidth,
-                            colorCache, textPaint, runBuffer
-                        )
+                            renderRowBackgrounds(
+                                pCanvas, rowCells, y, activeGeom.rowHeight, activeGeom.cellWidth,
+                                colorCache, activeDefaultBgColor, defaultBgColor, bgPaint
+                            )
+                            renderRowGlyphs(
+                                pCanvas, rowCells, y + activeGeom.baselineOffset, activeGeom.cellWidth,
+                                colorCache, textPaint, runBuffer
+                            )
 
-                        picture.endRecording()
-                        rowCache.put(r, picture)
-                        nativeCanvas.drawPicture(picture)
+                            picture.endRecording()
+                            rowCache.put(r, picture)
+                            nativeCanvas.drawPicture(picture)
+                        }
                     }
                 }
             }
