@@ -238,7 +238,6 @@ fun CmuxApp(
     onScanQrClick: () -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
-    val activeScreenState by viewModel.activeScreenState.collectAsState()
     val status by viewModel.connectionStatus.collectAsState(initial = ConnectionStatus.DISCONNECTED)
     val statusMsg by viewModel.statusMessage.collectAsState()
     val connectionReadiness by viewModel.connectionReadiness.collectAsState()
@@ -291,6 +290,19 @@ fun CmuxApp(
     val accessorySendKey: (String) -> Unit = remember { { key -> viewModel.sendInput(key) } }
     val accessoryOpenKeyboardPanel: () -> Unit = remember { { showKeyboardPanel = true } }
     val accessoryOpenSettings: () -> Unit = remember { { showSettingsDialog = true } }
+    val settingsOnDismiss: () -> Unit = remember { { showSettingsDialog = false } }
+    val settingsOnClearScrollback: () -> Unit = remember { { viewModel.clearScrollback() } }
+    val settingsOnConnect: () -> Unit = remember(hostInput, portInput, tokenInput) {
+        { viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput) }
+    }
+    val currentOnFontSizeChange by rememberUpdatedState(onFontSizeChange)
+    val currentTerminalDisplay by rememberUpdatedState(terminalDisplay)
+    val settingsOnFontSizeChange: (Float) -> Unit = remember {
+        { size ->
+            currentOnFontSizeChange(size)
+            changeTerminalDisplay(currentTerminalDisplay.copy(fontSizeSp = size, fitWidth = false, panX = 0f, panY = null))
+        }
+    }
 
     // Auto connect on launch with saved configuration
     LaunchedEffect(Unit) {
@@ -340,7 +352,7 @@ fun CmuxApp(
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         TerminalStage(
                             surfaces = activeSurfaces,
-                            activeScreenState = activeScreenState,
+                            screenStateFlow = viewModel.activeScreenState,
                             connectionStatus = status,
                             displayPreference = terminalDisplay,
                             onDisplayPreferenceChange = changeTerminalDisplay,
@@ -351,7 +363,8 @@ fun CmuxApp(
                             onTerminalScroll = viewModel::scrollTerminal,
                             onNewSurfaceClick = { showNewSurfaceDialog = true },
                             onSendKey = { key -> viewModel.sendInput(key) },
-                            onClearScreen = { viewModel.clearScrollback() }
+                            onClearScreen = { viewModel.clearScrollback() },
+                            renderEnabled = !showSettingsDialog
                         )
 
                         // D2 breadcrumb pill: same entry point in landscape
@@ -396,7 +409,7 @@ fun CmuxApp(
                     // Full Viewport Terminal Stage
                     TerminalStage(
                         surfaces = activeSurfaces,
-                        activeScreenState = activeScreenState,
+                        screenStateFlow = viewModel.activeScreenState,
                         connectionStatus = status,
                         displayPreference = terminalDisplay,
                         onDisplayPreferenceChange = changeTerminalDisplay,
@@ -407,7 +420,8 @@ fun CmuxApp(
                         onTerminalScroll = viewModel::scrollTerminal,
                         onNewSurfaceClick = { showNewSurfaceDialog = true },
                         onSendKey = { key -> viewModel.sendInput(key) },
-                        onClearScreen = { viewModel.clearScrollback() }
+                        onClearScreen = { viewModel.clearScrollback() },
+                        renderEnabled = !showSettingsDialog
                     )
 
                     // Minimalist frosted Floating Island Pill overlaid at top center
@@ -517,7 +531,7 @@ fun CmuxApp(
 
         // Full-screen settings page (never a floating overlay over the terminal).
         if (showSettingsDialog) {
-            BackHandler { showSettingsDialog = false }
+            BackHandler(onBack = settingsOnDismiss)
             SettingsScreen(
                 hostInput = hostInput,
                 portInput = portInput,
@@ -533,18 +547,13 @@ fun CmuxApp(
                 onHostChange = onHostChange,
                 onPortChange = onPortChange,
                 onTokenChange = onTokenChange,
-                onFontSizeChange = {
-                    onFontSizeChange(it)
-                    changeTerminalDisplay(terminalDisplay.copy(fontSizeSp = it, fitWidth = false, panX = 0f, panY = null))
-                },
+                onFontSizeChange = settingsOnFontSizeChange,
                 onThemeChange = onThemeHexChange,
                 onThemeModeChange = onThemeModeChange,
-                onConnectClick = {
-                    viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
-                },
+                onConnectClick = settingsOnConnect,
                 onScanQrClick = onScanQrClick,
-                onClearScrollback = { viewModel.clearScrollback() },
-                onDismissRequest = { showSettingsDialog = false }
+                onClearScrollback = settingsOnClearScrollback,
+                onDismissRequest = settingsOnDismiss
             )
         }
     }

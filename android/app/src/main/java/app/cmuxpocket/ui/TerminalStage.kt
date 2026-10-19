@@ -13,6 +13,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -23,7 +29,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun TerminalStage(
     surfaces: List<SurfaceInfo>,
-    activeScreenState: TerminalScreenState,
+    activeScreenState: TerminalScreenState? = null,
+    screenStateFlow: StateFlow<TerminalScreenState>? = null,
     connectionStatus: ConnectionStatus,
     onTapCanvas: () -> Unit,
     onTerminalScroll: (Double) -> Unit,
@@ -33,13 +40,24 @@ fun TerminalStage(
     onDisplayPreferenceChange: (TerminalDisplayPreference) -> Unit = {},
     themeHex: String = "#1E1E1E",
     onSendKey: (String) -> Unit = {},
-    onClearScreen: () -> Unit = {}
+    onClearScreen: () -> Unit = {},
+    renderEnabled: Boolean = true
 ) {
     val theme = CmuxTheme.colors
     val stageBg = try {
         Color(android.graphics.Color.parseColor(themeHex))
     } catch (_: Exception) {
         theme.background
+    }
+
+    val effectiveScreenState by if (screenStateFlow != null) {
+        if (renderEnabled) {
+            screenStateFlow.collectAsState()
+        } else {
+            remember { mutableStateOf(screenStateFlow.value) }
+        }
+    } else {
+        rememberUpdatedState(activeScreenState ?: TerminalScreenState())
     }
 
     Box(
@@ -97,7 +115,8 @@ fun TerminalStage(
         } else {
             // Active Terminal Canvas
             TerminalCanvas(
-                screenState = activeScreenState,
+                screenState = effectiveScreenState,
+                renderEnabled = renderEnabled,
                 onTap = onTapCanvas,
                 onTerminalScroll = onTerminalScroll,
                 displayPreference = displayPreference,

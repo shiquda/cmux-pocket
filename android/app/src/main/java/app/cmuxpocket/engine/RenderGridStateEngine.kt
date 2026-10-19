@@ -36,7 +36,8 @@ data class TerminalScreenState(
     val hasBaseline: Boolean = false,
     val syncState: SurfaceSyncState = SurfaceSyncState.EMPTY,
     val traceId: Long = 0L,
-    val receivedNanos: Long = 0L
+    val receivedNanos: Long = 0L,
+    val dirtyRows: Set<Int>? = null
 )
 
 enum class SurfaceSyncState {
@@ -404,6 +405,18 @@ class RenderGridStateEngine {
         for (r in 0 until rows) {
             immutableGrid.add(cells[r].toList())
         }
+        val dirtyRows: Set<Int>? = if (isFullBaseline) {
+            null
+        } else {
+            val dirty = HashSet<Int>(frame.clearedRows.size + frame.rowSpans.size)
+            for (r in frame.clearedRows) {
+                if (r in 0 until rows) dirty.add(r)
+            }
+            for (span in frame.rowSpans) {
+                if (span.row in 0 until rows) dirty.add(span.row)
+            }
+            dirty
+        }
 
         _screenState.value = TerminalScreenState(
             surfaceId = frame.surfaceId,
@@ -423,7 +436,8 @@ class RenderGridStateEngine {
             hasBaseline = hasBaseline,
             syncState = syncState,
             traceId = traceId,
-            receivedNanos = receivedNanos
+            receivedNanos = receivedNanos,
+            dirtyRows = dirtyRows,
         )
 
         return if (isFullBaseline) {

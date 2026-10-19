@@ -24,6 +24,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculateCentroidSize
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateRotation
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.positionChanged
+import android.graphics.Picture
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -238,6 +250,160 @@ internal fun computeTerminalGeometry(
     )
 }
 
+internal class TerminalRowCache {
+    private var cachedPictures = arrayOfNulls<Picture>(128)
+    private var cachedRows: Int = 0
+    private var cachedCols: Int = 0
+    private var cachedCellWidth: Float = 0f
+    private var cachedRowHeight: Float = 0f
+    private var cachedFontSizePx: Float = 0f
+    private var cachedLetterSpacingEm: Float = 0f
+    private var cachedOriginX: Float = 0f
+    private var cachedOriginY: Float = 0f
+    private var cachedDefaultBg: Int = 0
+    private var cachedSurfaceId: String = ""
+    private var cachedEpoch: String? = null
+    private var cachedEffectiveOffset: Int = 0
+
+    fun prepare(
+        surfaceId: String,
+        epoch: String?,
+        rows: Int,
+        cols: Int,
+        cellWidth: Float,
+        rowHeight: Float,
+        fontSizePx: Float,
+        letterSpacingEm: Float,
+        originX: Float,
+        originY: Float,
+        defaultBg: Int,
+        effectiveOffset: Int,
+        dirtyRows: Set<Int>?
+    ) {
+        val geometryOrStyleChanged = rows != cachedRows ||
+            cols != cachedCols ||
+            cellWidth != cachedCellWidth ||
+            rowHeight != cachedRowHeight ||
+            fontSizePx != cachedFontSizePx ||
+            letterSpacingEm != cachedLetterSpacingEm ||
+            originX != cachedOriginX ||
+            originY != cachedOriginY ||
+            defaultBg != cachedDefaultBg ||
+            surfaceId != cachedSurfaceId ||
+            epoch != cachedEpoch ||
+            effectiveOffset != cachedEffectiveOffset
+
+        if (cachedPictures.size < rows) {
+            val old = cachedPictures
+            cachedPictures = arrayOfNulls(maxOf(rows, old.size * 2))
+            System.arraycopy(old, 0, cachedPictures, 0, old.size)
+        }
+
+        if (geometryOrStyleChanged || dirtyRows == null) {
+            invalidateAll()
+            cachedRows = rows
+            cachedCols = cols
+            cachedCellWidth = cellWidth
+            cachedRowHeight = rowHeight
+            cachedFontSizePx = fontSizePx
+            cachedLetterSpacingEm = letterSpacingEm
+            cachedOriginX = originX
+            cachedOriginY = originY
+            cachedDefaultBg = defaultBg
+            cachedSurfaceId = surfaceId
+            cachedEpoch = epoch
+            cachedEffectiveOffset = effectiveOffset
+        } else {
+            for (r in dirtyRows) {
+                if (r in cachedPictures.indices) {
+                    cachedPictures[r] = null
+                }
+            }
+        }
+    }
+
+    fun get(r: Int): Picture? = if (r in cachedPictures.indices) cachedPictures[r] else null
+
+    fun put(r: Int, picture: Picture) {
+        if (r in cachedPictures.indices) {
+            cachedPictures[r] = picture
+        }
+    }
+
+    fun invalidateAll() {
+        for (i in cachedPictures.indices) {
+            cachedPictures[i] = null
+        }
+    }
+}
+
+internal suspend fun PointerInputScope.detectTransformGesturesWithEnd(
+    panZoomLock: Boolean = false,
+    onGestureStart: () -> Unit = {},
+    onGestureEnd: () -> Unit = {},
+    onGesture: (centroid: Offset, pan: Offset, zoom: Float, rotation: Float) -> Unit
+) {
+    awaitEachGesture {
+        var rotation = 0f
+        var zoom = 1f
+        var pan = Offset.Zero
+        var pastTouchSlop = false
+        val touchSlop = viewConfiguration.touchSlop
+        var lockedToPanZoom = false
+
+        awaitFirstDown(requireUnconsumed = false)
+        do {
+            val event = awaitPointerEvent()
+            val canceled = event.changes.any { it.isConsumed }
+            if (!canceled) {
+                val zoomChange = event.calculateZoom()
+                val rotationChange = event.calculateRotation()
+                val panChange = event.calculatePan()
+
+                if (!pastTouchSlop) {
+                    zoom *= zoomChange
+                    rotation += rotationChange
+                    pan += panChange
+
+                    val centroidSize = event.calculateCentroidSize(useCurrent = false)
+                    val zoomMotion = kotlin.math.abs(1 - zoom) * centroidSize
+                    val rotationMotion = kotlin.math.abs(rotation * kotlin.math.PI.toFloat() * centroidSize / 180f)
+                    val panMotion = pan.getDistance()
+
+                    if (zoomMotion > touchSlop ||
+                        rotationMotion > touchSlop ||
+                        panMotion > touchSlop
+                    ) {
+                        pastTouchSlop = true
+                        lockedToPanZoom = panZoomLock && rotationMotion < touchSlop
+                        onGestureStart()
+                    }
+                }
+
+                if (pastTouchSlop) {
+                    val centroid = event.calculateCentroid(useCurrent = false)
+                    val effectiveRotation = if (lockedToPanZoom) 0f else rotationChange
+                    if (effectiveRotation != 0f ||
+                        zoomChange != 1f ||
+                        panChange != Offset.Zero
+                    ) {
+                        onGesture(centroid, panChange, zoomChange, effectiveRotation)
+                    }
+                    event.changes.forEach {
+                        if (it.positionChanged()) {
+                            it.consume()
+                        }
+                    }
+                }
+            }
+        } while (!canceled && event.changes.any { it.pressed })
+
+        if (pastTouchSlop) {
+            onGestureEnd()
+        }
+    }
+}
+
 @Composable
 fun TerminalCanvas(
     screenState: TerminalScreenState,
@@ -248,7 +414,8 @@ fun TerminalCanvas(
     onDisplayPreferenceChange: (TerminalDisplayPreference) -> Unit = {},
     themeHex: String = "#1E1E1E",
     onSendKey: (String) -> Unit = {},
-    onClearScreen: () -> Unit = {}
+    onClearScreen: () -> Unit = {},
+    renderEnabled: Boolean = true
 ) {
     val context = LocalContext.current
     val readyLabel = stringResource(R.string.canvas_ready)
@@ -262,6 +429,11 @@ fun TerminalCanvas(
     val currentOnDisplayPreferenceChange by rememberUpdatedState(onDisplayPreferenceChange)
     var canvasSizePx by remember { mutableStateOf(Size.Zero) }
     val lastDrawnTraceId = remember(screenState.surfaceId) { AtomicLong(0L) }
+    val rowCache = remember { TerminalRowCache() }
+    var transientScale by remember { mutableFloatStateOf(1f) }
+    var transientTranslation by remember { mutableStateOf(Offset.Zero) }
+    var gestureActiveGeom by remember { mutableStateOf<TerminalGeometry?>(null) }
+    var gestureActivePref by remember { mutableStateOf<TerminalDisplayPreference?>(null) }
     val localScrollOffsets = remember { mutableStateMapOf<String, Int>() }
     val localScrollAccumulators = remember { mutableStateMapOf<String, Float>() }
     val lastSeenHistoryRows = remember { mutableStateMapOf<String, Long>() }
@@ -499,32 +671,91 @@ fun TerminalCanvas(
             }
             .pointerInput(surfaceId, isSelecting, density) {
                 if (!isSelecting) {
-                    detectTransformGestures(panZoomLock = false) { centroid, pan, zoom, _ ->
+                    detectTransformGesturesWithEnd(
+                        panZoomLock = false,
+                        onGestureStart = {
+                            gestureActiveGeom = currentGeometry
+                            gestureActivePref = currentDisplayPreference
+                            transientScale = 1f
+                            transientTranslation = Offset.Zero
+                            contextualBubbleOffset = null
+                        },
+                        onGestureEnd = {
+                            val geom = gestureActiveGeom ?: currentGeometry
+                            val pref = gestureActivePref ?: currentDisplayPreference
+                            val totalScale = transientScale
+                            val totalTrans = transientTranslation
+                            transientScale = 1f
+                            transientTranslation = Offset.Zero
+                            gestureActiveGeom = null
+                            gestureActivePref = null
+
+                            if (geom != null && pref != null && (totalScale != 1f || totalTrans != Offset.Zero)) {
+                                val nextFont = if (totalScale != 1f) {
+                                    (with(density) { geom.fontSizePx.toSp().value } * totalScale).coerceIn(2f, 48f)
+                                } else pref.fontSizeSp
+                                val ratio = if (totalScale != 1f) with(density) { nextFont.sp.toPx() } / geom.fontSizePx else 1f
+                                val isZooming = totalScale != 1f
+                                val contentWidth = geom.sourceCols * geom.cellWidth * ratio
+                                val contentHeight = geom.rows * geom.rowHeight * ratio
+                                val desiredX = totalScale * geom.originX + totalTrans.x
+                                val desiredY = totalScale * geom.originY + totalTrans.y
+                                val nextPanY = terminalPanY(geom.canvasHeight, contentHeight, desiredY - (geom.canvasHeight - contentHeight))
+                                val focusPanY = activeFocusRow.let {
+                                    terminalFocusPanY(geom.canvasHeight, contentHeight, geom.rowHeight * ratio, it)
+                                }
+                                val keepsFollowingCursor = focusPanY != null && kotlin.math.abs(nextPanY - focusPanY) < 0.5f
+                                val preserveVerticalPosition = totalTrans.y == 0f && !isZooming
+
+                                currentOnDisplayPreferenceChange(pref.copy(
+                                    fontSizeSp = nextFont,
+                                    fitWidth = pref.fitWidth && !isZooming,
+                                    panX = terminalPanX(geom.canvasWidth - 8f, contentWidth, desiredX - 4f),
+                                    panY = when {
+                                        preserveVerticalPosition -> pref.panY
+                                        keepsFollowingCursor -> null
+                                        else -> nextPanY
+                                    },
+                                    panAnchorRow = when {
+                                        preserveVerticalPosition -> pref.panAnchorRow
+                                        keepsFollowingCursor -> null
+                                        else -> activeFocusRow
+                                    }
+                                ).normalized())
+                            }
+                        }
+                    ) { centroid, pan, zoom, _ ->
                         if (zoom != 1.0f || pan != Offset.Zero) {
-                            val geom = currentGeometry ?: return@detectTransformGestures
-                            val pref = currentDisplayPreference
-                            val nextFont = if (zoom != 1f) {
-                                (with(density) { geom.fontSizePx.toSp().value } * zoom).coerceIn(2f, 48f)
-                            } else pref.fontSizeSp
-                            val ratio = if (zoom != 1f) with(density) { nextFont.sp.toPx() } / geom.fontSizePx else 1f
-                            currentOnDisplayPreferenceChange(transformTerminalDisplay(
-                                preference = pref,
-                                geometry = geom,
-                                nextFontSizeSp = nextFont,
-                                scaleRatio = ratio,
-                                centroid = centroid,
-                                pan = pan,
-                                isZooming = zoom != 1f,
-                                focusRow = activeFocusRow
-                            ))
+                            val currentScale = transientScale
+                            val currentTrans = transientTranslation
+                            val newScale = (currentScale * zoom).coerceIn(0.1f, 10f)
+                            val newTrans = Offset(
+                                x = zoom * currentTrans.x + (1f - zoom) * centroid.x + pan.x,
+                                y = zoom * currentTrans.y + (1f - zoom) * centroid.y + pan.y
+                            )
+                            transientScale = newScale
+                            transientTranslation = newTrans
                         }
                     }
                 }
             }
     ) {
-        Canvas(modifier = Modifier.fillMaxSize().padding(bottom = 48.dp).onSizeChanged {
-            canvasSizePx = Size(it.width.toFloat(), it.height.toFloat())
-        }) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 48.dp)
+                .graphicsLayer {
+                    scaleX = transientScale
+                    scaleY = transientScale
+                    translationX = transientTranslation.x
+                    translationY = transientTranslation.y
+                    transformOrigin = TransformOrigin(0f, 0f)
+                }
+                .onSizeChanged {
+                    canvasSizePx = Size(it.width.toFloat(), it.height.toFloat())
+                }
+        ) {
+            if (!renderEnabled) return@Canvas
             val nativeCanvas = drawContext.canvas.nativeCanvas
             val canvasWidth = size.width
             val canvasHeight = size.height
@@ -561,47 +792,20 @@ fun TerminalCanvas(
             nativeCanvas.clipRect(0f, 0f, canvasWidth, canvasHeight)
             nativeCanvas.translate(activeGeom.originX, activeGeom.originY)
 
-            // Step 1: Draw Background Cells
-            // Cells sharing a non-default colour are merged into one rect per run: the rect count
-            // is otherwise one per cell, which alone can exhaust the frame budget on wide grids.
-            for (r in 0 until minOf(activeRows, activeGrid.size)) {
-                val rowCells = activeGrid[r]
-                val y = r * activeGeom.rowHeight
+            val recordingWidth = canvasWidth.toInt().coerceAtLeast(1)
 
-                var c = 0
-                while (c < rowCells.size) {
-                    val cell = rowCells[c]
-                    if (cell.width == 0) {
-                        c++
-                        continue
-                    }
-
-                    val cellBg = colorCache.resolve(cell.background, activeDefaultBgColor)
-                    if (cellBg == defaultBgColor) {
-                        c++
-                        continue
-                    }
-
-                    var span = cell.width
-                    var end = c + 1
-                    while (end < rowCells.size) {
-                        val next = rowCells[end]
-                        if (next.width == 0) break
-                        if (colorCache.resolve(next.background, activeDefaultBgColor) != cellBg) break
-                        span += next.width
-                        end++
-                    }
-
-                    val x = c * activeGeom.cellWidth
-                    bgPaint.color = cellBg
-                    nativeCanvas.drawRect(x, y, x + span * activeGeom.cellWidth, y + activeGeom.rowHeight, bgPaint)
-
-                    c = end
-                }
-            }
-
-            // Step 2: Draw Selection Highlights (before text)
             if (currentSelection != null) {
+                // Interactive selection: bypass cache so highlights render immediately
+                rowCache.invalidateAll()
+                for (r in 0 until minOf(activeRows, activeGrid.size)) {
+                    val rowCells = activeGrid[r]
+                    val y = r * activeGeom.rowHeight
+                    renderRowBackgrounds(
+                        nativeCanvas, rowCells, y, activeGeom.rowHeight, activeGeom.cellWidth,
+                        colorCache, activeDefaultBgColor, defaultBgColor, bgPaint
+                    )
+                }
+
                 for (r in 0 until activeRows) {
                     val range = selectedColumnRange(currentSelection, r)
                     if (range != null) {
@@ -611,76 +815,59 @@ fun TerminalCanvas(
                         nativeCanvas.drawRect(startX, y, endX, y + activeGeom.rowHeight, selHighlightPaint)
                     }
                 }
-            }
 
-            // Step 3: Draw Glyphs / Text
-            // Consecutive cells sharing a style are emitted as one drawText call. One call per
-            // cell is what makes a 200-column grid unrenderable in a frame: the advance of every
-            // printable ASCII glyph equals the cell width, so a batched run lands on the exact
-            // same pixel positions.
-            val runBuffer = StringBuilder(activeSourceCols.coerceAtLeast(1))
-            for (r in 0 until minOf(activeRows, activeGrid.size)) {
-                val rowCells = activeGrid[r]
-                val y = r * activeGeom.rowHeight
-                val textBaseline = y + activeGeom.baselineOffset
+                val runBuffer = StringBuilder(activeSourceCols.coerceAtLeast(1))
+                for (r in 0 until minOf(activeRows, activeGrid.size)) {
+                    val rowCells = activeGrid[r]
+                    val y = r * activeGeom.rowHeight
+                    renderRowGlyphs(
+                        nativeCanvas, rowCells, y + activeGeom.baselineOffset, activeGeom.cellWidth,
+                        colorCache, textPaint, runBuffer
+                    )
+                }
+            } else {
+                // Normal mode: dirty-row cached rendering
+                rowCache.prepare(
+                    surfaceId = surfaceId,
+                    epoch = screenState.renderEpoch,
+                    rows = activeRows,
+                    cols = activeSourceCols,
+                    cellWidth = activeGeom.cellWidth,
+                    rowHeight = activeGeom.rowHeight,
+                    fontSizePx = activeGeom.fontSizePx,
+                    letterSpacingEm = activeGeom.letterSpacingEm,
+                    originX = activeGeom.originX,
+                    originY = activeGeom.originY,
+                    defaultBg = defaultBgColor,
+                    effectiveOffset = effectiveOffset,
+                    dirtyRows = screenState.dirtyRows
+                )
 
-                var c = 0
-                while (c < rowCells.size) {
-                    val cell = rowCells[c]
-                    if (!isBatchableGlyph(cell)) {
-                        // Wide, empty and non-ASCII cells stay on the per-cell path: their advance
-                        // is not guaranteed to be one column, so they anchor themselves.
-                        if (cell.width != 0 && cell.text.isNotEmpty() && cell.text != " ") {
-                            textPaint.color = colorCache.resolve(cell.foreground, DEFAULT_FOREGROUND_COLOR)
-                            textPaint.isFakeBoldText = cell.bold
-                            textPaint.isUnderlineText = cell.underline
-                            nativeCanvas.drawText(
-                                cell.text,
-                                c * activeGeom.cellWidth,
-                                textBaseline,
-                                textPaint
-                            )
-                        }
-                        c++
-                        continue
-                    }
-
-                    var end = c + 1
-                    var inkEnd = if (cell.text[0] == ' ') c else c + 1
-                    while (end < rowCells.size) {
-                        val next = rowCells[end]
-                        if (!isBatchableGlyph(next) ||
-                            next.foreground != cell.foreground ||
-                            next.bold != cell.bold ||
-                            next.underline != cell.underline
-                        ) {
-                            break
-                        }
-                        if (next.text[0] != ' ') inkEnd = end + 1
-                        end++
-                    }
-
-                    val x = c * activeGeom.cellWidth
-                    val runLength = inkEnd - c
-                    if (runLength <= 0) {
-                        // Trailing blanks: nothing to paint, and nothing after them in the run.
-                        c = end
-                        continue
-                    }
-
-                    textPaint.color = colorCache.resolve(cell.foreground, DEFAULT_FOREGROUND_COLOR)
-                    textPaint.isFakeBoldText = cell.bold
-                    textPaint.isUnderlineText = cell.underline
-
-                    if (runLength == 1) {
-                        nativeCanvas.drawText(cell.text, x, textBaseline, textPaint)
+                val runBuffer = StringBuilder(activeSourceCols.coerceAtLeast(1))
+                for (r in 0 until minOf(activeRows, activeGrid.size)) {
+                    val cached = rowCache.get(r)
+                    if (cached != null) {
+                        nativeCanvas.drawPicture(cached)
                     } else {
-                        runBuffer.setLength(0)
-                        for (index in c until inkEnd) runBuffer.append(rowCells[index].text)
-                        nativeCanvas.drawText(runBuffer.toString(), x, textBaseline, textPaint)
-                    }
+                        val rowCells = activeGrid[r]
+                        val y = r * activeGeom.rowHeight
+                        val picture = Picture()
+                        val recordingHeight = (y + activeGeom.rowHeight).toInt().coerceAtLeast(1)
+                        val pCanvas = picture.beginRecording(recordingWidth, recordingHeight)
 
-                    c = end
+                        renderRowBackgrounds(
+                            pCanvas, rowCells, y, activeGeom.rowHeight, activeGeom.cellWidth,
+                            colorCache, activeDefaultBgColor, defaultBgColor, bgPaint
+                        )
+                        renderRowGlyphs(
+                            pCanvas, rowCells, y + activeGeom.baselineOffset, activeGeom.cellWidth,
+                            colorCache, textPaint, runBuffer
+                        )
+
+                        picture.endRecording()
+                        rowCache.put(r, picture)
+                        nativeCanvas.drawPicture(picture)
+                    }
                 }
             }
 
@@ -1045,5 +1232,114 @@ private fun VerticalScrollJoystick(
                 .clip(CircleShape)
                 .background(if (held) theme.primary else theme.onSurfaceVariant)
         )
+    }
+}
+
+private fun renderRowBackgrounds(
+    canvas: android.graphics.Canvas,
+    rowCells: List<TerminalCell>,
+    y: Float,
+    rowHeight: Float,
+    cellWidth: Float,
+    colorCache: TerminalColorCache,
+    activeDefaultBgColor: Int,
+    defaultBgColor: Int,
+    bgPaint: Paint
+) {
+    var c = 0
+    while (c < rowCells.size) {
+        val cell = rowCells[c]
+        if (cell.width == 0) {
+            c++
+            continue
+        }
+
+        val cellBg = colorCache.resolve(cell.background, activeDefaultBgColor)
+        if (cellBg == defaultBgColor) {
+            c++
+            continue
+        }
+
+        var span = cell.width
+        var end = c + 1
+        while (end < rowCells.size) {
+            val next = rowCells[end]
+            if (next.width == 0) break
+            if (colorCache.resolve(next.background, activeDefaultBgColor) != cellBg) break
+            span += next.width
+            end++
+        }
+
+        val x = c * cellWidth
+        bgPaint.color = cellBg
+        canvas.drawRect(x, y, x + span * cellWidth, y + rowHeight, bgPaint)
+
+        c = end
+    }
+}
+
+private fun renderRowGlyphs(
+    canvas: android.graphics.Canvas,
+    rowCells: List<TerminalCell>,
+    textBaseline: Float,
+    cellWidth: Float,
+    colorCache: TerminalColorCache,
+    textPaint: Paint,
+    runBuffer: StringBuilder
+) {
+    var c = 0
+    while (c < rowCells.size) {
+        val cell = rowCells[c]
+        if (!isBatchableGlyph(cell)) {
+            if (cell.width != 0 && cell.text.isNotEmpty() && cell.text != " ") {
+                textPaint.color = colorCache.resolve(cell.foreground, DEFAULT_FOREGROUND_COLOR)
+                textPaint.isFakeBoldText = cell.bold
+                textPaint.isUnderlineText = cell.underline
+                canvas.drawText(
+                    cell.text,
+                    c * cellWidth,
+                    textBaseline,
+                    textPaint
+                )
+            }
+            c++
+            continue
+        }
+
+        var end = c + 1
+        var inkEnd = if (cell.text[0] == ' ') c else c + 1
+        while (end < rowCells.size) {
+            val next = rowCells[end]
+            if (!isBatchableGlyph(next) ||
+                next.foreground != cell.foreground ||
+                next.bold != cell.bold ||
+                next.underline != cell.underline
+            ) {
+                break
+            }
+            if (next.text[0] != ' ') inkEnd = end + 1
+            end++
+        }
+
+        val x = c * cellWidth
+        val runLength = inkEnd - c
+        if (runLength <= 0) {
+            c = end
+            continue
+        }
+
+        textPaint.color = colorCache.resolve(cell.foreground, DEFAULT_FOREGROUND_COLOR)
+        textPaint.isFakeBoldText = cell.bold
+        textPaint.isUnderlineText = cell.underline
+
+        if (runLength == 1) {
+            canvas.drawText(cell.text, x, textBaseline, textPaint)
+        } else {
+            runBuffer.setLength(0)
+            for (index in c until inkEnd) runBuffer.append(rowCells[index].text)
+            canvas.drawText(runBuffer.toString(), x, textBaseline, textPaint)
+        }
+
+        c = end
     }
 }
