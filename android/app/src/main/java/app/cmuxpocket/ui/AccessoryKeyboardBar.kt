@@ -3,6 +3,7 @@ package app.cmuxpocket.ui
 import app.cmuxpocket.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,6 +15,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -181,23 +184,27 @@ private fun KeyButton(
         else -> theme.accessoryKeyText
     }
 
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = bg,
-            contentColor = textColor
-        ),
-        shape = RoundedCornerShape(6.dp),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+    // A plain clickable box rather than an M3 Button: the row scrolls horizontally, so every
+    // frame lays out and draws all keys, and each Button's Surface/ripple/elevation nodes make
+    // that visibly janky. LocalIndication still supplies the ripple, so feedback is unchanged.
+    Box(
         modifier = Modifier
             .height(34.dp)
             .defaultMinSize(minWidth = 40.dp)
+            .minimumInteractiveComponentSize()
+            .clip(RoundedCornerShape(6.dp))
+            .background(bg)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
+            color = textColor,
             fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Monospace
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.1.sp
         )
     }
 }

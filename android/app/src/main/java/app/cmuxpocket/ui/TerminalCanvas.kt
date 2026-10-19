@@ -66,6 +66,58 @@ object FontLoader {
     }
 }
 
+private val DEFAULT_FOREGROUND_COLOR = 0xFFD4D4D4.toInt()
+
+/**
+ * HarfBuzz shapes a batched run, so the font's ligature/contextual features have to stay off:
+ * a cell is drawn alone today, and a single glyph can neither ligate nor kern. Without this a
+ * run such as `->` would render as one ligature glyph instead of two cells.
+ */
+private const val CELL_ALIGNED_FONT_FEATURES = "\"liga\" 0, \"clig\" 0, \"calt\" 0, \"kern\" 0"
+
+/**
+ * True when [cell] can join a batched glyph run: exactly one printable ASCII glyph (a space
+ * included — its advance is one cell, so runs may span word gaps) occupying one column. Anything
+ * else (empty, wide, or multi-character cells) is drawn on its own so its position stays exact.
+ */
+private fun isBatchableGlyph(cell: TerminalCell): Boolean =
+    cell.width == 1 && cell.text.length == 1 && cell.text[0] in ' '..'~'
+
+/**
+ * Memoizes hex -> ARGB resolution for terminal cells.
+ *
+ * The renderer resolves a colour for every visible cell on every frame, so a 200x50 viewport
+ * issues roughly 10k [Color.parseColor] calls per frame; that parsing alone exceeds a 16ms frame
+ * budget. A terminal palette holds a handful of distinct colours, so a small map collapses the
+ * parses into hash lookups.
+ */
+internal class TerminalColorCache(
+    private val parse: (String) -> Int? = { hex ->
+        try {
+            Color.parseColor(hex)
+        } catch (_: Exception) {
+            null
+        }
+    }
+) {
+    private val resolved = HashMap<String, Int>(64)
+
+    /** Resolves [hex], returning [fallback] for unparseable values (which are never cached). */
+    fun resolve(hex: String, fallback: Int): Int {
+        resolved[hex]?.let { return it }
+        val parsed = parse(hex) ?: return fallback
+        if (resolved.size >= MAX_ENTRIES) resolved.clear()
+        resolved[hex] = parsed
+        return parsed
+    }
+
+    fun clear() = resolved.clear()
+
+    private companion object {
+        const val MAX_ENTRIES = 256
+    }
+}
+
 
 internal data class TerminalGeometry(
     val canvasWidth: Float,
@@ -77,7 +129,13 @@ internal data class TerminalGeometry(
     val baselineOffset: Float,
     val originX: Float,
     val originY: Float,
-    val fontSizePx: Float
+    val fontSizePx: Float,
+    /**
+     * Letter spacing, in em, that makes the typeface advance exactly [cellWidth] per glyph. The
+     * grid stretches text to fit the viewport, while a shaped run uses the typeface's own
+     * advances, so runs drawn without this correction drift away from the column grid.
+     */
+    val letterSpacingEm: Float = 0f
 ) {
     fun cellToPoint(row: Int, column: Int): Offset {
         return Offset(
@@ -129,6 +187,7 @@ internal fun computeTerminalGeometry(
 
     textPaint.isFakeBoldText = false
     textPaint.isUnderlineText = false
+    textPaint.letterSpacing = 0f
     textPaint.textSize = 100f
     val referenceAdvance = textPaint.measureText("M").coerceAtLeast(1f)
     val cellWidth = terminalCellWidth(
@@ -145,6 +204,13 @@ internal fun computeTerminalGeometry(
 
     // Derive strictly proportional typography from Maple Mono character metrics
     textPaint.textSize = (100f * cellWidth) / referenceAdvance
+
+    // The rendered advance at that size is not the linearly extrapolated one: the grid is
+    // stretched to the viewport, and hinting adjusts small glyph advances. Measure what the
+    // typeface really produces and add the difference as letter spacing, so a run of glyphs
+    // advances exactly one cell per glyph instead of drifting off the column grid.
+    val renderedAdvance = textPaint.measureText("M").coerceAtLeast(0.01f)
+    val letterSpacingEm = (cellWidth - renderedAdvance) / textPaint.textSize
 
     val fontMetrics = textPaint.fontMetrics
     val rowHeight = (fontMetrics.bottom - fontMetrics.top) * 1.10f
@@ -167,7 +233,8 @@ internal fun computeTerminalGeometry(
         baselineOffset = baselineOffset,
         originX = originX,
         originY = originY,
-        fontSizePx = textPaint.textSize
+        fontSizePx = textPaint.textSize,
+        letterSpacingEm = letterSpacingEm
     )
 }
 
@@ -261,10 +328,12 @@ fun TerminalCanvas(
         clearSelection()
     }
 
-    val effectiveGrid = if (effectiveOffset > 0 && screenState.scrollback.isNotEmpty()) {
-        selectViewportRows(screenState.scrollback, screenState.grid, screenState.rows, effectiveOffset)
-    } else {
-        screenState.grid
+    val effectiveGrid = remember(screenState.scrollback, screenState.grid, screenState.rows, effectiveOffset) {
+        if (effectiveOffset > 0 && screenState.scrollback.isNotEmpty()) {
+            selectViewportRows(screenState.scrollback, screenState.grid, screenState.rows, effectiveOffset)
+        } else {
+            screenState.grid
+        }
     }
 
     val mapleTypeface = remember(context) {
@@ -275,6 +344,12 @@ fun TerminalCanvas(
         Paint().apply {
             isAntiAlias = true
             typeface = mapleTypeface
+            try {
+                fontFeatureSettings = CELL_ALIGNED_FONT_FEATURES
+            } catch (_: Exception) {
+                // Older platforms may reject the CSS syntax; runs then fall back to the font's
+                // default features, which the per-cell path never exercises anyway.
+            }
         }
     }
 
@@ -283,6 +358,10 @@ fun TerminalCanvas(
             style = Paint.Style.FILL
         }
     }
+
+    val colorCache = remember { TerminalColorCache() }
+
+    val cursorBlockColor = remember { Color.parseColor("#4CAF50") }
 
     val selHighlightPaint = remember {
         Paint().apply {
@@ -330,13 +409,18 @@ fun TerminalCanvas(
     val currentSelection = selectionState
 
     val activeGrid = currentSelection?.viewport?.grid ?: effectiveGrid
-    val activeSourceCols = currentSelection?.viewport?.columns ?: calculateRenderSourceCols(effectiveGrid, screenState.columns)
+    val effectiveSourceCols = remember(effectiveGrid, screenState.columns) {
+        calculateRenderSourceCols(effectiveGrid, screenState.columns)
+    }
+    val activeSourceCols = currentSelection?.viewport?.columns ?: effectiveSourceCols
     val activeRows = currentSelection?.viewport?.rows ?: maxOf(screenState.rows, 1)
     val liveCursorRow = if (screenState.cursor.visible && effectiveOffset == 0) {
         screenState.cursor.row.coerceIn(0, activeRows - 1)
     } else null
-    val activeFocusRow = liveCursorRow
-        ?: activeGrid.indexOfLast { row -> row.any { it.text.isNotBlank() } }.coerceAtLeast(0)
+    val lastContentRow = remember(activeGrid) {
+        activeGrid.indexOfLast { row -> row.any { it.text.isNotBlank() } }.coerceAtLeast(0)
+    }
+    val activeFocusRow = liveCursorRow ?: lastContentRow
     val focusRow = if (isSelecting || terminalViewportIsDetached(displayPreference, liveCursorRow)) null else activeFocusRow
 
     LaunchedEffect(displayPreference.panY, displayPreference.panAnchorRow, liveCursorRow) {
@@ -446,20 +530,26 @@ fun TerminalCanvas(
             val canvasHeight = size.height
             if (canvasWidth <= 0 || canvasHeight <= 0) return@Canvas
 
-            val activeGeom = computeTerminalGeometry(
-                canvasWidth = canvasWidth,
-                canvasHeight = canvasHeight,
-                sourceCols = activeSourceCols,
-                rows = activeRows,
-                requestedFontSizePx = requestedFontSizePx,
-                fitWidth = displayPreference.fitWidth,
-                panOffset = panOffset,
-                focusRow = focusRow,
-                textPaint = textPaint
-            )
+            val activeGeom = geometry?.takeIf { it.canvasWidth == canvasWidth && it.canvasHeight == canvasHeight }
+                ?: computeTerminalGeometry(
+                    canvasWidth = canvasWidth,
+                    canvasHeight = canvasHeight,
+                    sourceCols = activeSourceCols,
+                    rows = activeRows,
+                    requestedFontSizePx = requestedFontSizePx,
+                    fitWidth = displayPreference.fitWidth,
+                    panOffset = panOffset,
+                    focusRow = focusRow,
+                    textPaint = textPaint
+                )
+            // computeTerminalGeometry derives the paint's text size from the cell metrics; the
+            // hoisted path has to re-apply it because the paint is shared across draws.
+            textPaint.textSize = activeGeom.fontSizePx
+            textPaint.letterSpacing = activeGeom.letterSpacingEm
 
             if (activeGrid.isEmpty()) {
                 textPaint.color = Color.parseColor("#888888")
+                textPaint.letterSpacing = 0f
                 textPaint.textSize = 34f
                 nativeCanvas.drawText(readyLabel, 40f, 100f, textPaint)
                 textPaint.textSize = 26f
@@ -472,6 +562,8 @@ fun TerminalCanvas(
             nativeCanvas.translate(activeGeom.originX, activeGeom.originY)
 
             // Step 1: Draw Background Cells
+            // Cells sharing a non-default colour are merged into one rect per run: the rect count
+            // is otherwise one per cell, which alone can exhaust the frame budget on wide grids.
             for (r in 0 until minOf(activeRows, activeGrid.size)) {
                 val rowCells = activeGrid[r]
                 val y = r * activeGeom.rowHeight
@@ -484,21 +576,27 @@ fun TerminalCanvas(
                         continue
                     }
 
-                    val cellWidthPx = activeGeom.cellWidth * cell.width
+                    val cellBg = colorCache.resolve(cell.background, activeDefaultBgColor)
+                    if (cellBg == defaultBgColor) {
+                        c++
+                        continue
+                    }
+
+                    var span = cell.width
+                    var end = c + 1
+                    while (end < rowCells.size) {
+                        val next = rowCells[end]
+                        if (next.width == 0) break
+                        if (colorCache.resolve(next.background, activeDefaultBgColor) != cellBg) break
+                        span += next.width
+                        end++
+                    }
+
                     val x = c * activeGeom.cellWidth
+                    bgPaint.color = cellBg
+                    nativeCanvas.drawRect(x, y, x + span * activeGeom.cellWidth, y + activeGeom.rowHeight, bgPaint)
 
-                    val cellBg = try {
-                        Color.parseColor(cell.background)
-                    } catch (_: Exception) {
-                        activeDefaultBgColor
-                    }
-
-                    if (cellBg != defaultBgColor) {
-                        bgPaint.color = cellBg
-                        nativeCanvas.drawRect(x, y, x + cellWidthPx, y + activeGeom.rowHeight, bgPaint)
-                    }
-
-                    c++
+                    c = end
                 }
             }
 
@@ -516,6 +614,11 @@ fun TerminalCanvas(
             }
 
             // Step 3: Draw Glyphs / Text
+            // Consecutive cells sharing a style are emitted as one drawText call. One call per
+            // cell is what makes a 200-column grid unrenderable in a frame: the advance of every
+            // printable ASCII glyph equals the cell width, so a batched run lands on the exact
+            // same pixel positions.
+            val runBuffer = StringBuilder(activeSourceCols.coerceAtLeast(1))
             for (r in 0 until minOf(activeRows, activeGrid.size)) {
                 val rowCells = activeGrid[r]
                 val y = r * activeGeom.rowHeight
@@ -524,28 +627,60 @@ fun TerminalCanvas(
                 var c = 0
                 while (c < rowCells.size) {
                     val cell = rowCells[c]
-                    if (cell.width == 0) {
+                    if (!isBatchableGlyph(cell)) {
+                        // Wide, empty and non-ASCII cells stay on the per-cell path: their advance
+                        // is not guaranteed to be one column, so they anchor themselves.
+                        if (cell.width != 0 && cell.text.isNotEmpty() && cell.text != " ") {
+                            textPaint.color = colorCache.resolve(cell.foreground, DEFAULT_FOREGROUND_COLOR)
+                            textPaint.isFakeBoldText = cell.bold
+                            textPaint.isUnderlineText = cell.underline
+                            nativeCanvas.drawText(
+                                cell.text,
+                                c * activeGeom.cellWidth,
+                                textBaseline,
+                                textPaint
+                            )
+                        }
                         c++
                         continue
                     }
 
-                    val x = c * activeGeom.cellWidth
-
-                    if (cell.text.isNotEmpty() && cell.text != " ") {
-                        val cellFg = try {
-                            Color.parseColor(cell.foreground)
-                        } catch (_: Exception) {
-                            Color.parseColor("#D4D4D4")
+                    var end = c + 1
+                    var inkEnd = if (cell.text[0] == ' ') c else c + 1
+                    while (end < rowCells.size) {
+                        val next = rowCells[end]
+                        if (!isBatchableGlyph(next) ||
+                            next.foreground != cell.foreground ||
+                            next.bold != cell.bold ||
+                            next.underline != cell.underline
+                        ) {
+                            break
                         }
-
-                        textPaint.color = cellFg
-                        textPaint.isFakeBoldText = cell.bold
-                        textPaint.isUnderlineText = cell.underline
-
-                        nativeCanvas.drawText(cell.text, x, textBaseline, textPaint)
+                        if (next.text[0] != ' ') inkEnd = end + 1
+                        end++
                     }
 
-                    c++
+                    val x = c * activeGeom.cellWidth
+                    val runLength = inkEnd - c
+                    if (runLength <= 0) {
+                        // Trailing blanks: nothing to paint, and nothing after them in the run.
+                        c = end
+                        continue
+                    }
+
+                    textPaint.color = colorCache.resolve(cell.foreground, DEFAULT_FOREGROUND_COLOR)
+                    textPaint.isFakeBoldText = cell.bold
+                    textPaint.isUnderlineText = cell.underline
+
+                    if (runLength == 1) {
+                        nativeCanvas.drawText(cell.text, x, textBaseline, textPaint)
+                    } else {
+                        runBuffer.setLength(0)
+                        for (index in c until inkEnd) runBuffer.append(rowCells[index].text)
+                        nativeCanvas.drawText(runBuffer.toString(), x, textBaseline, textPaint)
+                    }
+
+                    c = end
                 }
             }
 
@@ -557,7 +692,7 @@ fun TerminalCanvas(
                     val cursorX = cursor.column * activeGeom.cellWidth
                     val cursorY = cursor.row * activeGeom.rowHeight
 
-                    bgPaint.color = Color.parseColor("#4CAF50")
+                    bgPaint.color = cursorBlockColor
                     nativeCanvas.drawRect(cursorX, cursorY, cursorX + (activeGeom.cellWidth * 0.9f), cursorY + activeGeom.rowHeight, bgPaint)
 
                     if (cursor.row < activeGrid.size && cursor.column < activeGrid[cursor.row].size) {

@@ -285,6 +285,13 @@ fun CmuxApp(
     var terminalInputView by remember { mutableStateOf<TerminalInputView?>(null) }
     val context = LocalContext.current
 
+    // Stable callbacks for the accessory bar: it sits inside the scope that recomposes on every
+    // rendered terminal frame, so lambdas allocated per composition would drag all 14 keys
+    // through recomposition on each frame.
+    val accessorySendKey: (String) -> Unit = remember { { key -> viewModel.sendInput(key) } }
+    val accessoryOpenKeyboardPanel: () -> Unit = remember { { showKeyboardPanel = true } }
+    val accessoryOpenSettings: () -> Unit = remember { { showSettingsDialog = true } }
+
     // Auto connect on launch with saved configuration
     LaunchedEffect(Unit) {
         viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
@@ -362,9 +369,9 @@ fun CmuxApp(
                     }
 
                     AccessoryKeyboardBar(
-                        onSendKey = { key -> viewModel.sendInput(key) },
-                        onOpenKeyboardPanel = { showKeyboardPanel = true },
-                        onSettingsClick = { showSettingsDialog = true }
+                        onSendKey = accessorySendKey,
+                        onOpenKeyboardPanel = accessoryOpenKeyboardPanel,
+                        onSettingsClick = accessoryOpenSettings
                     )
                 }
             }
@@ -374,9 +381,9 @@ fun CmuxApp(
             Scaffold(
                 bottomBar = {
                         AccessoryKeyboardBar(
-                            onSendKey = { key -> viewModel.sendInput(key) },
-                            onOpenKeyboardPanel = { showKeyboardPanel = true },
-                            onSettingsClick = { showSettingsDialog = true }
+                            onSendKey = accessorySendKey,
+                            onOpenKeyboardPanel = accessoryOpenKeyboardPanel,
+                            onSettingsClick = accessoryOpenSettings
                         )
                 },
                 containerColor = theme.background
