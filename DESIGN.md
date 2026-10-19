@@ -2,7 +2,7 @@
 
 Unified color system for the cmux Pocket Android app. This file is the **canonical design reference** for every color used in the app; the single source of truth in code is `CmuxColors` in `android/app/src/main/java/app/cmuxpocket/ui/CmuxTheme.kt`.
 
-> **Status: FINAL.** The owner selected **P3 · Neon Grid** as the canonical palette (2026-10-18). P1 and P2 are kept below as rejected alternatives for historical reference; only P3 token values may be used in code.
+> **Status: CANONICAL.** The canonical palette is **Neon Grid** (selected 2026-10-18). Token values below are implemented in `CmuxColors`.
 
 ## Design principles
 
@@ -27,73 +27,11 @@ Unified color system for the cmux Pocket Android app. This file is the **canonic
 | `islandBg` / `islandBorder` | Floating island pill (frosted; includes alpha) |
 | `scrim` | Modal overlay dimming |
 
-## Palettes
+## Palette: Neon Grid（像素霓虹）
 
-### P1 · Deep Space Console（深空终端）— REJECTED alternative
+Night-ops neon: violet primary with a neon-cyan secondary accent and a Monokai-lime nod for success, with semantic accents deliberately desaturated enough to avoid eye-searing. Light mode subdues the neon into violet/teal ink.
 
-Cool graphite-navy base with a signal-cyan primary. A neutralized evolution of the Warp / Blink Shell cool-dark school — restrained, low-noise, easy on the eyes during long sessions. The safest option; the least distinctive.
-
-![P1 Deep Space Console — dark and light mockups with token table](docs/design/palette-p1.png)
-
-| Token | Dark | Light |
-| --- | --- | --- |
-| `background` | `#0C1015` | `#F4F7F9` |
-| `surface` | `#131A22` | `#FFFFFF` |
-| `surfaceVariant` | `#1B242F` | `#E4EAF0` |
-| `onSurface` | `#F2F6FA` | `#131A21` |
-| `onSurfaceVariant` | `#8B98A6` | `#5A6B7A` |
-| `primary` | `#3EC6D8` | `#0B7A8C` |
-| `primaryContainer` | `#155E6B` | `#CDEFF5` |
-| `onPrimary` | `#06232A` | `#FFFFFF` |
-| `terminalBg` | `#0E141B` | `#FBFCFD` |
-| `terminalFg` | `#C9D6E2` | `#1A232C` |
-| `divider` | `#22303C` | `#D3DCE3` |
-| `accessoryBg` | `#131A22` | `#E4EAF0` |
-| `accessoryKeyBg` | `#1E2833` | `#FFFFFF` |
-| `accessoryKeyText` | `#D8E0E8` | `#1A232C` |
-| `accentGreen` | `#46D39A` | `#1E9E6A` |
-| `accentOrange` | `#F2B23E` | `#C07E1A` |
-| `accentRed` | `#F4655F` | `#D9453A` |
-| `accentPurple` | `#9D8CFF` | `#6D5BD0` |
-| `accentBlue` | `#4FA3E3` | `#1D74D8` |
-| `islandBg` | `#131A22D9` | `#FFFFFFE6` |
-| `islandBorder` | `#2A3745` | `#D3DCE3` |
-
-### P2 · Phosphor Amber（琥珀磷光）— REJECTED alternative
-
-A warm homage to CRT amber monochrome terminals: amber primary over warm-black. Fully warm-toned, instantly recognizable, and almost unused among contemporary terminal apps — the strongest identity of the three. Light mode becomes warm paper.
-
-![P2 Phosphor Amber — dark and light mockups with token table](docs/design/palette-p2.png)
-
-| Token | Dark | Light |
-| --- | --- | --- |
-| `background` | `#100E0A` | `#FAF6EC` |
-| `surface` | `#1A1610` | `#FFFFFF` |
-| `surfaceVariant` | `#251F16` | `#F0E8D6` |
-| `onSurface` | `#F7EFE0` | `#1F1809` |
-| `onSurfaceVariant` | `#A3947B` | `#71654E` |
-| `primary` | `#EEA93B` | `#8A5E00` |
-| `primaryContainer` | `#6B4A12` | `#F7E7C3` |
-| `onPrimary` | `#241A05` | `#FFFFFF` |
-| `terminalBg` | `#131009` | `#FCFAF3` |
-| `terminalFg` | `#E3D5B8` | `#241D10` |
-| `divider` | `#2E2718` | `#E2D7BE` |
-| `accessoryBg` | `#1A1610` | `#F0E8D6` |
-| `accessoryKeyBg` | `#28221A` | `#FFFFFF` |
-| `accessoryKeyText` | `#E8DCC8` | `#241D10` |
-| `accentGreen` | `#8FC15A` | `#5C8A2E` |
-| `accentOrange` | `#EEA93B` | `#8A5E00` |
-| `accentRed` | `#E86A5E` | `#C4453C` |
-| `accentPurple` | `#B493E6` | `#7E5FC0` |
-| `accentBlue` | `#5AB8C4` | `#2E8791` |
-| `islandBg` | `#1A1610D9` | `#FFFFFFE6` |
-| `islandBorder` | `#3A3222` | `#E2D7BE` |
-
-### P3 · Neon Grid（像素霓虹）— ✅ CANONICAL
-
-Night-ops neon: violet primary with a neon-cyan secondary accent and a Monokai-lime nod for success. The most overtly "hacker" of the three, with semantic accents deliberately desaturated enough to avoid eye-searing. Light mode subdues the neon into violet/teal ink.
-
-![P3 Neon Grid — dark and light mockups with token table](docs/design/palette-p3.png)
+![Neon Grid — dark and light mockups with token table](docs/design/palette-p3.png)
 
 | Token | Dark | Light |
 | --- | --- | --- |
@@ -121,11 +59,9 @@ Night-ops neon: violet primary with a neon-cyan secondary accent and a Monokai-l
 
 ## References and deliberate divergence
 
-- **Tokyo Night** (verified against the official VS Code theme JSON): purple `#bb9af7`, cyan `#2ac3de`, amber `#e0af68`, foreground `#c0caf5`. P3 borrows its violet/cyan tension but darkens the base to `#090911` and pushes lime into success, avoiding a straight clone.
-- **Warp** (community `warp.yaml`, verified): accent `#5299bf` — a muted steel blue. P1 deliberately shifts the primary toward cyan (`#3EC6D8`) to escape the ubiquitous "GitHub/Warp steel blue".
+- **Tokyo Night** (verified against the official VS Code theme JSON): purple `#bb9af7`, cyan `#2ac3de`, amber `#e0af68`, foreground `#c0caf5`. Neon Grid borrows its violet/cyan tension but darkens the base to `#090911` and pushes lime into success, avoiding a straight clone.
 - **Catppuccin** (public theme family): pastel-on-mauve-dark; cited as inspiration only, no values copied — its lavender base is becoming a cliché across dev tools.
 - **Blink Shell / Prompt 3** (studied via Mobbin earlier in this project): near-monochrome system-native palettes; we keep their restraint in the neutral tokens but add a real accent identity, which they lack.
-- **CRT amber phosphor monitors** (P2): historical terminal hardware — amber P1 phosphor, re-tuned to modern contrast floors.
 
 ## Usage rules (binding)
 
