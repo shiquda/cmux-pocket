@@ -24,18 +24,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculateCentroid
-import androidx.compose.foundation.gestures.calculateCentroidSize
-import androidx.compose.foundation.gestures.calculatePan
-import androidx.compose.foundation.gestures.calculateRotation
-import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.ui.input.pointer.PointerInputScope
-import androidx.compose.ui.input.pointer.positionChanged
 import android.graphics.Picture
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -337,73 +326,6 @@ internal class TerminalRowCache {
     }
 }
 
-internal suspend fun PointerInputScope.detectTransformGesturesWithEnd(
-    panZoomLock: Boolean = false,
-    onGestureStart: () -> Unit = {},
-    onGestureEnd: () -> Unit = {},
-    onGesture: (centroid: Offset, pan: Offset, zoom: Float, rotation: Float) -> Unit
-) {
-    awaitEachGesture {
-        var rotation = 0f
-        var zoom = 1f
-        var pan = Offset.Zero
-        var pastTouchSlop = false
-        val touchSlop = viewConfiguration.touchSlop
-        var lockedToPanZoom = false
-
-        awaitFirstDown(requireUnconsumed = false)
-        do {
-            val event = awaitPointerEvent()
-            val canceled = event.changes.any { it.isConsumed }
-            if (!canceled) {
-                val zoomChange = event.calculateZoom()
-                val rotationChange = event.calculateRotation()
-                val panChange = event.calculatePan()
-
-                if (!pastTouchSlop) {
-                    zoom *= zoomChange
-                    rotation += rotationChange
-                    pan += panChange
-
-                    val centroidSize = event.calculateCentroidSize(useCurrent = false)
-                    val zoomMotion = kotlin.math.abs(1 - zoom) * centroidSize
-                    val rotationMotion = kotlin.math.abs(rotation * kotlin.math.PI.toFloat() * centroidSize / 180f)
-                    val panMotion = pan.getDistance()
-
-                    if (zoomMotion > touchSlop ||
-                        rotationMotion > touchSlop ||
-                        panMotion > touchSlop
-                    ) {
-                        pastTouchSlop = true
-                        lockedToPanZoom = panZoomLock && rotationMotion < touchSlop
-                        onGestureStart()
-                    }
-                }
-
-                if (pastTouchSlop) {
-                    val centroid = event.calculateCentroid(useCurrent = false)
-                    val effectiveRotation = if (lockedToPanZoom) 0f else rotationChange
-                    if (effectiveRotation != 0f ||
-                        zoomChange != 1f ||
-                        panChange != Offset.Zero
-                    ) {
-                        onGesture(centroid, panChange, zoomChange, effectiveRotation)
-                    }
-                    event.changes.forEach {
-                        if (it.positionChanged()) {
-                            it.consume()
-                        }
-                    }
-                }
-            }
-        } while (!canceled && event.changes.any { it.pressed })
-
-        if (pastTouchSlop) {
-            onGestureEnd()
-        }
-    }
-}
-
 @Composable
 fun TerminalCanvas(
     screenState: TerminalScreenState,
@@ -430,10 +352,6 @@ fun TerminalCanvas(
     var canvasSizePx by remember { mutableStateOf(Size.Zero) }
     val lastDrawnTraceId = remember(screenState.surfaceId) { AtomicLong(0L) }
     val rowCache = remember { TerminalRowCache() }
-    var transientScale by remember { mutableFloatStateOf(1f) }
-    var transientTranslation by remember { mutableStateOf(Offset.Zero) }
-    var gestureActiveGeom by remember { mutableStateOf<TerminalGeometry?>(null) }
-    var gestureActivePref by remember { mutableStateOf<TerminalDisplayPreference?>(null) }
     val localScrollOffsets = remember { mutableStateMapOf<String, Int>() }
     val localScrollAccumulators = remember { mutableStateMapOf<String, Float>() }
     val lastSeenHistoryRows = remember { mutableStateMapOf<String, Long>() }
@@ -671,99 +589,38 @@ fun TerminalCanvas(
             }
             .pointerInput(surfaceId, isSelecting, density) {
                 if (!isSelecting) {
-                    detectTransformGesturesWithEnd(
-                        panZoomLock = false,
-                        onGestureStart = {
-                            gestureActiveGeom = currentGeometry
-                            gestureActivePref = currentDisplayPreference
-                            transientScale = 1f
-                            transientTranslation = Offset.Zero
-                            contextualBubbleOffset = null
-                        },
-                        onGestureEnd = {
-                            val geom = gestureActiveGeom ?: currentGeometry
-                            val pref = gestureActivePref ?: currentDisplayPreference
-                            val totalScale = transientScale
-                            val totalTrans = transientTranslation
-                            transientScale = 1f
-                            transientTranslation = Offset.Zero
-                            gestureActiveGeom = null
-                            gestureActivePref = null
-
-                            if (geom != null && pref != null && (totalScale != 1f || totalTrans != Offset.Zero)) {
-                                val nextFont = if (totalScale != 1f) {
-                                    (with(density) { geom.fontSizePx.toSp().value } * totalScale).coerceIn(2f, 48f)
-                                } else pref.fontSizeSp
-                                val ratio = if (totalScale != 1f) with(density) { nextFont.sp.toPx() } / geom.fontSizePx else 1f
-                                val isZooming = totalScale != 1f
-                                val contentWidth = geom.sourceCols * geom.cellWidth * ratio
-                                val contentHeight = geom.rows * geom.rowHeight * ratio
-                                val desiredX = totalScale * geom.originX + totalTrans.x
-                                val desiredY = totalScale * geom.originY + totalTrans.y
-                                val nextPanY = terminalPanY(geom.canvasHeight, contentHeight, desiredY - (geom.canvasHeight - contentHeight))
-                                val focusPanY = activeFocusRow.let {
-                                    terminalFocusPanY(geom.canvasHeight, contentHeight, geom.rowHeight * ratio, it)
-                                }
-                                val keepsFollowingCursor = focusPanY != null && kotlin.math.abs(nextPanY - focusPanY) < 0.5f
-                                val preserveVerticalPosition = totalTrans.y == 0f && !isZooming
-
-                                currentOnDisplayPreferenceChange(pref.copy(
-                                    fontSizeSp = nextFont,
-                                    fitWidth = pref.fitWidth && !isZooming,
-                                    panX = terminalPanX(geom.canvasWidth - 8f, contentWidth, desiredX - 4f),
-                                    panY = when {
-                                        preserveVerticalPosition -> pref.panY
-                                        keepsFollowingCursor -> null
-                                        else -> nextPanY
-                                    },
-                                    panAnchorRow = when {
-                                        preserveVerticalPosition -> pref.panAnchorRow
-                                        keepsFollowingCursor -> null
-                                        else -> activeFocusRow
-                                    }
-                                ).normalized())
-                            }
-                        }
-                    ) { centroid, pan, zoom, _ ->
+                    // The viewport is re-rendered on every gesture event: the transform is applied to
+                    // the layout, not to a composited snapshot, so content that scrolls into view is
+                    // painted in the same frame instead of staying blank until the gesture ends.
+                    detectTransformGestures(panZoomLock = false) { centroid, pan, zoom, _ ->
                         if (zoom != 1.0f || pan != Offset.Zero) {
-                            val currentScale = transientScale
-                            val currentTrans = transientTranslation
-                            val newScale = (currentScale * zoom).coerceIn(0.1f, 10f)
-                            val newTrans = Offset(
-                                x = zoom * currentTrans.x + (1f - zoom) * centroid.x + pan.x,
-                                y = zoom * currentTrans.y + (1f - zoom) * centroid.y + pan.y
-                            )
-                            transientScale = newScale
-                            transientTranslation = newTrans
+                            if (contextualBubbleOffset != null) {
+                                contextualBubbleOffset = null
+                            }
+                            val geom = currentGeometry ?: return@detectTransformGestures
+                            val pref = currentDisplayPreference
+                            val nextFont = if (zoom != 1f) {
+                                (with(density) { geom.fontSizePx.toSp().value } * zoom).coerceIn(2f, 48f)
+                            } else pref.fontSizeSp
+                            val ratio = if (zoom != 1f) with(density) { nextFont.sp.toPx() } / geom.fontSizePx else 1f
+                            currentOnDisplayPreferenceChange(transformTerminalDisplay(
+                                preference = pref,
+                                geometry = geom,
+                                nextFontSizeSp = nextFont,
+                                scaleRatio = ratio,
+                                centroid = centroid,
+                                pan = pan,
+                                isZooming = zoom != 1f,
+                                focusRow = activeFocusRow
+                            ))
                         }
                     }
                 }
             }
     ) {
-        // The transform layer exists only while a gesture is live. Keeping a graphicsLayer on the
-        // full-screen canvas permanently turns the terminal into a separate composited RenderNode,
-        // which costs bandwidth on every screen update (tile-based mobile GPUs) even when the
-        // transform is the identity.
-        val gestureLayer = if (gestureActiveGeom != null) {
-            Modifier.graphicsLayer {
-                scaleX = transientScale
-                scaleY = transientScale
-                translationX = transientTranslation.x
-                translationY = transientTranslation.y
-                transformOrigin = TransformOrigin(0f, 0f)
-            }
-        } else {
-            Modifier
-        }
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 48.dp)
-                .then(gestureLayer)
-                .onSizeChanged {
-                    canvasSizePx = Size(it.width.toFloat(), it.height.toFloat())
-                }
-        ) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(bottom = 48.dp).onSizeChanged {
+            canvasSizePx = Size(it.width.toFloat(), it.height.toFloat())
+        }) {
             if (!renderEnabled) return@Canvas
             val nativeCanvas = drawContext.canvas.nativeCanvas
             val canvasWidth = size.width
