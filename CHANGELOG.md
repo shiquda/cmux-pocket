@@ -23,7 +23,7 @@ extracts the section for the pushed tag while publishing, and
 - Android connection assistant with a live checklist (reachability, token acceptance, Gateway status, update subscription, workspace access), the host setup command, and an **Open Tailscale** shortcut.
 - Floating breadcrumb island over the terminal exposing connection state, workspace, and session, with a session drawer for switching surfaces and workspaces.
 - Full-screen settings hub with a section rail: General, Connection, Display, Language, Updates, Open Source, Diagnostics, Storage.
-- Language choice between English and 简体中文, persisted in encrypted preferences; English remains the default regardless of device locale.
+- Language choice between System default, English, and 简体中文, persisted in encrypted preferences; a fresh install follows the device locale and falls back to English.
 - In-app update check against the latest GitHub Release with a semver comparison and direct APK download prompt.
 - Diagnostics: opt-in network and RPC logger with a 500-line buffer, token redaction, in-app viewer, and redacted JSON export; connection profiles can also be exported to and imported from JSON.
 
