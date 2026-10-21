@@ -17,6 +17,34 @@ fn test_new_workspace_args() {
         new_workspace_args("my-workspace"),
         vec!["new-workspace", "--name", "my-workspace"]
     );
+    assert_eq!(
+        new_workspace_args(""),
+        vec!["new-workspace"]
+    );
+}
+
+#[test]
+fn test_rename_workspace_args() {
+    assert_eq!(
+        rename_workspace_args("ws-123", "backend-logs"),
+        vec!["rename-workspace", "--workspace", "ws-123", "backend-logs"]
+    );
+}
+
+#[test]
+fn test_close_workspace_args() {
+    assert_eq!(
+        close_workspace_args("ws-123"),
+        vec!["close-workspace", "--workspace", "ws-123"]
+    );
+}
+
+#[test]
+fn test_rename_surface_args() {
+    assert_eq!(
+        rename_surface_args("surface:1", "zsh-dev"),
+        vec!["rename-tab", "--surface", "surface:1", "zsh-dev"]
+    );
 }
 
 #[test]

@@ -11,6 +11,11 @@
     <string name="main_close_tab_title">关闭标签页？</string>
     <string name="main_close_tab_running">%1$s 仍有进程在运行，确定关闭吗？</string>
     <string name="main_close_tab_still_running">%1$s 仍在运行，确定关闭吗？</string>
+    <string name="main_close_active_tab_title">关闭当前活跃标签页？</string>
+    <string name="main_close_active_tab_desc">「%1$s」为当前活跃标签页，确定关闭吗？</string>
+    <string name="main_close_active_workspace_title">删除当前活跃工作区？</string>
+    <string name="main_close_active_workspace_desc">工作区「%1$s」当前处于活跃状态，删除将同时关闭其中的 %2$d 个标签页。确定删除吗？</string>
+    <string name="main_delete">删除</string>
     <string name="main_close">关闭</string>
     <string name="main_cancel">取消</string>
 

@@ -317,12 +317,14 @@ class CmuxWebSocketClient(
     }
 
     suspend fun createWorkspace(
-        name: String,
+        name: String? = null,
         initialTerminal: Boolean = true,
         mutationId: String = UUID.randomUUID().toString()
     ): WorkspaceCreateResponse {
         val params = buildJsonObject {
-            put("name", name)
+            if (!name.isNullOrBlank()) {
+                put("name", name)
+            }
             if (initialTerminal) {
                 put("initial_surface", buildJsonObject {
                     put("type", "terminal")
@@ -332,6 +334,35 @@ class CmuxWebSocketClient(
         }
         val result = callRpc("mobile.workspace.create", params)
         return json.decodeFromJsonElement(WorkspaceCreateResponse.serializer(), result)
+    }
+
+    suspend fun renameWorkspace(
+        workspaceKey: String,
+        name: String,
+        mutationId: String = UUID.randomUUID().toString()
+    ): WorkspaceRenameResponse {
+        val params = buildJsonObject {
+            put("workspace_key", workspaceKey)
+            put("workspace_id", workspaceKey)
+            put("name", name)
+            put("title", name)
+            put("mutation_id", mutationId)
+        }
+        val result = callRpc("mobile.workspace.rename", params)
+        return json.decodeFromJsonElement(WorkspaceRenameResponse.serializer(), result)
+    }
+
+    suspend fun closeWorkspace(
+        workspaceKey: String,
+        mutationId: String = UUID.randomUUID().toString()
+    ): WorkspaceCloseResponse {
+        val params = buildJsonObject {
+            put("workspace_key", workspaceKey)
+            put("workspace_id", workspaceKey)
+            put("mutation_id", mutationId)
+        }
+        val result = callRpc("mobile.workspace.close", params)
+        return json.decodeFromJsonElement(WorkspaceCloseResponse.serializer(), result)
     }
 
     suspend fun selectWorkspace(workspaceKey: String) {
@@ -370,6 +401,22 @@ class CmuxWebSocketClient(
         }
         val result = callRpc("mobile.surface.close", params)
         return json.decodeFromJsonElement(SurfaceCloseResponse.serializer(), result)
+    }
+
+    suspend fun renameSurface(
+        surfaceId: String,
+        title: String,
+        workspaceKey: String? = null,
+        mutationId: String = UUID.randomUUID().toString()
+    ): SurfaceRenameResponse {
+        val params = buildJsonObject {
+            put("surface_id", surfaceId)
+            put("title", title)
+            if (workspaceKey != null) put("workspace_key", workspaceKey)
+            put("mutation_id", mutationId)
+        }
+        val result = callRpc("mobile.surface.rename", params)
+        return json.decodeFromJsonElement(SurfaceRenameResponse.serializer(), result)
     }
 
     suspend fun focusSurface(surfaceId: String?) {

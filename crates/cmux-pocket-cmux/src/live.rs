@@ -19,9 +19,9 @@ use tokio::time::timeout;
 use tracing::{debug, warn};
 
 use crate::args::{
-    close_surface_args, list_notifications_args, new_surface_args, new_workspace_args, ping_args,
-    read_screen_args, rpc_replay_args, rpc_scroll_args, select_workspace_args, send_input_args,
-    tree_args,
+    close_surface_args, close_workspace_args, list_notifications_args, new_surface_args,
+    new_workspace_args, ping_args, read_screen_args, rename_surface_args, rename_workspace_args,
+    rpc_replay_args, rpc_scroll_args, select_workspace_args, send_input_args, tree_args,
 };
 use crate::backend::CmuxBackend;
 use crate::error::CmuxError;
@@ -190,6 +190,21 @@ impl CmuxBackend for LiveCmuxBackend {
         Ok(target)
     }
 
+    async fn rename_workspace(&self, workspace_key: &str, title: &str) -> Result<WorkspaceInfo, CmuxError> {
+        self.run_cmux(&rename_workspace_args(workspace_key, title)).await?;
+        let workspaces = self.list_workspaces().await?;
+        let target = workspaces
+            .into_iter()
+            .find(|w| w.id == workspace_key || w.key.as_deref() == Some(workspace_key) || w.name == title)
+            .unwrap_or_else(|| WorkspaceInfo::new(workspace_key, title));
+        Ok(target)
+    }
+
+    async fn close_workspace(&self, workspace_key: &str) -> Result<bool, CmuxError> {
+        self.run_cmux(&close_workspace_args(workspace_key)).await?;
+        Ok(true)
+    }
+
     async fn select_workspace(&self, workspace_key: &str) -> Result<(), CmuxError> {
         self.run_cmux(&select_workspace_args(workspace_key)).await?;
         Ok(())
@@ -245,6 +260,35 @@ impl CmuxBackend for LiveCmuxBackend {
         self.run_cmux(&close_surface_args(surface_id, workspace_key))
             .await?;
         Ok(true)
+    }
+
+    async fn rename_surface(
+        &self,
+        surface_id: &str,
+        title: &str,
+        workspace_key: Option<&str>,
+    ) -> Result<SurfaceInfo, CmuxError> {
+        self.run_cmux(&rename_surface_args(surface_id, title)).await?;
+        if let Ok(workspaces) = self.list_workspaces().await {
+            for ws in workspaces {
+                if let Some(surf) = ws.surfaces.into_iter().find(|s| s.id == surface_id) {
+                    return Ok(surf);
+                }
+            }
+        }
+        Ok(SurfaceInfo {
+            id: surface_id.to_string(),
+            surface_type: "terminal".to_string(),
+            title: Some(title.to_string()),
+            workspace_key: workspace_key.map(ToString::to_string),
+            pane_id: None,
+            tab_index: 0,
+            agent_state: None,
+            attention: false,
+            dead: false,
+            cwd: None,
+            extra: serde_json::Map::new(),
+        })
     }
 
     async fn send_input(&self, surface_id: &str, text: &str) -> Result<(), CmuxError> {

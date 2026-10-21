@@ -196,3 +196,91 @@ async fn test_surface_close_clears_active_surface() {
 
     gw.stop().await;
 }
+
+#[tokio::test]
+async fn test_workspace_and_surface_rename_close_mutations() {
+    let token = "test-token";
+    let (gw, port) = spawn_test_gateway(token).await;
+    let mut ws = authenticate_ws(port, token).await;
+
+    // 1. Subscribe to workspace.tree
+    let sub_req = json!({
+        "id": "req-sub-tree",
+        "method": "mobile.events.subscribe",
+        "params": {
+            "topics": ["workspace.tree"]
+        }
+    });
+    ws.send(Message::Text(sub_req.to_string())).await.unwrap();
+    let _sub_res: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+
+    // 2. Rename Workspace
+    let ws_rename_req = json!({
+        "id": "req-ws-rename",
+        "method": "mobile.workspace.rename",
+        "params": {
+            "workspace_key": "ws-main",
+            "title": "renamed-main",
+            "mutation_id": "mut-ws-rename-1",
+        }
+    });
+    ws.send(Message::Text(ws_rename_req.to_string())).await.unwrap();
+    let res_ws_rename: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(res_ws_rename["id"], "req-ws-rename");
+    assert_eq!(res_ws_rename["result"]["status"], "ok");
+    assert_eq!(res_ws_rename["result"]["workspace"]["name"], "renamed-main");
+
+    let evt_ws_rename: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(evt_ws_rename["event"], "workspace.tree");
+    assert_eq!(evt_ws_rename["data"]["action"], "workspace_renamed");
+    assert_eq!(evt_ws_rename["data"]["mutation_id"], "mut-ws-rename-1");
+
+    // 3. Rename Surface
+    let surf_rename_req = json!({
+        "id": "req-surf-rename",
+        "method": "mobile.surface.rename",
+        "params": {
+            "surface_id": "surf-main-1",
+            "title": "renamed-tab",
+            "mutation_id": "mut-surf-rename-2",
+        }
+    });
+    ws.send(Message::Text(surf_rename_req.to_string())).await.unwrap();
+    let res_surf_rename: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(res_surf_rename["id"], "req-surf-rename");
+    assert_eq!(res_surf_rename["result"]["status"], "ok");
+    assert_eq!(res_surf_rename["result"]["surface"]["title"], "renamed-tab");
+
+    let evt_surf_rename: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(evt_surf_rename["event"], "workspace.tree");
+    assert_eq!(evt_surf_rename["data"]["action"], "surface_renamed");
+    assert_eq!(evt_surf_rename["data"]["mutation_id"], "mut-surf-rename-2");
+
+    // 4. Close Workspace
+    let ws_close_req = json!({
+        "id": "req-ws-close",
+        "method": "mobile.workspace.close",
+        "params": {
+            "workspace_key": "ws-android",
+            "mutation_id": "mut-ws-close-3",
+        }
+    });
+    ws.send(Message::Text(ws_close_req.to_string())).await.unwrap();
+    let res_ws_close: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(res_ws_close["id"], "req-ws-close");
+    assert_eq!(res_ws_close["result"]["status"], "ok");
+
+    let evt_ws_close: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(evt_ws_close["event"], "workspace.tree");
+    assert_eq!(evt_ws_close["data"]["action"], "workspace_closed");
+    assert_eq!(evt_ws_close["data"]["mutation_id"], "mut-ws-close-3");
+
+    gw.stop().await;
+}

@@ -16,10 +16,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +50,9 @@ fun SessionSurfaceDrawer(
     onNewSurfaceClick: () -> Unit,
     onSelectWorkspace: (String) -> Unit,
     onNewWorkspaceClick: () -> Unit,
+    onRenameSurface: ((SurfaceInfo) -> Unit)? = null,
+    onRenameWorkspace: ((WorkspaceInfo) -> Unit)? = null,
+    onCloseWorkspace: ((String) -> Unit)? = null,
     onSettingsClick: () -> Unit,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier
@@ -169,6 +179,7 @@ fun SessionSurfaceDrawer(
                                                 onDismissRequest()
                                             },
                                             onClose = { onCloseSurface(surface.id) },
+                                            onRename = onRenameSurface?.let { cb -> { cb(surface) } },
                                             modifier = Modifier.weight(1f)
                                         )
                                     }
@@ -244,7 +255,9 @@ fun SessionSurfaceDrawer(
                                     onClick = {
                                         onSelectWorkspace(ws.stableKey)
                                         onDismissRequest()
-                                    }
+                                    },
+                                    onRename = onRenameWorkspace?.let { cb -> { cb(ws) } },
+                                    onClose = onCloseWorkspace?.let { cb -> { cb(ws.stableKey) } }
                                 )
                             }
                         }
@@ -263,6 +276,7 @@ private fun SurfaceCard(
     isSelected: Boolean,
     onClick: () -> Unit,
     onClose: () -> Unit,
+    onRename: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val theme = CmuxTheme.colors
@@ -300,6 +314,7 @@ private fun SurfaceCard(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
+                Row(verticalAlignment = Alignment.CenterVertically) {
                 // Agent status badge
                 if (isWorking) {
                     Box(
@@ -341,6 +356,49 @@ private fun SurfaceCard(
                             fontSize = 10.sp,
                             color = theme.onContainerMuted
                         )
+                    }
+                }
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.menu_rename),
+                                tint = theme.onContainerMuted,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                            modifier = Modifier.background(theme.containerBg)
+                        ) {
+                            if (onRename != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.menu_rename), color = theme.onContainer) },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Edit, contentDescription = null, tint = theme.onContainer, modifier = Modifier.size(16.dp))
+                                    },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onRename()
+                                    }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_close), color = theme.accentRed) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Close, contentDescription = null, tint = theme.accentRed, modifier = Modifier.size(16.dp))
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onClose()
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -400,7 +458,9 @@ private fun NewSurfaceCard(
 private fun WorkspaceCard(
     workspace: WorkspaceInfo,
     isCurrent: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onRename: (() -> Unit)? = null,
+    onClose: (() -> Unit)? = null
 ) {
     val theme = CmuxTheme.colors
     val cardBg = if (isCurrent) theme.accentGreen.copy(alpha = 0.13f) else theme.cardBg
@@ -453,20 +513,67 @@ private fun WorkspaceCard(
             }
         }
 
-        if (isCurrent) {
-            Text(
-                text = "● " + stringResource(R.string.drawer_connected),
-                fontSize = 12.sp,
-                color = theme.accentGreen,
-                fontWeight = FontWeight.Medium
-            )
-        } else {
-            Text(
-                text = stringResource(R.string.drawer_switch),
-                fontSize = 12.sp,
-                color = theme.primary,
-                fontWeight = FontWeight.Medium
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (isCurrent) {
+                Text(
+                    text = "● " + stringResource(R.string.drawer_connected),
+                    fontSize = 12.sp,
+                    color = theme.accentGreen,
+                    fontWeight = FontWeight.Medium
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.drawer_switch),
+                    fontSize = 12.sp,
+                    color = theme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            var menuExpanded by remember { mutableStateOf(false) }
+            Box {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.menu_rename),
+                        tint = theme.onContainerMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    modifier = Modifier.background(theme.containerBg)
+                ) {
+                    if (onRename != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.menu_rename), color = theme.onContainer) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Edit, contentDescription = null, tint = theme.onContainer, modifier = Modifier.size(16.dp))
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onRename()
+                            }
+                        )
+                    }
+                    if (onClose != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.menu_delete), color = theme.accentRed) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Delete, contentDescription = null, tint = theme.accentRed, modifier = Modifier.size(16.dp))
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onClose()
+                            }
+                        )
+                    }
+                }
+            }
         }
-    }
+}
 }

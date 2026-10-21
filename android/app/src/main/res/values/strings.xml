@@ -14,6 +14,11 @@
     <string name="main_close_tab_title">Close tab?</string>
     <string name="main_close_tab_running">%1$s has a running process. Close it anyway?</string>
     <string name="main_close_tab_still_running">%1$s is still running. Close it anyway?</string>
+    <string name="main_close_active_tab_title">Close active tab?</string>
+    <string name="main_close_active_tab_desc">\"%1$s\" is currently active. Close it anyway?</string>
+    <string name="main_close_active_workspace_title">Delete active workspace?</string>
+    <string name="main_close_active_workspace_desc">Workspace \"%1$s\" is currently active. Deleting it will close all %2$d tab(s) inside. Delete anyway?</string>
+    <string name="main_delete">Delete</string>
     <string name="main_close">Close</string>
     <string name="main_cancel">Cancel</string>
 
