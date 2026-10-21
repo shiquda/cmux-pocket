@@ -346,6 +346,7 @@ fun TerminalCanvas(
     onPhoneWidthMetrics: (String, TerminalWidthMetrics?, Boolean) -> Unit = { _, _, _ -> },
 ) {
     val context = LocalContext.current
+    var showUnsupportedDialog by remember { mutableStateOf(false) }
     val readyLabel = stringResource(R.string.canvas_ready)
     val connectingLabel = stringResource(R.string.canvas_connecting)
     val startHandleLabel = stringResource(R.string.canvas_selection_start_handle)
@@ -1070,11 +1071,14 @@ fun TerminalCanvas(
             }
         }
         LaunchedEffect(phoneWidth?.notice) {
+            if (phoneWidth?.notice == PhoneWidthNotice.UNSUPPORTED) {
+                showUnsupportedDialog = true
+                return@LaunchedEffect
+            }
             val message = when (phoneWidth?.notice) {
                 PhoneWidthNotice.REQUEST_FAILED -> R.string.terminal_width_failed
                 PhoneWidthNotice.CLEAR_UNCONFIRMED -> R.string.terminal_width_restore_failed
                 PhoneWidthNotice.NO_BASELINE -> R.string.terminal_width_waiting
-                PhoneWidthNotice.UNSUPPORTED -> R.string.terminal_width_unsupported
                 else -> null
             } ?: return@LaunchedEffect
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
@@ -1090,7 +1094,7 @@ fun TerminalCanvas(
                 if (!phoneMode) {
                     onPhoneWidthModeChange(surfaceId, false)
                 } else if (!viewportResizeSupported) {
-                    Toast.makeText(context, R.string.terminal_width_unsupported, Toast.LENGTH_SHORT).show()
+                    showUnsupportedDialog = true
                 } else {
                     val estimate = computePhoneWidthTarget(widthMetrics, maxOf(screenState.rows, 1))
                     if (estimate == null || screenState.columns <= 0) {
@@ -1111,6 +1115,18 @@ fun TerminalCanvas(
             },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+        if (showUnsupportedDialog) {
+            AlertDialog(
+                onDismissRequest = { showUnsupportedDialog = false },
+                title = { Text(stringResource(R.string.terminal_width_unsupported_title)) },
+                text = { Text(stringResource(R.string.terminal_width_unsupported_dialog)) },
+                confirmButton = {
+                    TextButton(onClick = { showUnsupportedDialog = false }) {
+                        Text(stringResource(R.string.terminal_width_unsupported_confirm))
+                    }
+                }
+            )
+        }
     }
 }
 

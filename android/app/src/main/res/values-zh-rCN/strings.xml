@@ -49,7 +49,9 @@
     <string name="canvas_readable">可读模式</string>
     <string name="terminal_width_follow_mac">跟随电脑</string>
     <string name="terminal_width_phone">按手机宽度排版</string>
-    <string name="terminal_width_unsupported">当前主机或网关不支持真实调整终端尺寸。</string>
+    <string name="terminal_width_unsupported_title">无法切换到手机排版</string>
+    <string name="terminal_width_unsupported_dialog">当前 Gateway 不支持调整终端尺寸（terminal.viewport.v1）。这通常说明网关版本较旧，请升级 Gateway 并重新连接后再试。</string>
+    <string name="terminal_width_unsupported_confirm">知道了</string>
     <string name="terminal_width_default_title">默认终端排版</string>
     <string name="terminal_width_default_hint">新打开的终端使用此模式；当前终端请用底部工具条里适应宽度按钮左侧的图标切换。</string>
     <string name="terminal_width_mode_phone">当前为手机排版，点击切换到桌面排版</string>

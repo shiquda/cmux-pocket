@@ -52,7 +52,9 @@
     <string name="canvas_readable">Readable</string>
     <string name="terminal_width_follow_mac">Follow computer</string>
     <string name="terminal_width_phone">Lay out for this phone</string>
-    <string name="terminal_width_unsupported">The connected host or Gateway cannot resize the terminal.</string>
+    <string name="terminal_width_unsupported_title">Phone layout unavailable</string>
+    <string name="terminal_width_unsupported_dialog">This Gateway can\'t resize the terminal (terminal.viewport.v1). That usually means the Gateway is older than this app — upgrade the Gateway, reconnect, and try again.</string>
+    <string name="terminal_width_unsupported_confirm">Got it</string>
     <string name="terminal_width_default_title">Default terminal layout</string>
     <string name="terminal_width_default_hint">Applies to newly opened terminals. Use the button left of fit-width in the terminal bar to switch the current one.</string>
     <string name="terminal_width_mode_phone">Phone layout active. Switch to desktop layout.</string>
