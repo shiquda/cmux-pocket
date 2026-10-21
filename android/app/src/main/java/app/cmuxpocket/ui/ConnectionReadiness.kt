@@ -1,6 +1,7 @@
 package app.cmuxpocket.ui
 
 import app.cmuxpocket.BuildConfig
+import app.cmuxpocket.R
 import app.cmuxpocket.protocol.GatewayCompatibility
 import app.cmuxpocket.protocol.GatewayHostStatus
 import app.cmuxpocket.protocol.GatewayVersions
@@ -13,13 +14,13 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 
-enum class ConnectionStep(val label: String) {
-    NETWORK("Reach Gateway"),
-    AUTHENTICATION("Accept token"),
-    GATEWAY("Verify Gateway response"),
-    SYNC("Subscribe to workspace updates"),
-    WORKSPACES("Read cmux workspaces"),
-    READY("Ready"),
+enum class ConnectionStep(val labelRes: Int, val label: String) {
+    NETWORK(R.string.conn_step_network, "Reach Gateway"),
+    AUTHENTICATION(R.string.conn_step_auth, "Accept token"),
+    GATEWAY(R.string.conn_step_gateway, "Verify Gateway response"),
+    SYNC(R.string.conn_step_sync, "Subscribe to workspace updates"),
+    WORKSPACES(R.string.conn_step_workspaces, "Read cmux workspaces"),
+    READY(R.string.conn_step_ready, "Ready"),
 }
 
 data class ConnectionReadiness(
@@ -43,6 +44,15 @@ data class ConnectionReadiness(
     }
 
     fun failed(message: String) = copy(problem = message)
+
+    val helpRes: Int? get() = when (step) {
+        ConnectionStep.NETWORK -> R.string.conn_help_network
+        ConnectionStep.AUTHENTICATION -> R.string.conn_help_auth
+        ConnectionStep.GATEWAY -> R.string.conn_help_gateway
+        ConnectionStep.WORKSPACES -> R.string.conn_help_workspaces
+        ConnectionStep.SYNC -> R.string.conn_help_sync
+        ConnectionStep.READY -> null
+    }
 
     val help: String get() = when (step) {
         ConnectionStep.NETWORK -> "Check the host and port. For Tailscale, connect both devices to the same tailnet, keep the Mac awake, and run cmux-pocket setup --tailscale on the Mac. A failed connection alone cannot tell whether Tailscale or the Gateway is stopped."

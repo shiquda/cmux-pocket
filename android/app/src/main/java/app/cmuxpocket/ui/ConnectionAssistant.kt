@@ -1,18 +1,23 @@
 package app.cmuxpocket.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.stringResource
 import app.cmuxpocket.R
-
 @Composable
 fun ConnectionAssistant(
     readiness: ConnectionReadiness,
@@ -28,7 +33,13 @@ fun ConnectionAssistant(
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.conn_check_title), color = theme.onSurface, style = MaterialTheme.typography.titleSmall)
-        Text(readiness.summary, color = theme.onSurface, fontSize = 13.sp)
+        val summaryText = when {
+            readiness.problem != null -> readiness.problem
+            readiness.ready -> stringResource(R.string.conn_summary_ready, readiness.workspaceCount, readiness.terminalCount)
+            !readiness.started -> stringResource(R.string.conn_summary_untested)
+            else -> "${stringResource(readiness.step.labelRes)}…"
+        }
+        Text(summaryText, color = theme.onSurface, fontSize = 13.sp)
         if (readiness.started) {
             ConnectionStep.entries.filter { it != ConnectionStep.READY }.forEach { step ->
                 val marker = when {
@@ -37,21 +48,24 @@ fun ConnectionAssistant(
                     step == readiness.step -> "…"
                     else -> "○"
                 }
-                Text(stringResource(R.string.conn_step_item, marker, step.label), color = theme.onSurfaceVariant, fontSize = 12.sp)
+                Text(
+                    text = stringResource(R.string.conn_step_item, marker, stringResource(step.labelRes)),
+                    color = theme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
             }
-            if (readiness.problem != null || readiness.ready) {
-                Text(readiness.help, color = theme.onSurfaceVariant, fontSize = 12.sp)
+            if (readiness.problem != null) {
+                val helpRes = readiness.helpRes
+                val helpText = if (helpRes != null) stringResource(helpRes) else readiness.help
+                if (helpText.isNotEmpty()) {
+                    Text(helpText, color = theme.onSurfaceVariant, fontSize = 12.sp)
+                }
             }
         }
         Button(
             onClick = onCheckConnection,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) { Text(stringResource(R.string.conn_btn_check)) }
-        Text(
-            stringResource(R.string.conn_check_desc),
-            color = theme.onSurfaceVariant,
-            fontSize = 11.sp,
-        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = { showHostSetup = !showHostSetup }) { Text(stringResource(R.string.conn_btn_host_setup)) }
             if (tailscaleIntent != null) {
@@ -64,15 +78,40 @@ fun ConnectionAssistant(
                 color = theme.onSurfaceVariant,
                 fontSize = 12.sp,
             )
-            SelectionContainer { Text("cmux-pocket setup --tailscale", color = theme.onSurface) }
-            TextButton(onClick = { clipboard.setText(AnnotatedString("cmux-pocket setup --tailscale")) }) {
-                Text(stringResource(R.string.conn_btn_copy_setup_cmd))
+            Surface(
+                color = theme.cardBg,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, theme.cardBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SelectionContainer(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "cmux-pocket setup --tailscale",
+                            color = theme.onSurface,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp
+                        )
+                    }
+                    IconButton(
+                        onClick = { clipboard.setText(AnnotatedString("cmux-pocket setup --tailscale")) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = stringResource(R.string.conn_btn_copy_setup_cmd),
+                            tint = theme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
-            Text(
-                stringResource(R.string.conn_host_setup_details),
-                color = theme.onSurfaceVariant,
-                fontSize = 12.sp,
-            )
         }
     }
 }

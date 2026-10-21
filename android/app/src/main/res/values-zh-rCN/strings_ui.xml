@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Import Gateway Dialog -->
-    <string name="dlg_import_title">导入网关配置</string>
+    <string name="dlg_import_title">导入连接配置</string>
     <string name="dlg_import_cancel">取消</string>
     <string name="dlg_import_existing_found">发现已存在的配置文件</string>
     <string name="dlg_import_existing_desc">已保存的配置文件 \'%1$s\' 已在使用此端点（%2$s:%3$d）。</string>
@@ -15,10 +15,10 @@
     <string name="dlg_import_protocol_wss">WSS (TLS 加密)</string>
     <string name="dlg_import_protocol_ws">WS (Loopback 明文)</string>
     <string name="dlg_import_usb_local">USB / 本地</string>
-    <string name="dlg_import_gateway_auth_token">Gateway 认证 Token</string>
+    <string name="dlg_import_gateway_auth_token">认证 Token</string>
     <string name="dlg_import_token_hide">隐藏</string>
     <string name="dlg_import_token_show">显示</string>
-    <string name="dlg_import_security_reminder">导入操作会将此主机配置保存至 Pocket 配置文件中。</string>
+    <string name="dlg_import_security_reminder">保存此连接配置至 Pocket。</string>
     <string name="dlg_import_confirm">导入并连接</string>
     <string name="dlg_import_error_title">无效的导入配置</string>
     <string name="dlg_import_error_ok">确定</string>
@@ -77,13 +77,24 @@
     <!-- Connection Assistant -->
     <string name="conn_check_title">连接检查</string>
     <string name="conn_step_item">"%1$s  %2$s"</string>
+    <string name="conn_step_network">连接 Gateway</string>
+    <string name="conn_step_auth">验证 Token</string>
+    <string name="conn_step_gateway">检查网关响应</string>
+    <string name="conn_step_sync">订阅工作区更新</string>
+    <string name="conn_step_workspaces">加载工作区</string>
+    <string name="conn_step_ready">已连接</string>
+    <string name="conn_summary_untested">尚未检查连接</string>
+    <string name="conn_summary_ready">已就绪 · %1$d 个工作区 · %2$d 个终端</string>
+    <string name="conn_help_network">无法连接主机。请检查 IP 与端口，并确认电脑端已启动 Tailscale 或 Gateway。</string>
+    <string name="conn_help_auth">Token 无效。可在电脑运行 cmux-pocket token 查看当前 Token。</string>
+    <string name="conn_help_gateway">网关未响应。可在电脑运行 cmux-pocket gateway probe 排查。</string>
+    <string name="conn_help_workspaces">无法读取工作区。请确认电脑端已打开 cmux。</string>
+    <string name="conn_help_sync">工作区同步失败。请点击检查连接重试。</string>
     <string name="conn_btn_check">检查连接</string>
-    <string name="conn_check_desc">检查上方的 Host、Port 和 Token。这将重新连接 Pocket 并加载你的工作区。</string>
     <string name="conn_btn_host_setup">Host 设置</string>
     <string name="conn_btn_open_tailscale">打开 Tailscale</string>
-    <string name="conn_host_setup_instructions">在 Mac 和手机上安装 Tailscale，登录同一 tailnet 并连接两者。在 Mac 上打开 cmux，然后运行：</string>
+    <string name="conn_host_setup_instructions">确保双端处于同一 Tailscale 网络，然后在电脑终端运行：</string>
     <string name="conn_btn_copy_setup_cmd">复制设置命令</string>
-    <string name="conn_host_setup_details">Mac 上的命令将启动或复用 Gateway，验证工作区访问权限，并配置私有 HTTPS 转发。输入输出的手机端点（端口 443）及现有的 Gateway Token，然后在此处检查连接。保存的配置文件将使用加密存储。</string>
     <string name="conn_notice_check_in_settings">在设置中检查连接</string>
     <!-- Gateway version and upgrade guidance -->
     <string name="conn_versions_title">宿主与连接版本</string>

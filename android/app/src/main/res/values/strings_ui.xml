@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Import Gateway Dialog -->
-    <string name="dlg_import_title">Import Gateway Profile</string>
+    <string name="dlg_import_title">Import Connection Profile</string>
     <string name="dlg_import_cancel">Cancel</string>
     <string name="dlg_import_existing_found">Existing Profile Found</string>
     <string name="dlg_import_existing_desc">A saved profile \'%1$s\' already uses this endpoint (%2$s:%3$d).</string>
@@ -15,10 +15,10 @@
     <string name="dlg_import_protocol_wss">WSS (TLS Encrypted)</string>
     <string name="dlg_import_protocol_ws">WS (Loopback Cleartext)</string>
     <string name="dlg_import_usb_local">USB / Local</string>
-    <string name="dlg_import_gateway_auth_token">Gateway Auth Token</string>
+    <string name="dlg_import_gateway_auth_token">Auth Token</string>
     <string name="dlg_import_token_hide">Hide</string>
     <string name="dlg_import_token_show">Show</string>
-    <string name="dlg_import_security_reminder">Importing will save this host configuration to your Pocket profiles.</string>
+    <string name="dlg_import_security_reminder">Saves this connection configuration to Pocket.</string>
     <string name="dlg_import_confirm">Import &amp; Connect</string>
     <string name="dlg_import_error_title">Invalid Import Configuration</string>
     <string name="dlg_import_error_ok">OK</string>
@@ -78,13 +78,24 @@
     <!-- Connection Assistant -->
     <string name="conn_check_title">Connection check</string>
     <string name="conn_step_item">"%1$s  %2$s"</string>
+    <string name="conn_step_network">Reach Gateway</string>
+    <string name="conn_step_auth">Verify token</string>
+    <string name="conn_step_gateway">Check Gateway response</string>
+    <string name="conn_step_sync">Subscribe to updates</string>
+    <string name="conn_step_workspaces">Load workspaces</string>
+    <string name="conn_step_ready">Connected</string>
+    <string name="conn_summary_untested">Connection not checked</string>
+    <string name="conn_summary_ready">Ready · %1$d workspaces · %2$d terminals</string>
+    <string name="conn_help_network">Cannot reach host. Check that the IP and port are correct and that Tailscale or Gateway is active on your computer.</string>
+    <string name="conn_help_auth">Invalid token. Run \'cmux-pocket token\' on your computer to view the current token.</string>
+    <string name="conn_help_gateway">Gateway not responding. Run \'cmux-pocket gateway probe\' on your computer.</string>
+    <string name="conn_help_workspaces">Cannot read workspaces. Ensure cmux is open on your computer.</string>
+    <string name="conn_help_sync">Workspace sync failed. Tap Check connection to retry.</string>
     <string name="conn_btn_check">Check connection</string>
-    <string name="conn_check_desc">Checks the host, port, and token above. This reconnects Pocket and loads your workspaces.</string>
     <string name="conn_btn_host_setup">Host setup</string>
     <string name="conn_btn_open_tailscale">Open Tailscale</string>
-    <string name="conn_host_setup_instructions">Install Tailscale on the Mac and phone, sign in to the same tailnet, and connect both. On the Mac, open cmux, then run:</string>
+    <string name="conn_host_setup_instructions">Ensure both devices are on the same Tailscale network, then run in your computer terminal:</string>
     <string name="conn_btn_copy_setup_cmd">Copy setup command</string>
-    <string name="conn_host_setup_details">The Mac command starts or reuses the Gateway, verifies workspace access, and sets up private HTTPS forwarding. Enter the printed phone endpoint with port 443 and the existing Gateway token, then check the connection here. Saved profiles use encrypted storage.</string>
     <string name="conn_notice_check_in_settings">Check connection in Settings</string>
     <!-- Gateway version and upgrade guidance -->
     <string name="conn_versions_title">Host &amp; connection</string>
