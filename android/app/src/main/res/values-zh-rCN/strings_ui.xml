@@ -64,7 +64,8 @@
     <string name="scan_torch_toggle_cd">开关手电筒</string>
     <string name="scan_close_cd">取消扫描</string>
     <string name="scan_hint_point_camera">将摄像头对准 cmux-pocket 二维码</string>
-    <string name="scan_hint_focus">画面模糊时轻触对焦 · 支持暗色终端屏幕</string>
+    <string name="scan_hint_focus">画面模糊时轻触对焦</string>
+    <string name="scan_hint_terminal">需要二维码？在电脑终端运行以下命令</string>
     <string name="scan_cancel">取消</string>
     <string name="scan_permission_denied_title">需要相机权限</string>
     <string name="scan_permission_denied_desc">扫描连接二维码需要相机权限。请在设置中开启，或手动输入连接信息。</string>
