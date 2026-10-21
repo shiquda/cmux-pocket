@@ -85,7 +85,7 @@ cmux-pocket token rotate
 pbcopy < "$(cmux-pocket token path)"
 ```
 
-`cmux-pocket service uninstall` removes only the CLI-owned LaunchAgent. Homebrew installation and upgrades do not create tokens, start services, or mutate user configuration.
+`cmux-pocket service uninstall` removes only the CLI-owned LaunchAgent. Homebrew installation and upgrades do not create tokens, start services, or mutate user configuration; the formula does restart an already-registered LaunchAgent after install, so a `brew upgrade` puts the new Gateway build in service immediately. Running `cmux-pocket setup` after an upgrade also restarts a Gateway whose reported build is older than the CLI, because launchd otherwise keeps the previous process running; a Gateway at the same or a newer build is reused untouched.
 
 ### Remote wake and Gateway version checks
 

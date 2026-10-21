@@ -3,7 +3,7 @@
 use crate::cli::SetupArgs;
 use crate::error::CliError;
 use crate::output::{print_success, token_fingerprint};
-use crate::probe::probe_gateway;
+use crate::probe::{probe_gateway, ProbeReport};
 use crate::tailscale::{TailnetEndpoint, Tailscale};
 use cmux_pocket_cmux::{CmuxBackend, LiveCmuxBackend};
 use cmux_pocket_macos::{
@@ -13,6 +13,7 @@ use cmux_pocket_macos::{
     LaunchdPlistConfig, LaunchdTarget, PocketPaths, DEFAULT_LAUNCHD_LABEL,
 };
 use serde::Serialize;
+use serde_json::Value;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -143,7 +144,7 @@ pub async fn handle_setup(
     if !args.no_start {
         gateway_reused = probe_gateway(&config.host, config.port, &token, Duration::from_secs(2))
             .await
-            .is_ok_and(|report| report.is_backend_healthy());
+            .is_ok_and(|report| report.is_backend_healthy() && gateway_is_current(&report));
     }
 
     if gateway_reused {
@@ -318,9 +319,82 @@ pub async fn handle_setup(
     Ok(())
 }
 
+/// Whether the probed Gateway already runs the build this CLI ships.
+///
+/// `brew upgrade` replaces the binary on disk but launchd keeps the old process,
+/// so a healthy Gateway can still be the previous release. Reusing it would leave
+/// `setup` reporting success while the phone keeps talking to the old build.
+fn gateway_is_current(report: &ProbeReport) -> bool {
+    let running = report
+        .host_status
+        .as_ref()
+        .and_then(|status| status.get("gateway_version"))
+        .and_then(Value::as_str);
+    match (running.and_then(parse_version), parse_version(env!("CARGO_PKG_VERSION"))) {
+        (Some(running), Some(current)) => running >= current,
+        // Gateways older than 0.2.0 do not report a build version at all, and an
+        // unparseable value cannot prove the process is current.
+        _ => false,
+    }
+}
+
+fn parse_version(value: &str) -> Option<(u64, u64, u64)> {
+    let core = value.split(['-', '+']).next()?;
+    let mut parts = core.split('.');
+    let parsed = (
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+    );
+    if parts.next().is_some() {
+        return None;
+    }
+    Some(parsed)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::CMUX_BINARY_CANDIDATES;
+    use super::{gateway_is_current, parse_version, CMUX_BINARY_CANDIDATES};
+    use crate::probe::ProbeReport;
+
+    fn report(gateway_version: Option<&str>) -> ProbeReport {
+        ProbeReport {
+            connected: true,
+            authenticated: true,
+            host: "127.0.0.1".to_string(),
+            port: 8088,
+            server_version: Some("2.0.0".to_string()),
+            session_id: None,
+            capabilities: Vec::new(),
+            host_status: gateway_version
+                .map(|version| serde_json::json!({ "gateway_version": version })),
+            latency_ms: 1,
+            backend_health: Some("healthy".to_string()),
+            error: None,
+        }
+    }
+
+    #[test]
+    fn reuses_a_gateway_running_the_same_or_a_newer_build() {
+        assert!(gateway_is_current(&report(Some(env!("CARGO_PKG_VERSION")))));
+        assert!(gateway_is_current(&report(Some("99.0.0"))));
+    }
+
+    #[test]
+    fn restarts_a_gateway_left_behind_by_an_upgrade() {
+        assert!(!gateway_is_current(&report(Some("0.0.1"))));
+        assert!(!gateway_is_current(&report(Some("not-a-version"))));
+        assert!(!gateway_is_current(&report(None)));
+    }
+
+    #[test]
+    fn compares_three_part_versions_and_ignores_prerelease_suffixes() {
+        assert_eq!(parse_version("0.2.0"), Some((0, 2, 0)));
+        assert_eq!(parse_version("0.3.0-rc1"), Some((0, 3, 0)));
+        assert_eq!(parse_version("1.2"), None);
+        assert_eq!(parse_version("1.2.3.4"), None);
+        assert!(parse_version("10.0.0") > parse_version("9.9.9"));
+    }
 
     #[test]
     fn discovers_cmux_app_bundled_cli_for_launchd() {

@@ -158,7 +158,9 @@ cd android
 ```
 
 ### Releases & Changelog
-Release bodies are generated directly from [CHANGELOG.md](CHANGELOG.md). Before tagging a `v*` release, add a `## [X.Y.Z] - YYYY-MM-DD` section. The release workflow extracts this section using `scripts/release-notes-from-changelog.sh` to populate GitHub Releases notes automatically.
+Release bodies are generated directly from [CHANGELOG.md](CHANGELOG.md). Before tagging a `v*` release, add a `## [X.Y.Z] - YYYY-MM-DD` section. The release workflow extracts this section using `scripts/release-notes-from-changelog.sh` to populate GitHub Releases notes automatically. Bump the workspace version in `Cargo.toml` and the Android `versionName` to the tag's number first: the APK workflow rejects a mismatched `versionName`, and the Homebrew tap rejects a tag whose `Cargo.toml` version differs.
+
+The Gateway's formula lives only in `shiquda/homebrew-cmux-pocket`. Its scheduled workflow resolves the latest GitHub Release, verifies that tag's `Cargo.toml`, and rewrites `Formula/cmux-pocket.rb` to install that tag at its exact commit, so `brew upgrade` reaches a new Gateway without editing the tap by hand. This repository intentionally keeps no copy of the formula.
 
 ---
 
