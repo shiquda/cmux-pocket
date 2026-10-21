@@ -60,6 +60,9 @@
     <string name="notif_agent_fallback">Agent</string>
     <string name="notif_task_complete">%1$s 任务已完成</string>
     <string name="notif_tap_to_open">点击打开 cmux Pocket 中已完成的标签页。</string>
+    <string name="completion_banner_done">已完成</string>
+    <string name="completion_banner_more">+%1$d</string>
+    <string name="completion_banner_open">打开刚刚完成的会话</string>
     <string name="keepalive_channel_name">连接状态</string>
     <string name="keepalive_channel_desc">在后台保持 cmux Pocket Gateway 连接活跃。</string>
     <string name="keepalive_title">cmux Pocket 已连接</string>
@@ -82,6 +85,13 @@
     <string name="settings_section_opensource">开源</string>
     <string name="settings_section_diagnostics">诊断</string>
     <string name="settings_section_storage">存储</string>
+    <string name="settings_section_notifications">通知</string>
+
+    <!-- Settings · Notifications -->
+    <string name="settings_notif_vibrate">当前会话完成时震动</string>
+    <string name="settings_notif_vibrate_desc">仅在 cmux Pocket 前台时生效。其他会话完成时改为在顶部弹出提示胶囊。</string>
+    <string name="settings_notif_on">已开启</string>
+    <string name="settings_notif_off">已关闭</string>
 
     <!-- Settings · General -->
     <string name="settings_theme_mode_title">应用主题模式</string>

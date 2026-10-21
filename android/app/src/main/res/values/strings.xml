@@ -63,6 +63,9 @@
     <string name="notif_agent_fallback">Agent</string>
     <string name="notif_task_complete">%1$s task complete</string>
     <string name="notif_tap_to_open">Tap to open the completed tab in cmux Pocket.</string>
+    <string name="completion_banner_done">Done</string>
+    <string name="completion_banner_more">+%1$d</string>
+    <string name="completion_banner_open">Open the session that just finished</string>
     <string name="keepalive_channel_name">Connection</string>
     <string name="keepalive_channel_desc">Keeps the cmux Pocket Gateway connection active in the background.</string>
     <string name="keepalive_title">cmux Pocket connected</string>
@@ -85,6 +88,13 @@
     <string name="settings_section_opensource">Open Source</string>
     <string name="settings_section_diagnostics">Diagnostics</string>
     <string name="settings_section_storage">Storage</string>
+    <string name="settings_section_notifications">Notifications</string>
+
+    <!-- Settings · Notifications -->
+    <string name="settings_notif_vibrate">Vibrate when the session on screen finishes</string>
+    <string name="settings_notif_vibrate_desc">Only while cmux Pocket is open. Other sessions finishing show a capsule at the top instead.</string>
+    <string name="settings_notif_on">On</string>
+    <string name="settings_notif_off">Off</string>
 
     <!-- Settings · General -->
     <string name="settings_theme_mode_title">App theme mode</string>

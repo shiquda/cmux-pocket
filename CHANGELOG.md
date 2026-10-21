@@ -15,6 +15,7 @@ extracts the section for the pushed tag while publishing, and
 
 ### Added
 
+- Session completion feedback: when the session on screen finishes its agent turn, the phone gives a short haptic pulse; any other session raises a tappable capsule under the floating island (`workspace › #N title Done`) that jumps straight to it, with a `+N` badge for queued completions. **Settings → Notifications** turns the pulse off (on by default). While the app is in the foreground these replace the system notification; a backgrounded app still posts one.
 - Remote wake: when the Gateway is online but cmux.app is not running, the Android terminal shows a **Mac online · cmux not running** card with a one-tap **Wake cmux on Mac** action. The Gateway launches the app through LaunchServices in the background (10-second debounce), polls the socket every 500 ms for up to 15 seconds, then pushes a full workspace sync.
 - Android **Settings → Connection** shows the Pocket Gateway version, the app version, the cmux protocol version, and remote-wake support with a compatibility badge, a **Recheck version** action, a copyable Mac upgrade command, and an APK download link when the app is older than the Gateway.
 - `mobile.host.status` now reports `gateway_version`, `protocol_version`, and `cmux_status` (`installed`, `running`, `can_wake`), and Gateways advertise the `mobile.host.wake_cmux.v1` capability plus a new `mobile.host.wake_cmux` RPC.
