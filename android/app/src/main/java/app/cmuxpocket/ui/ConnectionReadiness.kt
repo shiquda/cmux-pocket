@@ -27,6 +27,7 @@ data class ConnectionReadiness(
     val step: ConnectionStep = ConnectionStep.NETWORK,
     val started: Boolean = false,
     val problem: String? = null,
+    val problemRes: Int? = null,
     val workspaceCount: Int = 0,
     val terminalCount: Int = 0,
     val hostStatus: GatewayHostStatus? = null,
@@ -43,15 +44,16 @@ data class ConnectionReadiness(
         else -> "${step.label}…"
     }
 
-    fun failed(message: String) = copy(problem = message)
+    fun failed(message: String, resId: Int? = null) = copy(problem = message, problemRes = resId)
 
-    val helpRes: Int? get() = when (step) {
-        ConnectionStep.NETWORK -> R.string.conn_help_network
-        ConnectionStep.AUTHENTICATION -> R.string.conn_help_auth
-        ConnectionStep.GATEWAY -> R.string.conn_help_gateway
-        ConnectionStep.WORKSPACES -> R.string.conn_help_workspaces
-        ConnectionStep.SYNC -> R.string.conn_help_sync
-        ConnectionStep.READY -> null
+    val helpRes: Int? get() = when {
+        cmuxStopped -> R.string.conn_help_cmux_stopped
+        step == ConnectionStep.NETWORK -> R.string.conn_help_network
+        step == ConnectionStep.AUTHENTICATION -> R.string.conn_help_auth
+        step == ConnectionStep.GATEWAY -> R.string.conn_help_gateway
+        step == ConnectionStep.WORKSPACES -> R.string.conn_help_workspaces
+        step == ConnectionStep.SYNC -> R.string.conn_help_sync
+        else -> null
     }
 
     val help: String get() = when (step) {

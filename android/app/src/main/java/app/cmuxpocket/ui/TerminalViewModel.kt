@@ -1,5 +1,6 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
 import app.cmuxpocket.engine.*
 import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.protocol.AgentSessionCompleted
@@ -240,6 +241,13 @@ class TerminalViewModel : ViewModel() {
                                 ConnectionFailure.DNS -> "Gateway hostname could not be resolved"
                                 else -> "Cannot reach the Gateway"
                             },
+                            problemRes = when (wsClient.connectionFailure) {
+                                ConnectionFailure.AUTHENTICATION -> R.string.conn_err_auth_rejected
+                                ConnectionFailure.AUTHENTICATION_TIMEOUT -> R.string.conn_err_auth_timeout
+                                ConnectionFailure.TLS -> R.string.conn_err_tls
+                                ConnectionFailure.DNS -> R.string.conn_err_dns
+                                else -> R.string.conn_err_unreachable
+                            },
                         )
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
                         _statusMessage.value = _connectionReadiness.value.summary
@@ -252,8 +260,8 @@ class TerminalViewModel : ViewModel() {
                         connectionGeneration++
                         if (connectionValidationError != null || _connectionReadiness.value.started) {
                             _connectionReadiness.value = _connectionReadiness.value.copy(
-                                started = true,
                                 problem = connectionValidationError ?: "Gateway disconnected",
+                                problemRes = if (connectionValidationError != null) null else R.string.conn_err_disconnected,
                             )
                         }
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
@@ -527,10 +535,15 @@ class TerminalViewModel : ViewModel() {
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
                         _statusMessage.value = "Bootstrap failed: ${e.message}"
                         _connectionReadiness.value = _connectionReadiness.value.failed(
-                            when (_connectionReadiness.value.step) {
+                            message = when (_connectionReadiness.value.step) {
                                 ConnectionStep.WORKSPACES -> "Gateway connected, but cmux workspaces are unavailable"
                                 ConnectionStep.GATEWAY -> "Gateway did not complete the readiness handshake"
                                 else -> "Workspace synchronization failed"
+                            },
+                            resId = when (_connectionReadiness.value.step) {
+                                ConnectionStep.WORKSPACES -> R.string.conn_err_workspaces_unavailable
+                                ConnectionStep.GATEWAY -> R.string.conn_err_handshake_incomplete
+                                else -> R.string.conn_err_sync_failed
                             }
                         )
                     }

@@ -120,4 +120,17 @@
     <string name="conn_upgrade_copied">已复制升级命令</string>
     <string name="conn_btn_copy_upgrade_cmd">复制命令</string>
 
+    <!-- Connection Error and Status Messages for i18n -->
+    <string name="conn_summary_cmux_stopped">Mac 在线 · cmux 未运行</string>
+    <string name="conn_help_cmux_stopped">Gateway 已在线，但 cmux 未运行。点击「唤醒 cmux」可远程启动。</string>
+    <string name="conn_err_auth_rejected">Gateway 拒绝了认证 Token</string>
+    <string name="conn_err_auth_timeout">Gateway 认证响应超时</string>
+    <string name="conn_err_tls">无法建立受信任的 HTTPS 连接</string>
+    <string name="conn_err_dns">无法解析 Gateway 主机名</string>
+    <string name="conn_err_unreachable">无法连接到 Gateway</string>
+    <string name="conn_err_disconnected">Gateway 连接已断开</string>
+    <string name="conn_err_workspaces_unavailable">Gateway 已连接，但 cmux 工作区不可用</string>
+    <string name="conn_err_handshake_incomplete">Gateway 未完成握手</string>
+    <string name="conn_err_sync_failed">工作区同步失败</string>
+
 </resources>

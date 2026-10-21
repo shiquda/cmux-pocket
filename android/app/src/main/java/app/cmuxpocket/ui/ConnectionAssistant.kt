@@ -34,7 +34,9 @@ fun ConnectionAssistant(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.conn_check_title), color = theme.onSurface, style = MaterialTheme.typography.titleSmall)
         val summaryText = when {
+            readiness.problemRes != null -> stringResource(readiness.problemRes)
             readiness.problem != null -> readiness.problem
+            readiness.cmuxStopped -> stringResource(R.string.conn_summary_cmux_stopped)
             readiness.ready -> stringResource(R.string.conn_summary_ready, readiness.workspaceCount, readiness.terminalCount)
             !readiness.started -> stringResource(R.string.conn_summary_untested)
             else -> "${stringResource(readiness.step.labelRes)}…"
@@ -123,14 +125,20 @@ fun ConnectionReadinessNotice(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (readiness.problem == null) return
+    if (readiness.problem == null && readiness.problemRes == null) return
+    val message = when {
+        readiness.problemRes != null -> stringResource(readiness.problemRes)
+        readiness.problem != null -> readiness.problem
+        readiness.cmuxStopped -> stringResource(R.string.conn_summary_cmux_stopped)
+        else -> readiness.summary
+    }
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-            Text(readiness.summary, fontSize = 13.sp)
+            Text(message, fontSize = 13.sp)
             TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.conn_notice_check_in_settings)) }
         }
     }

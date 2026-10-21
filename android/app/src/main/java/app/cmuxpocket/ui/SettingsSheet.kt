@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.platform.LocalContext
 import app.cmuxpocket.diagnostics.DiagnosticsManager
 import app.cmuxpocket.transport.ConnectionStatus
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import android.app.Activity
 import androidx.annotation.StringRes
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -1728,13 +1730,27 @@ fun GatewayVersionCard(
             title = { Text(stringResource(R.string.conn_upgrade_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(stringResource(R.string.conn_upgrade_body))
                     Text(
-                        MAC_GATEWAY_UPGRADE_COMMAND,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        color = theme.onSurface,
+                        stringResource(R.string.conn_upgrade_body),
+                        color = theme.onSurfaceVariant,
+                        fontSize = 13.sp,
                     )
+                    Surface(
+                        color = theme.cardBg,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, theme.cardBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                text = MAC_GATEWAY_UPGRADE_COMMAND,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                color = theme.onSurface,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {

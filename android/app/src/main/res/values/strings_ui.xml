@@ -121,4 +121,17 @@
     <string name="conn_upgrade_copied">Upgrade command copied</string>
     <string name="conn_btn_copy_upgrade_cmd">Copy command</string>
 
+    <!-- Connection Error and Status Messages for i18n -->
+    <string name="conn_summary_cmux_stopped">Mac online · cmux not running</string>
+    <string name="conn_help_cmux_stopped">The Gateway is online, but cmux is not running. Tap Wake cmux to launch it remotely.</string>
+    <string name="conn_err_auth_rejected">Gateway rejected the token</string>
+    <string name="conn_err_auth_timeout">Gateway did not answer authentication</string>
+    <string name="conn_err_tls">Could not establish a trusted HTTPS connection</string>
+    <string name="conn_err_dns">Gateway hostname could not be resolved</string>
+    <string name="conn_err_unreachable">Cannot reach the Gateway</string>
+    <string name="conn_err_disconnected">Gateway disconnected</string>
+    <string name="conn_err_workspaces_unavailable">Gateway connected, but cmux workspaces are unavailable</string>
+    <string name="conn_err_handshake_incomplete">Gateway did not complete the readiness handshake</string>
+    <string name="conn_err_sync_failed">Workspace synchronization failed</string>
+
 </resources>
