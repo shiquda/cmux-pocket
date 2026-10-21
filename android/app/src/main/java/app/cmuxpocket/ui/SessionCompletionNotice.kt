@@ -44,6 +44,20 @@ fun sessionCompletionNotice(
 }
 
 /**
+ * Label shown on the system notification so grouped completions stay distinguishable:
+ * `workspace › #N title`. Null when the workspace tree has not resolved the surface yet.
+ */
+fun sessionNotificationLabel(
+    completion: AgentSessionCompleted,
+    workspaces: List<WorkspaceInfo>,
+): String? {
+    val workspace = workspaces.firstOrNull { ws -> ws.surfaces.any { it.id == completion.surfaceId } }
+        ?: return null
+    val surface = workspace.surfaces.first { it.id == completion.surfaceId }
+    return "${workspace.name} › #${surface.tabIndex + 1} ${surface.displayTitle}"
+}
+
+/**
  * True when the finished surface is the one currently rendered. `selectedSurfaceId` may be stale
  * or absent, and the stage then falls back to the first surface, exactly like the island pill.
  */

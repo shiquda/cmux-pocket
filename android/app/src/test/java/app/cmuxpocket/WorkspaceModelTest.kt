@@ -210,4 +210,42 @@ class WorkspaceModelTest {
         assertTrue(requiresSurfDeleteConfirmation(inactiveNeedsInputSurf))
         assertFalse(requiresSurfDeleteConfirmation(inactiveIdleSurf))
     }
+
+    @Test
+    fun testLocateSurfacePrefersTheMatchingWorkspace() {
+        val workspaces = listOf(
+            WorkspaceInfo(
+                id = "ws-1",
+                key = "ws-key-1",
+                name = "cmux-main",
+                surfaces = listOf(SurfaceInfo(id = "surf-1"), SurfaceInfo(id = "surf-2"))
+            ),
+            WorkspaceInfo(
+                id = "ws-2",
+                name = "android-dev",
+                surfaces = listOf(SurfaceInfo(id = "surf-3"))
+            ),
+        )
+
+        assertEquals("ws-key-1", WorkspaceSelection.locateSurface(workspaces, "ws-1", "surf-2")?.stableKey)
+        assertEquals("ws-2", WorkspaceSelection.locateSurface(workspaces, "ws-2", "surf-3")?.stableKey)
+        assertEquals("ws-key-1", WorkspaceSelection.locateSurface(workspaces, null, "surf-1")?.stableKey)
+    }
+
+    @Test
+    fun testLocateSurfaceFallsBackWhenTheWorkspaceIdIsStale() {
+        val workspaces = listOf(
+            WorkspaceInfo(
+                id = "ws-android-1",
+                key = "cmux-window-a",
+                name = "android-dev",
+                surfaces = listOf(SurfaceInfo(id = "surf-9"))
+            )
+        )
+
+        // A cmux window id that never reached the mobile tree must not swallow the tap.
+        assertEquals("cmux-window-a", WorkspaceSelection.locateSurface(workspaces, "cmux-window-a", "surf-9")?.stableKey)
+        assertEquals("cmux-window-a", WorkspaceSelection.locateSurface(workspaces, "window-unknown", "surf-9")?.stableKey)
+        assertNull(WorkspaceSelection.locateSurface(workspaces, "ws-android-1", "surf-missing"))
+    }
 }

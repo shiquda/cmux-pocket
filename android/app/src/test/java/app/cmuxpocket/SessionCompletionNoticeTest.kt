@@ -5,6 +5,7 @@ import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.ui.isCurrentSession
 import app.cmuxpocket.ui.sessionCompletionNotice
+import app.cmuxpocket.ui.sessionNotificationLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -58,6 +59,17 @@ class SessionCompletionNoticeTest {
 
         assertEquals("cmux", notice.workspaceName)
         assertEquals("evt-9", notice.key)
+    }
+
+    @Test
+    fun notificationLabelNamesWorkspaceAndTab() {
+        val completion = AgentSessionCompleted(surfaceId = "surface-b", workspaceId = "ws-1")
+        assertEquals(
+            "backend › #2 logs",
+            sessionNotificationLabel(completion, listOf(backend))
+        )
+        assertNull(sessionNotificationLabel(completion, emptyList()))
+        assertNull(sessionNotificationLabel(AgentSessionCompleted(surfaceId = "surface-x"), listOf(backend)))
     }
 
     @Test

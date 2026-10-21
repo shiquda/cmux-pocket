@@ -64,7 +64,11 @@ class MainActivity : ComponentActivity() {
                     // The foreground UI answers completions with a haptic pulse or an in-app
                     // capsule; a system notification on top of that would double the alert.
                     if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@collect
-                    AgentCompletionNotifications.show(this@MainActivity, completion)
+                    AgentCompletionNotifications.show(
+                        this@MainActivity,
+                        completion,
+                        sessionNotificationLabel(completion, viewModel.workspaces.value)
+                    )
                 }
             }
         }
@@ -91,10 +95,9 @@ class MainActivity : ComponentActivity() {
 
     private fun handleNotificationIntent(intent: Intent?) {
         val surfaceId = intent?.getStringExtra(AgentCompletionNotifications.extraSurfaceId) ?: return
-        viewModel.navigateToSurface(
-            intent.getStringExtra(AgentCompletionNotifications.extraWorkspaceId),
-            surfaceId
-        )
+        val workspaceId = intent.getStringExtra(AgentCompletionNotifications.extraWorkspaceId)
+        android.util.Log.d("CmuxPocket", "Notification tap → workspace=$workspaceId surface=$surfaceId")
+        viewModel.navigateToSurface(workspaceId, surfaceId)
         intent.removeExtra(AgentCompletionNotifications.extraSurfaceId)
         intent.removeExtra(AgentCompletionNotifications.extraWorkspaceId)
     }
