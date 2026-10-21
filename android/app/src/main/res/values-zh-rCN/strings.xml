@@ -167,7 +167,13 @@
 
     <!-- Settings · Storage -->
     <string name="settings_export_profiles">导出 Host 配置与预设</string>
-    <string name="settings_export_profiles_desc">备份全部 %1$d 个 Profiles（JSON 复制到剪贴板）</string>
+    <string name="settings_export_profiles_desc">选择复制到剪贴板的 JSON 是否携带访问密钥（共 %1$d 个 Profiles）</string>
+    <string name="settings_export_dialog_title">导出 Host 配置</string>
+    <string name="settings_export_dialog_body">将以 JSON 复制 %1$d 个配置到剪贴板。只有选择“携带密钥”时才会包含 Gateway 访问密钥；不携带时可在导入后补齐。</string>
+    <string name="settings_export_without_credentials">不携带密钥复制</string>
+    <string name="settings_export_with_credentials">携带密钥复制</string>
+    <string name="settings_export_dialog_cancel">取消</string>
+    <string name="settings_exported_with_credentials_toast">已将 %1$d 个 Host Profiles（含访问密钥）复制到剪贴板</string>
     <string name="settings_import_profiles">导入配置（从剪贴板）</string>
     <string name="settings_import_profiles_desc">从剪贴板读取 JSON 并合并入现有配置</string>
     <string name="settings_clear_scrollback">清空终端历史回滚缓冲区</string>

@@ -14,6 +14,8 @@ import android.os.Build
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
@@ -66,6 +68,11 @@ class MainActivity : ComponentActivity() {
         }
         handleDeepLinkIntent(intent)
         handleNotificationIntent(intent)
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                viewModel.onAppForegrounded()
+            }
+        })
         setContent {
             CmuxAppRoot(viewModel = viewModel)
         }

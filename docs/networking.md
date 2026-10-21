@@ -157,7 +157,7 @@ tailscale status
 tailscale serve status
 ```
 
-Tailscale Serve keeps its background configuration, but the Mac, cmux, VPN, and Gateway must remain running. This version continues to use the existing manually entered Gateway token; QR pairing and device-specific credentials are separate work.
+Tailscale Serve keeps its background configuration, but the Mac, cmux, VPN, and Gateway must remain running. QR pairing (`cmux-pocket qr`) transfers the Gateway endpoint, TLS state, and token in one scan; see §3.
 
 ### LAN with a TLS reverse proxy
 

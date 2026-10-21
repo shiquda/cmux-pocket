@@ -104,7 +104,7 @@ A persistent bottom bar provides essential developer keys missing from mobile so
 - **Connection Profiles**: Manage multiple hosts (Tailscale, LAN, USB Reverse) with encrypted credential storage in Android Keystore.
 - **Gateway Versions & Upgrades**: The Connection page reports Gateway, app, and cmux protocol versions, flags protocol mismatches or a Gateway that lacks remote wake, and offers a one-tap copy of the Mac upgrade command plus a direct latest-APK link.
 - **Live Diagnostics**: Built-in 500-frame circular buffer captures WebSocket handshakes, frame timings, and RPC payloads. Export redacted JSON logs directly to clipboard for troubleshooting.
-- **Data & Backup**: Export and import host profiles via clipboard JSON without risking credential leakage.
+- **Data & Backup**: Export and import host profiles via clipboard JSON. Export asks whether to include the Gateway access keys: without them the JSON carries endpoints only, and you can fill a key in after importing.
 - **In-App Updates**: Check for new releases directly against GitHub Releases and download updated APKs in one tap.
 
 ---

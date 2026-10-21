@@ -118,6 +118,7 @@ class TerminalViewModel : ViewModel() {
     private var lastConnectionTarget: ConnectionTarget? = null
     private var reconnectJob: Job? = null
     private var reconnectAttempt = 0
+    private var foregroundProbeJob: Job? = null
     private var manualDisconnect = true
     private var connectionValidationError: String? = null
     private var pendingNotificationWorkspaceId: String? = null
@@ -356,6 +357,51 @@ class TerminalViewModel : ViewModel() {
             }
             reconnectJob = null
         }
+    }
+
+    /**
+     * Called when the activity returns to the foreground. A backgrounded process can keep a dead
+     * socket behind a stale CONNECTED status, and a retry scheduled while backgrounded can still
+     * be waiting for its backoff delay (or already be paused). Probe the live socket and recover
+     * immediately instead of leaving the terminal on a stale screen.
+     */
+    fun onAppForegrounded() {
+        val target = lastConnectionTarget ?: return
+        if (manualDisconnect) return
+        when (wsClient.statusFlow.value) {
+            ConnectionStatus.CONNECTED -> verifyConnectionAfterForeground(target)
+            ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Unit
+            else -> reconnectNow(target)
+        }
+    }
+
+    private fun verifyConnectionAfterForeground(target: ConnectionTarget) {
+        if (foregroundProbeJob?.isActive == true) return
+        foregroundProbeJob = viewModelScope.launch {
+            try {
+                wsClient.callRpc("mobile.host.status")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.i(tag, "Foreground liveness probe failed; reconnecting", e)
+                if (!manualDisconnect &&
+                    lastConnectionTarget == target &&
+                    wsClient.statusFlow.value == ConnectionStatus.CONNECTED
+                ) {
+                    reconnectNow(target)
+                }
+            }
+        }
+    }
+
+    /** Replaces a stale attempt with a fresh connection now, instead of waiting out a backoff. */
+    private fun reconnectNow(target: ConnectionTarget) {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        reconnectAttempt = 0
+        if (manualDisconnect || lastConnectionTarget != target) return
+        wsClient.discardSocket()
+        connectTarget(target)
     }
 
     fun scrollTerminal(deltaLines: Double) {
