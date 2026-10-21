@@ -114,6 +114,11 @@ disabled merely because the host cannot resize — tapping then shows the
 unsupported explanation. Failed applies and unconfirmed clears surface a toast
 instead of only changing internal state.
 
+Fit-width belongs to desktop layout. While the phone layout is active its
+control is hidden and the local fit flag is cleared: the phone host width is
+already derived from the chosen font, so fitting again only moved the rendered
+font by a rounding step (for example 13.0 ↔ 13.3 sp).
+
 ## Verified behaviour
 
 Against cmux 0.64.25 on macOS with a live surface:

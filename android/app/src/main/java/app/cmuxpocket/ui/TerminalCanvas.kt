@@ -596,6 +596,16 @@ fun TerminalCanvas(
         currentOnPhoneWidthMetrics(surfaceId, widthMetrics, autoRefitPaused)
     }
 
+    // The phone layout already derives its host width from the chosen font, so
+    // fit-width would only nudge that font by a rounding step. Drop the local
+    // fit before hiding its control, otherwise A-/A+ would stay locked.
+    LaunchedEffect(phoneWidth?.enabled) {
+        if (phoneWidth?.enabled == true && displayPreference.fitWidth) {
+            onDisplayPreferenceChange(
+                displayPreference.copy(fitWidth = false, panX = 0f, panY = null, panAnchorRow = null)
+            )
+        }
+    }
     // A grid geometry change invalidates frozen selection coordinates and pan
     // anchors; keep the user at live output instead of pointing at old cells.
     LaunchedEffect(surfaceId, screenState.columns, screenState.rows) {
@@ -1183,26 +1193,28 @@ private fun TerminalTextControls(
                         )
                     }
                 }
-                IconButton(
-                    onClick = {
-                        onChange(
-                            preference.copy(
-                                fitWidth = !preference.fitWidth,
-                                panX = 0f,
-                                panY = null,
-                                panAnchorRow = null
+                if (!phoneWidthActive) {
+                    IconButton(
+                        onClick = {
+                            onChange(
+                                preference.copy(
+                                    fitWidth = !preference.fitWidth,
+                                    panX = 0f,
+                                    panY = null,
+                                    panAnchorRow = null
+                                )
                             )
+                        },
+                        enabled = enabled,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.FitScreen,
+                            contentDescription = fitWidthLabel,
+                            tint = if (preference.fitWidth) theme.primary else theme.onContainer,
+                            modifier = Modifier.size(20.dp)
                         )
-                    },
-                    enabled = enabled,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        Icons.Default.FitScreen,
-                        contentDescription = fitWidthLabel,
-                        tint = if (preference.fitWidth) theme.primary else theme.onContainer,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    }
                 }
             }
         }
