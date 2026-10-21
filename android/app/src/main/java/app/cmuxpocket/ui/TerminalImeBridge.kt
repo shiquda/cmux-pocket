@@ -20,12 +20,13 @@ class TerminalInputView(
     context: Context
 ) : EditText(context) {
 
-    var onInputText: (String) -> Unit = {}
-    var onDelete: () -> Unit = {}
-    var onEnter: () -> Unit = {}
+    var onInputText: (String?, String) -> Unit = { _, _ -> }
+    var onDelete: (String?) -> Unit = {}
+    var onEnter: (String?) -> Unit = {}
 
     private val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
     private var pendingKeyboardShow = false
+    private var inputSurfaceId: String? = null
 
     init {
         isFocusable = true
@@ -65,7 +66,8 @@ class TerminalInputView(
         }
     }
 
-    fun requestKeyboard() {
+    fun requestKeyboard(surfaceId: String?) {
+        inputSurfaceId = surfaceId
         pendingKeyboardShow = true
 
         if (!isAttachedToWindow) return
@@ -103,6 +105,12 @@ class TerminalInputView(
             ?: imm.hideSoftInputFromWindow(windowToken, 0)
     }
 
+    fun clearInputTarget() {
+        inputSurfaceId = null
+        hideKeyboard()
+        clearLocalBuffer()
+    }
+
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
         if (hasWindowFocus && pendingKeyboardShow) {
@@ -124,7 +132,7 @@ class TerminalInputView(
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
                 val ok = super.commitText(text, newCursorPosition)
                 if (ok && text.isNotEmpty()) {
-                    onInputText(text.toString())
+                    onInputText(inputSurfaceId, text.toString())
                     clearLocalBuffer()
                 }
                 return ok
@@ -145,7 +153,7 @@ class TerminalInputView(
 
                 val ok = super.finishComposingText()
                 if (ok && !pending.isNullOrEmpty()) {
-                    onInputText(pending)
+                    onInputText(inputSurfaceId, pending)
                     clearLocalBuffer()
                 }
                 return ok
@@ -159,7 +167,7 @@ class TerminalInputView(
 
                 if (beforeLength > 0) {
                     repeat(beforeLength.coerceAtMost(64)) {
-                        onDelete()
+                        onDelete(inputSurfaceId)
                     }
                     return true
                 }
@@ -174,7 +182,7 @@ class TerminalInputView(
 
                 if (beforeLength > 0) {
                     repeat(beforeLength.coerceAtMost(64)) {
-                        onDelete()
+                        onDelete(inputSurfaceId)
                     }
                     return true
                 }
@@ -193,18 +201,18 @@ class TerminalInputView(
 
                 when (event.keyCode) {
                     KeyEvent.KEYCODE_DEL -> {
-                        onDelete()
+                        onDelete(inputSurfaceId)
                         return true
                     }
                     KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                        onEnter()
+                        onEnter(inputSurfaceId)
                         return true
                     }
                 }
 
                 val codePoint = event.unicodeChar
                 if (codePoint > 0 && Character.isValidCodePoint(codePoint)) {
-                    onInputText(String(Character.toChars(codePoint)))
+                    onInputText(inputSurfaceId, String(Character.toChars(codePoint)))
                     return true
                 }
 
@@ -216,7 +224,7 @@ class TerminalInputView(
                     EditorInfo.IME_ACTION_DONE,
                     EditorInfo.IME_ACTION_GO,
                     EditorInfo.IME_ACTION_SEND -> {
-                        onEnter()
+                        onEnter(inputSurfaceId)
                         true
                     }
                     else -> super.performEditorAction(editorAction)
@@ -235,9 +243,9 @@ class TerminalInputView(
 
 @Composable
 fun TerminalImeBridge(
-    onSendText: (String) -> Unit,
-    onDelete: () -> Unit,
-    onEnter: () -> Unit,
+    onSendText: (String?, String) -> Unit,
+    onDelete: (String?) -> Unit,
+    onEnter: (String?) -> Unit,
     onViewReady: (TerminalInputView?) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -260,16 +268,16 @@ fun TerminalImeBridge(
         factory = { context ->
             TerminalInputView(context).also { view ->
                 holder[0] = view
-                view.onInputText = { latestSendText(it) }
-                view.onDelete = { latestDelete() }
-                view.onEnter = { latestEnter() }
+                view.onInputText = { surfaceId, text -> latestSendText(surfaceId, text) }
+                view.onDelete = { surfaceId -> latestDelete(surfaceId) }
+                view.onEnter = { surfaceId -> latestEnter(surfaceId) }
                 latestViewReady(view)
             }
         },
         update = { view ->
-            view.onInputText = { latestSendText(it) }
-            view.onDelete = { latestDelete() }
-            view.onEnter = { latestEnter() }
+            view.onInputText = { surfaceId, text -> latestSendText(surfaceId, text) }
+            view.onDelete = { surfaceId -> latestDelete(surfaceId) }
+            view.onEnter = { surfaceId -> latestEnter(surfaceId) }
         },
         modifier = modifier.size(1.dp)
     )

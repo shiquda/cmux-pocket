@@ -18,6 +18,7 @@ import android.view.inputmethod.InputMethodManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.lifecycleScope
@@ -433,6 +434,22 @@ fun CmuxApp(
     var completionQueue by remember { mutableStateOf<List<SessionCompletionNotice>>(emptyList()) }
     val activeCompletion = completionQueue.firstOrNull()
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // IME text is bound to the tab that opened the keyboard: drop the target when the
+    // user switches tabs or backgrounds the app so a late commit cannot land elsewhere.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                terminalInputView?.clearInputTarget()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(selectedSurfaceId) {
+        terminalInputView?.clearInputTarget()
+    }
     val currentSurfaces by rememberUpdatedState(activeSurfaces)
     val currentWorkspaces by rememberUpdatedState(workspaces)
     val currentSelectedSurfaceId by rememberUpdatedState(selectedSurfaceId)
@@ -464,7 +481,9 @@ fun CmuxApp(
     // Stable callbacks for the accessory bar: it sits inside the scope that recomposes on every
     // rendered terminal frame, so lambdas allocated per composition would drag all 14 keys
     // through recomposition on each frame.
-    val accessorySendKey: (String) -> Unit = remember { { key -> viewModel.sendInput(key) } }
+    val accessorySendKey: (String) -> Unit = remember { { key ->
+        viewModel.sendInput(key, TerminalInputKind.KEY)
+    } }
     val accessoryOpenKeyboardPanel: () -> Unit = remember { { showKeyboardPanel = true } }
     val accessoryOpenSettings: () -> Unit = remember { { showSettingsDialog = true } }
     val settingsOnDismiss: () -> Unit = remember { { showSettingsDialog = false } }
@@ -541,11 +560,11 @@ fun CmuxApp(
                             onDisplayPreferenceChange = changeTerminalDisplay,
                             themeHex = selectedThemeHex,
                             onTapCanvas = {
-                                terminalInputView?.requestKeyboard()
+                                terminalInputView?.requestKeyboard(viewModel.selectedSurfaceId.value)
                             },
                             onTerminalScroll = viewModel::scrollTerminal,
                             onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
-                            onSendKey = { key -> viewModel.sendInput(key) },
+                            onSendKey = { key -> viewModel.sendInput(key, TerminalInputKind.KEY) },
                             onClearScreen = { viewModel.clearScrollback() },
                             renderEnabled = !showSettingsDialog
                         )
@@ -613,11 +632,11 @@ fun CmuxApp(
                         onDisplayPreferenceChange = changeTerminalDisplay,
                         themeHex = selectedThemeHex,
                         onTapCanvas = {
-                            terminalInputView?.requestKeyboard()
+                            terminalInputView?.requestKeyboard(viewModel.selectedSurfaceId.value)
                         },
                         onTerminalScroll = viewModel::scrollTerminal,
                         onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
-                        onSendKey = { key -> viewModel.sendInput(key) },
+                        onSendKey = { key -> viewModel.sendInput(key, TerminalInputKind.KEY) },
                         onClearScreen = { viewModel.clearScrollback() },
                         renderEnabled = !showSettingsDialog
                     )
@@ -650,9 +669,15 @@ fun CmuxApp(
 
         // Single, stable root-level TerminalImeBridge instance
         TerminalImeBridge(
-            onSendText = { text -> viewModel.sendInput(text) },
-            onDelete = { viewModel.sendInput("\u007f") },
-            onEnter = { viewModel.sendInput("\n") },
+            onSendText = { surfaceId, text ->
+                viewModel.sendInputToSurface(surfaceId, text, TerminalInputKind.TEXT)
+            },
+            onDelete = { surfaceId ->
+                viewModel.sendInputToSurface(surfaceId, "\u007f", TerminalInputKind.KEY)
+            },
+            onEnter = { surfaceId ->
+                viewModel.sendInputToSurface(surfaceId, "\n", TerminalInputKind.KEY)
+            },
             onViewReady = { terminalInputView = it },
             modifier = Modifier.size(1.dp)
         )
@@ -660,7 +685,7 @@ fun CmuxApp(
         // Shared Sheets & Dialogs
         if (showKeyboardPanel) {
             ComputerKeyboardPanel(
-                onSendKey = { key -> viewModel.sendInput(key) },
+                onSendKey = { key -> viewModel.sendInput(key, TerminalInputKind.KEY) },
                 onDismissRequest = { showKeyboardPanel = false },
                 isLandscape = isLandscape
             )

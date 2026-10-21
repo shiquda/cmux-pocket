@@ -309,10 +309,11 @@ class CmuxWebSocketClient(
         return json.decodeFromJsonElement(WakeCmuxResponse.serializer(), result)
     }
 
-    suspend fun sendTerminalInput(surfaceId: String, text: String) {
+    suspend fun sendTerminalInput(surfaceId: String, text: String, inputKind: String = "text") {
         val params = buildJsonObject {
             put("surface_id", surfaceId)
             put("text", text)
+            put("input_kind", inputKind)
             put("client_id", "android-client")
         }
         callRpc("mobile.terminal.input", params)

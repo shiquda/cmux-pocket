@@ -23,13 +23,19 @@ use crate::args::{
     new_workspace_args, ping_args, read_screen_args, rename_surface_args, rename_workspace_args,
     rpc_replay_args, rpc_scroll_args, select_workspace_args, send_input_args, tree_args,
 };
-use crate::backend::CmuxBackend;
+use crate::backend::{CmuxBackend, CmuxCapabilities, TerminalInputKind};
 use crate::error::CmuxError;
 use crate::events::CmuxEventStream;
 use crate::tree_parser::{extract_surface_id, parse_workspace_tree};
 
 /// Default timeout for short cmux CLI commands (e.g. ping, tree, send).
 pub const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// How long probed CLI capabilities stay trusted before another probe runs.
+///
+/// cmux upgrades replace the CLI in place while the Gateway keeps running, so
+/// a positive cache must expire instead of assuming the startup state forever.
+const CAPABILITY_TTL: Duration = Duration::from_secs(300);
 
 /// Connects to a real live cmux instance via CLI subprocess invocations.
 #[derive(Debug, Clone)]
@@ -39,6 +45,7 @@ pub struct LiveCmuxBackend {
     state_seqs: Arc<Mutex<HashMap<String, u64>>>,
     render_epochs: Arc<Mutex<HashMap<String, String>>>,
     epoch_counter: Arc<AtomicU64>,
+    capabilities: Arc<tokio::sync::Mutex<Option<(std::time::Instant, CmuxCapabilities)>>>,
 }
 
 impl Default for LiveCmuxBackend {
@@ -56,6 +63,7 @@ impl LiveCmuxBackend {
             state_seqs: Arc::new(Mutex::new(HashMap::new())),
             render_epochs: Arc::new(Mutex::new(HashMap::new())),
             epoch_counter: Arc::new(AtomicU64::new(1)),
+            capabilities: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 
@@ -67,6 +75,7 @@ impl LiveCmuxBackend {
             state_seqs: Arc::new(Mutex::new(HashMap::new())),
             render_epochs: Arc::new(Mutex::new(HashMap::new())),
             epoch_counter: Arc::new(AtomicU64::new(1)),
+            capabilities: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 
@@ -78,12 +87,36 @@ impl LiveCmuxBackend {
             state_seqs: Arc::new(Mutex::new(HashMap::new())),
             render_epochs: Arc::new(Mutex::new(HashMap::new())),
             epoch_counter: Arc::new(AtomicU64::new(1)),
+            capabilities: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 
     /// Returns the configured cmux binary path.
     pub fn cmux_path(&self) -> &Path {
         &self.cmux_path
+    }
+
+    /// Returns the input flags supported by the installed cmux binary.
+    ///
+    /// Probes `cmux send --help` and `cmux send-key --help` (no side effects)
+    /// and caches the result for [`CAPABILITY_TTL`]. A failed probe yields the
+    /// legacy flagless profile, which is always safe to send.
+    pub async fn capabilities(&self) -> CmuxCapabilities {
+        let mut cached = self.capabilities.lock().await;
+        if let Some((probed_at, caps)) = *cached {
+            if probed_at.elapsed() < CAPABILITY_TTL {
+                return caps;
+            }
+        }
+        let send_help = self.run_cmux(&["send", "--help"]).await.unwrap_or_default();
+        let send_key_help = self
+            .run_cmux(&["send-key", "--help"])
+            .await
+            .unwrap_or_default();
+        let caps = CmuxCapabilities::from_help(&send_help, &send_key_help);
+        debug!(?caps, "probed cmux CLI input capabilities");
+        *cached = Some((std::time::Instant::now(), caps));
+        caps
     }
 
     /// Returns the next monotonic state sequence number for a surface.
@@ -121,11 +154,9 @@ impl LiveCmuxBackend {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let child_future = cmd.output();
-
-        let output = match timeout(self.default_timeout, child_future).await {
-            Ok(Ok(out)) => out,
-            Ok(Err(e)) => {
+        let mut child = match cmd.spawn() {
+            Ok(child) => child,
+            Err(e) => {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     return Err(CmuxError::unavailable(format!(
                         "cmux executable not found at {}",
@@ -136,16 +167,52 @@ impl LiveCmuxBackend {
                     "failed to execute cmux {op}: {e}"
                 )));
             }
+        };
+
+        // Draining both pipes concurrently prevents a verbose cmux response
+        // from blocking the child before it can exit.
+        let stdout = child.stdout.take().expect("stdout was piped");
+        let stderr = child.stderr.take().expect("stderr was piped");
+        let stdout_task = tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
+            let mut reader = stdout;
+            let mut bytes = Vec::new();
+            reader.read_to_end(&mut bytes).await.map(|_| bytes)
+        });
+        let stderr_task = tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
+            let mut reader = stderr;
+            let mut bytes = Vec::new();
+            reader.read_to_end(&mut bytes).await.map(|_| bytes)
+        });
+
+        let status = match timeout(self.default_timeout, child.wait()).await {
+            Ok(Ok(status)) => status,
+            Ok(Err(e)) => return Err(CmuxError::Io(e)),
             Err(_) => {
+                // A dropped `Command::output` future leaves its child running.
+                // Kill and reap it before returning so a timed-out input cannot
+                // be delivered later by a stray local cmux process.
+                let _ = child.start_kill();
+                let _ = child.wait().await;
+                let _ = stdout_task.await;
+                let _ = stderr_task.await;
                 return Err(CmuxError::timeout(op, self.default_timeout));
             }
         };
 
-        if !output.status.success() {
-            let code = output.status.code();
+        let stdout = stdout_task
+            .await
+            .map_err(|e| CmuxError::unavailable(format!("failed to collect cmux stdout: {e}")))??;
+        let stderr = stderr_task
+            .await
+            .map_err(|e| CmuxError::unavailable(format!("failed to collect cmux stderr: {e}")))??;
+
+        if !status.success() {
+            let code = status.code();
             // Stderr is logged at debug level for troubleshooting, but NOT included in CmuxError
             // to ensure no private/sensitive text leaks into user-visible error strings.
-            let stderr_sample = String::from_utf8_lossy(&output.stderr);
+            let stderr_sample = String::from_utf8_lossy(&stderr);
             warn!(
                 op = %op,
                 exit_code = ?code,
@@ -156,7 +223,7 @@ impl LiveCmuxBackend {
             return Err(CmuxError::non_zero_exit(op, code));
         }
 
-        let stdout_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let stdout_str = String::from_utf8_lossy(&stdout).trim().to_string();
         Ok(stdout_str)
     }
 }
@@ -292,7 +359,19 @@ impl CmuxBackend for LiveCmuxBackend {
     }
 
     async fn send_input(&self, surface_id: &str, text: &str) -> Result<(), CmuxError> {
-        self.run_cmux(&send_input_args(surface_id, text)).await?;
+        self.send_input_with_kind(surface_id, text, TerminalInputKind::Text)
+            .await
+    }
+
+    async fn send_input_with_kind(
+        &self,
+        surface_id: &str,
+        text: &str,
+        kind: TerminalInputKind,
+    ) -> Result<(), CmuxError> {
+        let capabilities = self.capabilities().await;
+        self.run_cmux(&send_input_args(surface_id, text, kind, capabilities))
+            .await?;
         Ok(())
     }
 
