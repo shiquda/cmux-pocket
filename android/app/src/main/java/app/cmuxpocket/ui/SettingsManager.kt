@@ -32,6 +32,25 @@ class SettingsManager(context: Context) {
         get() = prefs.getFloat(KEY_FONT_SIZE, 14.5f)
         set(value) = prefs.edit().putFloat(KEY_FONT_SIZE, value).apply()
 
+    /** Global switch for the floating (picture-in-picture) terminal window. */
+    var floatingWindowEnabled: Boolean
+        get() = prefs.getBoolean(KEY_FLOATING_WINDOW_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_FLOATING_WINDOW_ENABLED, value).apply()
+
+    /** When enabled, leaving the app automatically opens the floating window. */
+    var floatingWindowAutoEnter: Boolean
+        get() = prefs.getBoolean(KEY_FLOATING_WINDOW_AUTO_ENTER, true)
+        set(value) = prefs.edit().putBoolean(KEY_FLOATING_WINDOW_AUTO_ENTER, value).apply()
+
+    var pipSizePreset: PipSizePreset
+        get() = PipSizePreset.fromStorage(prefs.getString(KEY_PIP_SIZE_PRESET, null))
+        set(value) = prefs.edit().putString(KEY_PIP_SIZE_PRESET, value.name).apply()
+
+    var pipFontSizeSp: Float
+        get() = prefs.getFloat(KEY_PIP_FONT_SIZE, DEFAULT_PIP_FONT_SIZE)
+            .coerceIn(MIN_PIP_FONT_SIZE, MAX_PIP_FONT_SIZE)
+        set(value) = prefs.edit().putFloat(KEY_PIP_FONT_SIZE, value.coerceIn(MIN_PIP_FONT_SIZE, MAX_PIP_FONT_SIZE)).apply()
+
     var themeMode: ThemeMode
         get() {
             val name = prefs.getString(KEY_THEME_MODE, ThemeMode.DARK.name) ?: ThemeMode.DARK.name
@@ -187,6 +206,10 @@ class SettingsManager(context: Context) {
     }
 
     companion object {
+        const val MIN_PIP_FONT_SIZE = 8f
+        const val MAX_PIP_FONT_SIZE = 20f
+        const val DEFAULT_PIP_FONT_SIZE = 11f
+
         private const val LEGACY_PREFS_NAME = "cmux_preferences"
         private const val SECURE_PREFS_NAME = "cmux_preferences_secure"
         private const val KEY_HOST = "host"
@@ -201,6 +224,10 @@ class SettingsManager(context: Context) {
         private const val KEY_DIAGNOSTICS_ENABLED = "diagnostics_enabled"
         private const val KEY_VIBRATE_ON_SESSION_COMPLETE = "vibrate_on_session_complete"
         private const val KEY_APP_LANGUAGE = "app_language"
+        private const val KEY_FLOATING_WINDOW_ENABLED = "floating_window_enabled"
+        private const val KEY_FLOATING_WINDOW_AUTO_ENTER = "floating_window_auto_enter"
+        private const val KEY_PIP_SIZE_PRESET = "pip_size_preset"
+        private const val KEY_PIP_FONT_SIZE = "pip_font_size_sp"
     }
 
         private fun createEncryptedPreferences(context: Context): SharedPreferences {

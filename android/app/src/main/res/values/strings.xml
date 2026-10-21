@@ -89,6 +89,21 @@
     <string name="settings_section_diagnostics">Diagnostics</string>
     <string name="settings_section_storage">Storage</string>
     <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_section_floating_window">Floating window</string>
+
+    <!-- Settings · Floating window -->
+    <string name="settings_floating_window_title">Floating window</string>
+    <string name="settings_floating_window_desc">Show the latest terminal output in a system picture-in-picture window.</string>
+    <string name="settings_floating_window_auto">Auto-open when leaving the app</string>
+    <string name="settings_floating_window_auto_desc_on">Like YouTube: the window opens when the app goes to the background.</string>
+    <string name="settings_floating_window_auto_desc_off">Use the floating-window button in the accessory bar instead.</string>
+    <string name="settings_floating_window_shape">Window shape</string>
+    <string name="settings_floating_window_font">Floating window font size</string>
+    <string name="settings_floating_window_preview">Preview</string>
+    <string name="floating_window_open">Open floating window</string>
+    <string name="floating_window_no_surface">Open a terminal tab first</string>
+    <string name="floating_window_size_action">Size</string>
+    <string name="floating_window_size_action_desc">Switch floating window size (next: %1$s)</string>
 
     <!-- Settings · Notifications -->
     <string name="settings_notif_vibrate">Vibrate when the session on screen finishes</string>

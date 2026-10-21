@@ -4,13 +4,21 @@ import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.transport.ConnectionStatus
 import app.cmuxpocket.ui.*
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
 import android.content.res.Configuration
 import android.content.Context
 import android.os.Bundle
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.os.Build
+import android.util.Log
+import android.util.Rational
+import android.view.inputmethod.InputMethodManager
+import java.lang.ref.WeakReference
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -39,6 +47,10 @@ import androidx.compose.ui.unit.dp
 class MainActivity : ComponentActivity() {
 
     private val viewModel: TerminalViewModel by viewModels()
+    private val settingsManager by lazy { SettingsManager(this) }
+    private var inPictureInPicture by mutableStateOf(false)
+    private var floatingWindowEnabled = false
+    private var floatingWindowAutoEnter = true
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
@@ -54,6 +66,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pipActivity = WeakReference(this)
         ContextCompat.startForegroundService(
             this,
             Intent(this, ConnectionKeepAliveService::class.java)
@@ -76,13 +89,133 @@ class MainActivity : ComponentActivity() {
         }
         handleDeepLinkIntent(intent)
         handleNotificationIntent(intent)
+        syncFloatingWindowSettings()
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                viewModel.activeSurface.collect { updatePictureInPictureParams() }
+            }
+        }
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 viewModel.onAppForegrounded()
             }
         })
         setContent {
-            CmuxAppRoot(viewModel = viewModel)
+            CmuxAppRoot(
+                viewModel = viewModel,
+                isInPictureInPicture = inPictureInPicture,
+                onEnterFloatingWindow = ::enterFloatingWindow,
+                onFloatingWindowSettingsChanged = ::onFloatingWindowSettingsChanged
+            )
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        syncFloatingWindowSettings()
+        updatePictureInPictureParams()
+    }
+
+    override fun onUserLeaveHint() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+            floatingWindowEnabled && floatingWindowAutoEnter
+        ) {
+            enterFloatingWindow()
+        }
+        super.onUserLeaveHint()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPictureInPicture = isInPictureInPictureMode
+    }
+
+    override fun onDestroy() {
+        if (pipActivity?.get() === this) {
+            pipActivity = null
+        }
+        super.onDestroy()
+    }
+
+    private fun syncFloatingWindowSettings() {
+        floatingWindowEnabled = settingsManager.floatingWindowEnabled
+        floatingWindowAutoEnter = settingsManager.floatingWindowAutoEnter
+    }
+
+    private fun onFloatingWindowSettingsChanged() {
+        syncFloatingWindowSettings()
+        updatePictureInPictureParams()
+    }
+
+    private fun enterFloatingWindow() {
+        if (isInPictureInPictureMode) return
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
+        if (viewModel.activeSurface.value == null) {
+            Toast.makeText(this, getString(R.string.floating_window_no_surface), Toast.LENGTH_SHORT).show()
+            return
+        }
+        getSystemService(InputMethodManager::class.java)
+            ?.hideSoftInputFromWindow(window.decorView.windowToken, 0)
+        try {
+            enterPictureInPictureMode(buildPictureInPictureParams())
+        } catch (error: IllegalStateException) {
+            Log.w("MainActivity", "Unable to enter picture-in-picture", error)
+        }
+    }
+
+    private fun buildPictureInPictureParams(): PictureInPictureParams {
+        val preset = settingsManager.pipSizePreset
+        val builder = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(preset.aspectWidth, preset.aspectHeight))
+            .setActions(listOf(buildPipSizeAction(preset)))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(
+                floatingWindowEnabled &&
+                    floatingWindowAutoEnter &&
+                    viewModel.activeSurface.value != null
+            )
+            builder.setSeamlessResizeEnabled(true)
+        }
+        return builder.build()
+    }
+
+    private fun buildPipSizeAction(current: PipSizePreset): RemoteAction {
+        val next = current.next()
+        val intent = Intent(this, PipActionReceiver::class.java)
+            .setAction(PipActionReceiver.ACTION_CYCLE_SIZE)
+        val pendingIntent = PendingIntent.getBroadcast(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return RemoteAction(
+            Icon.createWithResource(this, R.drawable.ic_pip_size),
+            getString(R.string.floating_window_size_action),
+            getString(R.string.floating_window_size_action_desc, next.label),
+            pendingIntent
+        )
+    }
+
+    private fun updatePictureInPictureParams() {
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
+        runCatching { setPictureInPictureParams(buildPictureInPictureParams()) }
+            .onFailure { Log.w("MainActivity", "Unable to update picture-in-picture params", it) }
+    }
+
+    internal fun onPipSizeChanged() {
+        updatePictureInPictureParams()
+    }
+
+    companion object {
+        private var pipActivity: WeakReference<MainActivity>? = null
+
+        fun notifyPipSizeChanged() {
+            val activity = pipActivity?.get() ?: return
+            activity.runOnUiThread { activity.onPipSizeChanged() }
         }
     }
     override fun onNewIntent(intent: Intent) {
@@ -119,7 +252,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun CmuxAppRoot(viewModel: TerminalViewModel) {
+fun CmuxAppRoot(
+    viewModel: TerminalViewModel,
+    isInPictureInPicture: Boolean,
+    onEnterFloatingWindow: () -> Unit,
+    onFloatingWindowSettingsChanged: () -> Unit
+) {
     val context = LocalContext.current
     val settingsManager = remember { CmuxPocketApp.settingsManager }
     val pendingImportUri by viewModel.pendingImportUri.collectAsState()
@@ -146,7 +284,16 @@ fun CmuxAppRoot(viewModel: TerminalViewModel) {
     var portInput by remember { mutableStateOf(settingsManager.port.toString()) }
     var tokenInput by remember { mutableStateOf(settingsManager.token) }
     var fontSizeSp by remember { mutableStateOf(settingsManager.fontSizeSp) }
+    var floatingWindowEnabled by remember { mutableStateOf(settingsManager.floatingWindowEnabled) }
     CmuxAppTheme(themeMode = themeMode) {
+        if (isInPictureInPicture) {
+            FloatingTerminalView(
+                viewModel = viewModel,
+                themeHex = selectedThemeHex,
+                fontSizeSp = settingsManager.pipFontSizeSp
+            )
+            return@CmuxAppTheme
+        }
         CmuxApp(
             viewModel = viewModel,
             settingsManager = settingsManager,
@@ -156,6 +303,12 @@ fun CmuxAppRoot(viewModel: TerminalViewModel) {
             fontSizeSp = fontSizeSp,
             selectedThemeHex = selectedThemeHex,
             themeMode = themeMode,
+            floatingWindowEnabled = floatingWindowEnabled,
+            onEnterFloatingWindow = onEnterFloatingWindow,
+            onFloatingWindowSettingsChanged = {
+                floatingWindowEnabled = settingsManager.floatingWindowEnabled
+                onFloatingWindowSettingsChanged()
+            },
             onScanQrClick = { showQrScanner = true },
 
             onHostChange = {
@@ -243,6 +396,9 @@ fun CmuxApp(
     fontSizeSp: Float,
     selectedThemeHex: String,
     themeMode: ThemeMode,
+    floatingWindowEnabled: Boolean,
+    onEnterFloatingWindow: () -> Unit,
+    onFloatingWindowSettingsChanged: () -> Unit,
 
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
@@ -407,7 +563,8 @@ fun CmuxApp(
                     onRenameWorkspace = { ws -> renamingWorkspace = ws },
                     onCloseWorkspace = { key -> requestCloseWorkspace(key) },
                     onRenameSurface = { surf -> renamingSurface = surf },
-                    onSettingsClick = { showSettingsDialog = true }
+                    onSettingsClick = { showSettingsDialog = true },
+                    onFloatingWindowClick = if (floatingWindowEnabled) onEnterFloatingWindow else null
                 )
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     ConnectionReadinessNotice(
@@ -463,6 +620,7 @@ fun CmuxApp(
                     AccessoryKeyboardBar(
                         onSendKey = accessorySendKey,
                         onOpenKeyboardPanel = accessoryOpenKeyboardPanel,
+                        onFloatingWindowClick = if (floatingWindowEnabled) onEnterFloatingWindow else null,
                         onSettingsClick = accessoryOpenSettings
                     )
                 }
@@ -475,6 +633,7 @@ fun CmuxApp(
                         AccessoryKeyboardBar(
                             onSendKey = accessorySendKey,
                             onOpenKeyboardPanel = accessoryOpenKeyboardPanel,
+                            onFloatingWindowClick = if (floatingWindowEnabled) onEnterFloatingWindow else null,
                             onSettingsClick = accessoryOpenSettings
                         )
                 },
@@ -685,6 +844,7 @@ fun CmuxApp(
                 onClearScrollback = settingsOnClearScrollback,
                 onRecheckGatewayVersion = viewModel::refreshHostStatus,
                 isRefreshingGatewayVersion = refreshingHostStatus,
+                onFloatingWindowSettingsChanged = onFloatingWindowSettingsChanged,
                 onDismissRequest = settingsOnDismiss
             )
         }

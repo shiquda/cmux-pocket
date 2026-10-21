@@ -79,6 +79,7 @@ fun SettingsScreen(
     connectionStatus: ConnectionStatus,
     connectionReadiness: ConnectionReadiness,
     settingsManager: SettingsManager,
+    onFloatingWindowSettingsChanged: () -> Unit = {},
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onTokenChange: (String) -> Unit,
@@ -106,6 +107,10 @@ fun SettingsScreen(
     var showExportProfilesDialog by remember { mutableStateOf(false) }
     var isDiagnosticsEnabled by remember { mutableStateOf(settingsManager.isDiagnosticsEnabled) }
     var vibrateOnSessionComplete by remember { mutableStateOf(settingsManager.vibrateOnSessionComplete) }
+    var floatingWindowEnabled by remember { mutableStateOf(settingsManager.floatingWindowEnabled) }
+    var floatingWindowAutoEnter by remember { mutableStateOf(settingsManager.floatingWindowAutoEnter) }
+    var pipSizePreset by remember { mutableStateOf(settingsManager.pipSizePreset) }
+    var pipFontSizeSp by remember { mutableStateOf(settingsManager.pipFontSizeSp) }
     // Ordinal rather than the enum itself so the page survives the activity recreation that a
     // language switch triggers; [ROOT_MENU] means the root list is showing.
     var openSectionOrdinal by rememberSaveable { mutableStateOf(ROOT_MENU) }
@@ -222,6 +227,15 @@ fun SettingsScreen(
                                 summary = stringResource(appLanguage.labelRes),
                                 onClick = { openSectionOrdinal = SettingsSection.LANGUAGE.ordinal }
                             )
+                            SettingsRowDivider()
+                            SettingsNavRow(
+                                section = SettingsSection.FLOATING_WINDOW,
+                                summary = stringResource(
+                                    if (floatingWindowEnabled) R.string.settings_notif_on
+                                    else R.string.settings_notif_off
+                                ),
+                                onClick = { openSectionOrdinal = SettingsSection.FLOATING_WINDOW.ordinal }
+                            )
                         }
                     }
 
@@ -318,6 +332,34 @@ fun SettingsScreen(
                                 onFontSizeChange = onFontSizeChange,
                                 onThemeChange = onThemeChange,
                                 onThemeModeChange = onThemeModeChange,
+                            )
+                        }
+
+                        SettingsSection.FLOATING_WINDOW -> item {
+                            FloatingWindowSection(
+                                enabled = floatingWindowEnabled,
+                                autoEnter = floatingWindowAutoEnter,
+                                sizePreset = pipSizePreset,
+                                fontSizeSp = pipFontSizeSp,
+                                onEnabledChange = {
+                                    floatingWindowEnabled = it
+                                    settingsManager.floatingWindowEnabled = it
+                                    onFloatingWindowSettingsChanged()
+                                },
+                                onAutoEnterChange = {
+                                    floatingWindowAutoEnter = it
+                                    settingsManager.floatingWindowAutoEnter = it
+                                    onFloatingWindowSettingsChanged()
+                                },
+                                onSizePresetChange = {
+                                    pipSizePreset = it
+                                    settingsManager.pipSizePreset = it
+                                    onFloatingWindowSettingsChanged()
+                                },
+                                onFontSizeChange = {
+                                    pipFontSizeSp = it
+                                    settingsManager.pipFontSizeSp = it
+                                }
                             )
                         }
 
@@ -525,6 +567,7 @@ enum class SettingsSection(@StringRes val labelRes: Int, val icon: ImageVector) 
     CONNECTION(R.string.settings_section_connection, Icons.Default.Cast),
     DISPLAY(R.string.settings_section_display, Icons.Default.TextFields),
     LANGUAGE(R.string.settings_section_language, Icons.Default.Translate),
+    FLOATING_WINDOW(R.string.settings_section_floating_window, Icons.Default.PictureInPictureAlt),
     UPDATES(R.string.settings_section_updates, Icons.Default.CloudDownload),
     OPENSOURCE(R.string.settings_section_opensource, Icons.Default.Code),
     DIAGNOSTICS(R.string.settings_section_diagnostics, Icons.Default.BugReport),
@@ -758,6 +801,7 @@ fun ConnectionSection(
     connectionStatus: ConnectionStatus,
     connectionReadiness: ConnectionReadiness,
     settingsManager: SettingsManager,
+    onFloatingWindowSettingsChanged: () -> Unit = {},
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onTokenChange: (String) -> Unit,
@@ -1925,5 +1969,146 @@ private fun CompatibilityBadge(compatibility: GatewayCompatibility) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
         )
+    }
+}
+
+
+@Composable
+fun FloatingWindowSection(
+    enabled: Boolean,
+    autoEnter: Boolean,
+    sizePreset: PipSizePreset,
+    fontSizeSp: Float,
+    onEnabledChange: (Boolean) -> Unit,
+    onAutoEnterChange: (Boolean) -> Unit,
+    onSizePresetChange: (PipSizePreset) -> Unit,
+    onFontSizeChange: (Float) -> Unit
+) {
+    val theme = CmuxTheme.colors
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = theme.surfaceVariant),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onEnabledChange(!enabled) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.settings_floating_window_title),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = theme.onSurface
+                    )
+                    Text(
+                        stringResource(R.string.settings_floating_window_desc),
+                        fontSize = 10.sp,
+                        color = theme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = onEnabledChange)
+            }
+
+            if (enabled) {
+                HorizontalDivider(color = theme.divider)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAutoEnterChange(!autoEnter) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.settings_floating_window_auto),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = theme.onSurface
+                        )
+                        Text(
+                            stringResource(
+                                if (autoEnter) R.string.settings_floating_window_auto_desc_on
+                                else R.string.settings_floating_window_auto_desc_off
+                            ),
+                            fontSize = 10.sp,
+                            color = theme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = autoEnter, onCheckedChange = onAutoEnterChange)
+                }
+
+                HorizontalDivider(color = theme.divider)
+
+                Text(
+                    stringResource(R.string.settings_floating_window_shape),
+                    fontSize = 12.sp,
+                    color = theme.onSurface,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    PipSizePreset.entries.forEach { preset ->
+                        FilterChip(
+                            selected = preset == sizePreset,
+                            onClick = { onSizePresetChange(preset) },
+                            label = { Text(preset.label, fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        stringResource(R.string.settings_floating_window_font),
+                        fontSize = 13.sp,
+                        color = theme.onSurface
+                    )
+                    Text(
+                        stringResource(R.string.font_size_sp_value, fontSizeSp.toInt()),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.primary
+                    )
+                }
+
+                Slider(
+                    value = fontSizeSp,
+                    onValueChange = onFontSizeChange,
+                    valueRange = SettingsManager.MIN_PIP_FONT_SIZE..SettingsManager.MAX_PIP_FONT_SIZE,
+                    steps = (SettingsManager.MAX_PIP_FONT_SIZE - SettingsManager.MIN_PIP_FONT_SIZE).toInt() - 1,
+                    colors = SliderDefaults.colors(
+                        thumbColor = theme.primary,
+                        activeTrackColor = theme.primary,
+                        inactiveTrackColor = theme.divider
+                    )
+                )
+
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PipWindowPreview(
+                        preset = sizePreset,
+                        fontSizeSp = fontSizeSp,
+                        modifier = Modifier.width(240.dp)
+                    )
+                }
+            }
+        }
     }
 }
