@@ -51,8 +51,8 @@ class SettingsManager(context: Context) {
         }
 
     /**
-     * Dictionary used for every user-facing string. Defaults to [AppLanguage.DEFAULT] (English) so a
-     * fresh install never starts in Chinese, regardless of the device locale.
+     * Dictionary used for every user-facing string. Defaults to [AppLanguage.SYSTEM], so a fresh
+     * install follows the device locale and picks the closest shipped dictionary.
      */
     var appLanguage: AppLanguage
         get() = AppLanguage.fromTag(prefs.getString(KEY_APP_LANGUAGE, null))

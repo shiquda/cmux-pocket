@@ -186,7 +186,7 @@ fun SettingsScreen(
                             SettingsRowDivider()
                             SettingsNavRow(
                                 section = SettingsSection.LANGUAGE,
-                                summary = appLanguage.nativeName,
+                                summary = stringResource(appLanguage.labelRes),
                                 onClick = { openSectionOrdinal = SettingsSection.LANGUAGE.ordinal }
                             )
                         }
@@ -676,6 +676,7 @@ fun LanguageSection(
                 ) {
                     Text(
                         text = when (option) {
+                            AppLanguage.SYSTEM -> stringResource(R.string.settings_language_system)
                             AppLanguage.ENGLISH -> stringResource(R.string.settings_language_english)
                             AppLanguage.CHINESE -> stringResource(R.string.settings_language_chinese)
                         },

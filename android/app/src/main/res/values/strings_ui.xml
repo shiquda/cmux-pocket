@@ -64,7 +64,9 @@
     <string name="scan_torch_toggle_cd">Toggle Flashlight</string>
     <string name="scan_close_cd">Cancel Scanning</string>
     <string name="scan_hint_point_camera">Point camera at cmux-pocket QR code</string>
-    <string name="scan_hint_focus">Tap screen to focus if blurry · Supports dark terminal screens</string>
+    <string name="scan_hint_focus">Tap screen to focus if blurry</string>
+    <string name="scan_hint_terminal">To show a QR code, run this in your computer terminal</string>
+    <string name="scan_command_qr" translatable="false">cmux-pocket qr</string>
     <string name="scan_cancel">Cancel</string>
     <string name="scan_permission_denied_title">Camera Permission Required</string>
     <string name="scan_permission_denied_desc">Camera access is needed to scan connection QR codes. Please enable it in Settings, or enter connection details manually.</string>
