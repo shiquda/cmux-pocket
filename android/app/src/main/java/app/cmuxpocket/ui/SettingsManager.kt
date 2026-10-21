@@ -42,9 +42,22 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean(KEY_FLOATING_WINDOW_AUTO_ENTER, true)
         set(value) = prefs.edit().putBoolean(KEY_FLOATING_WINDOW_AUTO_ENTER, value).apply()
 
-    var pipSizePreset: PipSizePreset
-        get() = PipSizePreset.fromStorage(prefs.getString(KEY_PIP_SIZE_PRESET, null))
-        set(value) = prefs.edit().putString(KEY_PIP_SIZE_PRESET, value.name).apply()
+    /**
+     * Width / height of the floating window. Absolute pixels are chosen by the system;
+     * this is the only geometry an app can control for picture-in-picture.
+     */
+    var pipAspectRatio: Float
+        get() {
+            if (prefs.contains(KEY_PIP_ASPECT_RATIO)) {
+                return prefs.getFloat(KEY_PIP_ASPECT_RATIO, DEFAULT_PIP_ASPECT_RATIO)
+                    .coerceIn(MIN_PIP_ASPECT_RATIO, MAX_PIP_ASPECT_RATIO)
+            }
+            // Migrate the pre-slider build that only stored a preset name.
+            return PipSizePreset.fromStorage(prefs.getString(KEY_PIP_SIZE_PRESET, null)).ratio
+        }
+        set(value) = prefs.edit()
+            .putFloat(KEY_PIP_ASPECT_RATIO, value.coerceIn(MIN_PIP_ASPECT_RATIO, MAX_PIP_ASPECT_RATIO))
+            .apply()
 
     var pipFontSizeSp: Float
         get() = prefs.getFloat(KEY_PIP_FONT_SIZE, DEFAULT_PIP_FONT_SIZE)
@@ -208,7 +221,10 @@ class SettingsManager(context: Context) {
     companion object {
         const val MIN_PIP_FONT_SIZE = 8f
         const val MAX_PIP_FONT_SIZE = 20f
-        const val DEFAULT_PIP_FONT_SIZE = 11f
+        const val DEFAULT_PIP_FONT_SIZE = 13f
+        const val MIN_PIP_ASPECT_RATIO = PipSizePreset.MIN_ASPECT_RATIO
+        const val MAX_PIP_ASPECT_RATIO = PipSizePreset.MAX_ASPECT_RATIO
+        const val DEFAULT_PIP_ASPECT_RATIO = PipSizePreset.DEFAULT_ASPECT_RATIO
 
         private const val LEGACY_PREFS_NAME = "cmux_preferences"
         private const val SECURE_PREFS_NAME = "cmux_preferences_secure"
@@ -227,6 +243,7 @@ class SettingsManager(context: Context) {
         private const val KEY_FLOATING_WINDOW_ENABLED = "floating_window_enabled"
         private const val KEY_FLOATING_WINDOW_AUTO_ENTER = "floating_window_auto_enter"
         private const val KEY_PIP_SIZE_PRESET = "pip_size_preset"
+        private const val KEY_PIP_ASPECT_RATIO = "pip_aspect_ratio"
         private const val KEY_PIP_FONT_SIZE = "pip_font_size_sp"
     }
 

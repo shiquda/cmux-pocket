@@ -19,6 +19,7 @@ import android.util.Log
 import android.util.Rational
 import android.view.inputmethod.InputMethodManager
 import java.lang.ref.WeakReference
+import kotlin.math.roundToInt
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -167,10 +168,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun buildPictureInPictureParams(): PictureInPictureParams {
-        val preset = settingsManager.pipSizePreset
+        val ratio = settingsManager.pipAspectRatio
         val builder = PictureInPictureParams.Builder()
-            .setAspectRatio(Rational(preset.aspectWidth, preset.aspectHeight))
-            .setActions(listOf(buildPipSizeAction(preset)))
+            .setAspectRatio(Rational((ratio * 1000).roundToInt(), 1000))
+            .setActions(listOf(buildPipSizeAction(ratio)))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setAutoEnterEnabled(
                 floatingWindowEnabled &&
@@ -182,8 +183,8 @@ class MainActivity : ComponentActivity() {
         return builder.build()
     }
 
-    private fun buildPipSizeAction(current: PipSizePreset): RemoteAction {
-        val next = current.next()
+    private fun buildPipSizeAction(currentRatio: Float): RemoteAction {
+        val next = PipSizePreset.nextAfter(currentRatio)
         val intent = Intent(this, PipActionReceiver::class.java)
             .setAction(PipActionReceiver.ACTION_CYCLE_SIZE)
         val pendingIntent = PendingIntent.getBroadcast(

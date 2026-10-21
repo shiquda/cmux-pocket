@@ -95,6 +95,9 @@
     <string name="settings_floating_window_auto_desc_on">类似 YouTube：应用退到后台时自动打开小窗。</string>
     <string name="settings_floating_window_auto_desc_off">使用底部工具栏的悬浮窗按钮手动打开。</string>
     <string name="settings_floating_window_shape">窗口形状</string>
+    <string name="settings_floating_window_aspect">宽高比（宽 : 高）</string>
+    <string name="settings_floating_window_aspect_value">%1$.2f : 1</string>
+    <string name="settings_floating_window_custom">自定义</string>
     <string name="settings_floating_window_font">悬浮窗字号</string>
     <string name="settings_floating_window_preview">预览</string>
     <string name="floating_window_open">打开悬浮窗</string>

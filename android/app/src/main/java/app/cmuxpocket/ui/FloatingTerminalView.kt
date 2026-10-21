@@ -216,13 +216,15 @@ fun PipTerminalTailCanvas(
 
 @Composable
 fun PipWindowPreview(
-    preset: PipSizePreset,
+    aspectRatio: Float,
     fontSizeSp: Float,
     modifier: Modifier = Modifier
 ) {
     val theme = CmuxTheme.colors
     val previewState = remember { pipPreviewState() }
-    val ratio = preset.aspectWidth.toFloat() / preset.aspectHeight
+    val preset = PipSizePreset.fromRatio(aspectRatio)
+    val ratioLabel = preset?.let { "${it.label} · ${it.ratioLabel}" }
+        ?: stringResource(R.string.settings_floating_window_custom)
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -231,13 +233,13 @@ fun PipWindowPreview(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(stringResource(R.string.settings_floating_window_preview), fontSize = 11.sp, color = theme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-            Text("${preset.label} · ${preset.ratioLabel}", fontSize = 11.sp, color = theme.primary, fontWeight = FontWeight.Bold)
+            Text(ratioLabel, fontSize = 11.sp, color = theme.primary, fontWeight = FontWeight.Bold)
         }
         Spacer(modifier = Modifier.height(6.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(ratio)
+                .aspectRatio(aspectRatio)
                 .clip(RoundedCornerShape(10.dp))
                 .background(Color(0xFF1E1E1E))
                 .border(1.dp, theme.divider, RoundedCornerShape(10.dp))

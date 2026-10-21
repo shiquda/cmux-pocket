@@ -98,6 +98,9 @@
     <string name="settings_floating_window_auto_desc_on">Like YouTube: the window opens when the app goes to the background.</string>
     <string name="settings_floating_window_auto_desc_off">Use the floating-window button in the accessory bar instead.</string>
     <string name="settings_floating_window_shape">Window shape</string>
+    <string name="settings_floating_window_aspect">Aspect ratio (width : height)</string>
+    <string name="settings_floating_window_aspect_value">%1$.2f : 1</string>
+    <string name="settings_floating_window_custom">Custom</string>
     <string name="settings_floating_window_font">Floating window font size</string>
     <string name="settings_floating_window_preview">Preview</string>
     <string name="floating_window_open">Open floating window</string>

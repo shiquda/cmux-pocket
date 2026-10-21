@@ -12,13 +12,26 @@ enum class PipSizePreset(
     STANDARD("Standard", 16, 9),
     WIDE("Wide", 22, 10);
 
+    val ratio: Float get() = aspectWidth.toFloat() / aspectHeight
     val ratioLabel: String get() = "$aspectWidth:$aspectHeight"
 
     fun next(): PipSizePreset = entries[(ordinal + 1) % entries.size]
 
     companion object {
+        /** Android rejects picture-in-picture ratios outside 1/2.39 … 2.39. */
+        const val MIN_ASPECT_RATIO = 0.6f
+        const val MAX_ASPECT_RATIO = 2.39f
+        const val DEFAULT_ASPECT_RATIO = 1f
+
         fun fromStorage(value: String?): PipSizePreset =
-            entries.firstOrNull { it.name == value } ?: STANDARD
+            entries.firstOrNull { it.name == value } ?: COMPACT
+
+        fun fromRatio(ratio: Float): PipSizePreset? =
+            entries.firstOrNull { kotlin.math.abs(it.ratio - ratio) < 0.01f }
+
+        /** Next preset when cycling from an arbitrary custom ratio. */
+        fun nextAfter(ratio: Float): PipSizePreset =
+            entries.firstOrNull { it.ratio > ratio + 0.01f } ?: COMPACT
     }
 }
 

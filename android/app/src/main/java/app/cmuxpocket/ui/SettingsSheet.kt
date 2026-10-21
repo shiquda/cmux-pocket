@@ -109,7 +109,7 @@ fun SettingsScreen(
     var vibrateOnSessionComplete by remember { mutableStateOf(settingsManager.vibrateOnSessionComplete) }
     var floatingWindowEnabled by remember { mutableStateOf(settingsManager.floatingWindowEnabled) }
     var floatingWindowAutoEnter by remember { mutableStateOf(settingsManager.floatingWindowAutoEnter) }
-    var pipSizePreset by remember { mutableStateOf(settingsManager.pipSizePreset) }
+    var pipAspectRatio by remember { mutableStateOf(settingsManager.pipAspectRatio) }
     var pipFontSizeSp by remember { mutableStateOf(settingsManager.pipFontSizeSp) }
     // Ordinal rather than the enum itself so the page survives the activity recreation that a
     // language switch triggers; [ROOT_MENU] means the root list is showing.
@@ -339,7 +339,7 @@ fun SettingsScreen(
                             FloatingWindowSection(
                                 enabled = floatingWindowEnabled,
                                 autoEnter = floatingWindowAutoEnter,
-                                sizePreset = pipSizePreset,
+                                aspectRatio = pipAspectRatio,
                                 fontSizeSp = pipFontSizeSp,
                                 onEnabledChange = {
                                     floatingWindowEnabled = it
@@ -351,9 +351,9 @@ fun SettingsScreen(
                                     settingsManager.floatingWindowAutoEnter = it
                                     onFloatingWindowSettingsChanged()
                                 },
-                                onSizePresetChange = {
-                                    pipSizePreset = it
-                                    settingsManager.pipSizePreset = it
+                                onAspectRatioChange = {
+                                    pipAspectRatio = it
+                                    settingsManager.pipAspectRatio = it
                                     onFloatingWindowSettingsChanged()
                                 },
                                 onFontSizeChange = {
@@ -1977,11 +1977,11 @@ private fun CompatibilityBadge(compatibility: GatewayCompatibility) {
 fun FloatingWindowSection(
     enabled: Boolean,
     autoEnter: Boolean,
-    sizePreset: PipSizePreset,
+    aspectRatio: Float,
     fontSizeSp: Float,
     onEnabledChange: (Boolean) -> Unit,
     onAutoEnterChange: (Boolean) -> Unit,
-    onSizePresetChange: (PipSizePreset) -> Unit,
+    onAspectRatioChange: (Float) -> Unit,
     onFontSizeChange: (Float) -> Unit
 ) {
     val theme = CmuxTheme.colors
@@ -2058,15 +2058,45 @@ fun FloatingWindowSection(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    val selectedPreset = PipSizePreset.fromRatio(aspectRatio)
                     PipSizePreset.entries.forEach { preset ->
                         FilterChip(
-                            selected = preset == sizePreset,
-                            onClick = { onSizePresetChange(preset) },
+                            selected = preset == selectedPreset,
+                            onClick = { onAspectRatioChange(preset.ratio) },
                             label = { Text(preset.label, fontSize = 11.sp) },
                             modifier = Modifier.weight(1f)
                         )
                     }
                 }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        stringResource(R.string.settings_floating_window_aspect),
+                        fontSize = 13.sp,
+                        color = theme.onSurface
+                    )
+                    Text(
+                        stringResource(R.string.settings_floating_window_aspect_value, aspectRatio),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.primary
+                    )
+                }
+
+                Slider(
+                    value = aspectRatio,
+                    onValueChange = onAspectRatioChange,
+                    valueRange = SettingsManager.MIN_PIP_ASPECT_RATIO..SettingsManager.MAX_PIP_ASPECT_RATIO,
+                    colors = SliderDefaults.colors(
+                        thumbColor = theme.primary,
+                        activeTrackColor = theme.primary,
+                        inactiveTrackColor = theme.divider
+                    )
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2103,7 +2133,7 @@ fun FloatingWindowSection(
                     contentAlignment = Alignment.Center
                 ) {
                     PipWindowPreview(
-                        preset = sizePreset,
+                        aspectRatio = aspectRatio,
                         fontSizeSp = fontSizeSp,
                         modifier = Modifier.width(240.dp)
                     )

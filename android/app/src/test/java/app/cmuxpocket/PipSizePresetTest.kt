@@ -27,10 +27,24 @@ class PipSizePresetTest {
     }
 
     @Test
-    fun storageFallsBackToStandardForUnknownValues() {
-        assertEquals(PipSizePreset.STANDARD, PipSizePreset.fromStorage(null))
-        assertEquals(PipSizePreset.STANDARD, PipSizePreset.fromStorage("future-preset"))
+    fun storageFallsBackToCompactForUnknownValues() {
+        assertEquals(PipSizePreset.COMPACT, PipSizePreset.fromStorage(null))
+        assertEquals(PipSizePreset.COMPACT, PipSizePreset.fromStorage("future-preset"))
         assertEquals(PipSizePreset.WIDE, PipSizePreset.fromStorage("WIDE"))
+    }
+
+    @Test
+    fun customRatiosMapToTheMatchingPreset() {
+        assertEquals(PipSizePreset.COMPACT, PipSizePreset.fromRatio(1f))
+        assertEquals(PipSizePreset.STANDARD, PipSizePreset.fromRatio(16f / 9f))
+        assertEquals(null, PipSizePreset.fromRatio(1.62f))
+    }
+
+    @Test
+    fun cyclingFromACustomRatioPicksTheNextPreset() {
+        assertEquals(PipSizePreset.STANDARD, PipSizePreset.nextAfter(1.4f))
+        assertEquals(PipSizePreset.WIDE, PipSizePreset.nextAfter(16f / 9f))
+        assertEquals(PipSizePreset.COMPACT, PipSizePreset.nextAfter(2.2f))
     }
 }
 
