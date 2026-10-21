@@ -44,7 +44,7 @@ extracts the section for the pushed tag while publishing, and
 - Pending RPC requests now time out when the Gateway becomes unreachable, rejected credentials and DNS/TLS failures are reported distinctly, and queued messages from a previous socket are ignored.
 - A long-press on the terminal shows exactly one contextual bubble (Copy, Paste, Interrupt, Clear) with drag handles, replacing the duplicate Copy pill.
 - Settings content is no longer squeezed by the section rail, and palette swatch labels ellipsise instead of being cut mid-word.
-- `cmux-pocket setup` now restarts a healthy Gateway whose reported build is older than the CLI it is invoked from. Previously `brew upgrade` replaced the binary on disk while launchd kept the previous process, so the phone stayed on old Gateway behaviour until logout.
+- Upgrades now put the new Gateway in service without a logout: the Homebrew formula kickstarts the registered LaunchAgent during install, and `cmux-pocket setup` restarts a healthy Gateway whose reported build is older than the CLI it is invoked from. Previously `brew upgrade` replaced the binary on disk while launchd kept the previous process, so the phone stayed on old Gateway behaviour until the next login.
 
 ## [0.2.0] - 2026-10-14
 
