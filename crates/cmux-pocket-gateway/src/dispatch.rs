@@ -789,32 +789,24 @@ pub async fn dispatch_rpc<'a>(
                 }
             };
 
-            if !ctx.viewport_leases.supported().await {
-                let err_res = json!({
-                    "id": id_val,
-                    "error": {
-                        "code": CODE_METHOD_NOT_FOUND,
-                        "message": "Host does not support terminal viewport resizing",
-                    }
-                });
-                ctx.session.send_json(err_res).await?;
-                return Ok(());
-            }
-
             if clear {
+                // Clearing an existing lease must not depend on a fresh
+                // capability probe: a transient probe failure would otherwise
+                // strand the host report until its TTL.
                 match ctx
                     .viewport_leases
                     .clear(&ctx.session.session_id, &client_id, &surface_id, generation)
                     .await
                 {
-                    Ok(geometry) => {
+                    Ok(outcome) => {
                         ctx.health.mark_healthy();
                         let mut result = Map::new();
                         result.insert("accepted".into(), Value::Bool(true));
-                        result.insert("cleared".into(), Value::Bool(true));
+                        result.insert("cleared".into(), Value::Bool(outcome.cleared));
+                        result.insert("stale".into(), Value::Bool(!outcome.cleared));
                         result.insert("geometry_owner".into(), Value::Bool(false));
                         result.insert("generation".into(), json!(generation));
-                        if let Some((columns, rows)) = geometry {
+                        if let Some((columns, rows)) = outcome.geometry {
                             result.insert("columns".into(), json!(columns));
                             result.insert("rows".into(), json!(rows));
                         }
@@ -835,6 +827,18 @@ pub async fn dispatch_rpc<'a>(
                         ctx.session.send_json(err_res).await?;
                     }
                 }
+                return Ok(());
+            }
+
+            if !ctx.viewport_leases.supported().await {
+                let err_res = json!({
+                    "id": id_val,
+                    "error": {
+                        "code": CODE_METHOD_NOT_FOUND,
+                        "message": "Host does not support terminal viewport resizing",
+                    }
+                });
+                ctx.session.send_json(err_res).await?;
                 return Ok(());
             }
 

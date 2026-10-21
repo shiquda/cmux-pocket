@@ -28,7 +28,8 @@ async fn report_changes_the_host_grid_and_clear_restores_it() {
         .clear("session-a", "phone-a", "surf-main-1", 11)
         .await
         .unwrap();
-    assert_eq!(restored, Some((80, 24)));
+    assert!(restored.cleared);
+    assert_eq!(restored.geometry, Some((80, 24)));
     assert!(backend.viewport_reports_for("surf-main-1").is_empty());
 }
 
@@ -109,4 +110,109 @@ async fn an_active_lease_keeps_renewing_its_report() {
     let after_release = backend.viewport_report_calls();
     tokio::time::sleep(std::time::Duration::from_millis(1800)).await;
     assert_eq!(backend.viewport_report_calls(), after_release);
+}
+
+#[tokio::test]
+async fn a_report_older_than_a_clear_cannot_resurrect_the_lease() {
+    let (backend, leases) = manager();
+
+    leases
+        .report("session-a", "phone-a", "surf-main-1", 44, 30, 10)
+        .await
+        .unwrap();
+    let cleared = leases
+        .clear("session-a", "phone-a", "surf-main-1", 11)
+        .await
+        .unwrap();
+    assert!(cleared.cleared);
+
+    let replay = leases
+        .report("session-a", "phone-a", "surf-main-1", 44, 30, 10)
+        .await
+        .unwrap();
+    assert!(!replay.accepted);
+    assert!(backend.viewport_reports_for("surf-main-1").is_empty());
+    let snapshot = backend.get_snapshot("surf-main-1", 0).await.unwrap();
+    assert_eq!((snapshot.columns, snapshot.rows), (80, 24));
+
+    // A genuinely newer generation may start a fresh lease.
+    let fresh = leases
+        .report("session-a", "phone-a", "surf-main-1", 44, 30, 12)
+        .await
+        .unwrap();
+    assert!(fresh.accepted);
+    assert_eq!(backend.viewport_reports_for("surf-main-1").len(), 1);
+}
+
+#[tokio::test]
+async fn a_stale_clear_reports_not_cleared_and_keeps_the_newer_lease() {
+    let (backend, leases) = manager();
+
+    leases
+        .report("session-a", "phone-a", "surf-main-1", 44, 30, 20)
+        .await
+        .unwrap();
+    let stale = leases
+        .clear("session-a", "phone-a", "surf-main-1", 19)
+        .await
+        .unwrap();
+    assert!(!stale.cleared);
+    assert_eq!(backend.viewport_reports_for("surf-main-1").len(), 1);
+
+    // The live lease still owns the grid after the rejected clear.
+    let heartbeat = leases
+        .report("session-a", "phone-a", "surf-main-1", 44, 30, 20)
+        .await
+        .unwrap();
+    assert!(heartbeat.accepted);
+    let snapshot = backend.get_snapshot("surf-main-1", 0).await.unwrap();
+    assert_eq!((snapshot.columns, snapshot.rows), (44, 30));
+}
+
+#[tokio::test(start_paused = true)]
+async fn renewals_stop_when_the_client_stops_heartbeating() {
+    let (backend, leases) = manager();
+
+    leases
+        .report("session-a", "phone-a", "surf-main-1", 44, 30, 10)
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    let while_alive = backend.viewport_report_calls();
+    assert!(while_alive >= 2);
+
+    // No heartbeat for longer than the staleness window: the lease task must
+    // stop touching the host so its non-sticky report expires.
+    tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+    let stopped = backend.viewport_report_calls();
+    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+    assert_eq!(backend.viewport_report_calls(), stopped);
+
+    // A later heartbeat starts a fresh renewal task.
+    leases
+        .report("session-a", "phone-a", "surf-main-1", 44, 30, 11)
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    assert!(backend.viewport_report_calls() > stopped);
+}
+
+#[tokio::test(start_paused = true)]
+async fn heartbeats_keep_a_lease_alive_past_the_staleness_window() {
+    let (backend, leases) = manager();
+
+    leases
+        .report("session-a", "phone-a", "surf-main-1", 44, 30, 10)
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    let first_window = backend.viewport_report_calls();
+    assert!(first_window >= 2);
+
+    leases
+        .report("session-a", "phone-a", "surf-main-1", 44, 30, 10)
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    assert!(backend.viewport_report_calls() > first_window);
 }

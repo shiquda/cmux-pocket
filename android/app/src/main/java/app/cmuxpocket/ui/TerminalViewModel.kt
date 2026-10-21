@@ -17,10 +17,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonPrimitive
 import java.util.concurrent.ConcurrentHashMap
 
 enum class AppSyncPhase {
@@ -109,6 +112,9 @@ class TerminalViewModel : ViewModel() {
 
     /** Last authoritative geometry observed while this client pinned nothing. */
     private val macBasis = mutableMapOf<String, Pair<Int, Int>>()
+    /** Surfaces whose report may exist on the host even if the last RPC failed. */
+    private val reportedSurfaces = mutableSetOf<String>()
+    private val widthRenewalJobs = mutableMapOf<String, Job>()
     /** Frames received before this deadline may still show the phone grid. */
     private val macBasisInvalidUntil = mutableMapOf<String, Long>()
     private val widthMetrics = mutableMapOf<String, TerminalWidthMetrics>()
@@ -861,6 +867,9 @@ class TerminalViewModel : ViewModel() {
         if (surfaceId.isBlank()) return
         val current = _phoneWidthStates.value[surfaceId]
         if (current?.enabled == true) return
+        // A clear is in flight. Let it settle instead of racing it with a new
+        // report; the UI disables this action while restoring.
+        if (current?.phase == PhoneWidthPhase.RESTORING) return
         if (!viewportResizeSupported()) {
             setPhoneWidthState(
                 surfaceId,
@@ -915,11 +924,9 @@ class TerminalViewModel : ViewModel() {
 
     /** Releases every surface's report (app backgrounded, connection ending). */
     fun releaseAllPhoneWidths() {
-        val enabledSurfaces = _phoneWidthStates.value
-            .filterValues { it.enabled || it.phase == PhoneWidthPhase.RESTORING }
-            .keys
-            .toList()
-        enabledSurfaces.forEach { releasePhoneWidth(it) }
+        val states = _phoneWidthStates.value
+        val surfaces = (states.keys + reportedSurfaces).toSet()
+        surfaces.forEach { releasePhoneWidth(it) }
     }
 
     /** Font size or canvas size changed; refit after the gesture settles. */
@@ -1012,6 +1019,9 @@ class TerminalViewModel : ViewModel() {
         ) {
             return
         }
+        // From here on the report may have reached the Gateway even if the RPC
+        // times out; release must still attempt a clear.
+        reportedSurfaces.add(surfaceId)
         val generation = nextViewportGeneration()
         widthConfirmedAtNanos.remove(surfaceId)
         setPhoneWidthState(
@@ -1028,6 +1038,10 @@ class TerminalViewModel : ViewModel() {
             try {
                 wsClient.requestViewportReport(surfaceId, targetColumns, targetRows, generation)
                 widthConfirmedAtNanos[surfaceId] = System.nanoTime()
+                val confirmed = _phoneWidthStates.value[surfaceId]
+                if (confirmed?.enabled == true && confirmed.generation == generation) {
+                    startPhoneWidthRenewal(surfaceId, targetColumns, targetRows, generation)
+                }
                 delay(PHONE_WIDTH_CONFIRM_GRACE_MS)
                 val latest = _phoneWidthStates.value[surfaceId] ?: return@launch
                 if (latest.generation != generation || latest.phase != PhoneWidthPhase.REQUESTING) {
@@ -1056,6 +1070,9 @@ class TerminalViewModel : ViewModel() {
                 throw e
             } catch (e: Exception) {
                 Log.w(tag, "Viewport report failed for $surfaceId", e)
+                // Stop heartbeats: if the report did land, letting it lapse
+                // restores the Mac grid instead of pinning it indefinitely.
+                widthRenewalJobs.remove(surfaceId)?.cancel()
                 val latest = _phoneWidthStates.value[surfaceId]
                 if (latest != null && latest.generation == generation) {
                     setPhoneWidthState(
@@ -1067,41 +1084,91 @@ class TerminalViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Renews an active report so the Gateway can tell a live phone from a
+     * blackholed one. The Gateway stops renewing after a few missed beats and
+     * lets the host TTL restore the Mac grid.
+     */
+    private fun startPhoneWidthRenewal(
+        surfaceId: String,
+        columns: Int,
+        rows: Int,
+        generation: Long,
+    ) {
+        widthRenewalJobs.remove(surfaceId)?.cancel()
+        widthRenewalJobs[surfaceId] = viewModelScope.launch {
+            while (isActive) {
+                delay(PHONE_WIDTH_RENEW_INTERVAL_MS)
+                val state = _phoneWidthStates.value[surfaceId] ?: break
+                if (!state.enabled || state.generation != generation) break
+                try {
+                    wsClient.requestViewportReport(surfaceId, columns, rows, generation)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(tag, "Viewport heartbeat failed for $surfaceId", e)
+                    widthRenewalJobs.remove(surfaceId)?.cancel()
+                    val latest = _phoneWidthStates.value[surfaceId]
+                    if (latest != null && latest.enabled && latest.generation == generation) {
+                        setPhoneWidthState(
+                            surfaceId,
+                            latest.copy(phase = PhoneWidthPhase.FAILED, notice = PhoneWidthNotice.REQUEST_FAILED)
+                        )
+                    }
+                    break
+                }
+            }
+        }
+    }
+
     private fun releasePhoneWidth(surfaceId: String) {
         widthRequestJobs.remove(surfaceId)?.cancel()
-        val state = _phoneWidthStates.value[surfaceId] ?: return
-        if (!state.enabled && state.phase != PhoneWidthPhase.RESTORING) {
+        widthRenewalJobs.remove(surfaceId)?.cancel()
+        val state = _phoneWidthStates.value[surfaceId]
+        if (!phoneWidthNeedsClear(state, reportedSurfaces.contains(surfaceId))) {
             setPhoneWidthState(surfaceId, PhoneWidthState())
             return
         }
         val generation = nextViewportGeneration()
-        setPhoneWidthState(surfaceId, state.copy(phase = PhoneWidthPhase.RESTORING, generation = generation))
+        setPhoneWidthState(
+            surfaceId,
+            (state ?: PhoneWidthState()).copy(
+                phase = PhoneWidthPhase.RESTORING,
+                generation = generation,
+            )
+        )
         viewModelScope.launch {
             val cleared = runCatching {
-                wsClient.clearViewportReport(surfaceId, generation)
-            }.isSuccess
-            macBasis.remove(surfaceId)
-            macBasisInvalidUntil[surfaceId] = System.nanoTime() + MAC_BASIS_INVALIDATE_NANOS
-            // Stop renewing either way: the Gateway drops the lease before it
-            // asks the host, so a failed clear still expires within the host's
-            // five-second report TTL.
-            setPhoneWidthState(
-                surfaceId,
-                PhoneWidthState(
-                    phase = PhoneWidthPhase.OFF,
-                    notice = if (cleared) PhoneWidthNotice.NONE else PhoneWidthNotice.CLEAR_UNCONFIRMED,
-                )
-            )
+                val response = wsClient.clearViewportReport(surfaceId, generation) as? JsonObject
+                response?.get("cleared")?.jsonPrimitive?.booleanOrNull ?: true
+            }.getOrElse {
+                Log.w(tag, "Viewport clear failed for $surfaceId", it)
+                false
+            }
+            // A newer enable/report owns the surface now; this response must
+            // not erase its state or its lease.
+            val latest = _phoneWidthStates.value[surfaceId] ?: return@launch
+            val settled = settlePhoneWidthClear(latest, generation, cleared) ?: return@launch
+            if (cleared) {
+                reportedSurfaces.remove(surfaceId)
+                macBasis.remove(surfaceId)
+                macBasisInvalidUntil[surfaceId] = System.nanoTime() + MAC_BASIS_INVALIDATE_NANOS
+            }
+            setPhoneWidthState(surfaceId, settled)
         }
     }
 
     private fun handleConnectionLost() {
         widthRequestJobs.values.forEach { it.cancel() }
         widthRequestJobs.clear()
+        widthRenewalJobs.values.forEach { it.cancel() }
+        widthRenewalJobs.clear()
         widthConfirmedAtNanos.clear()
+        // The canvas metrics are local and survive a reconnect; keeping them
+        // lets the mode be re-enabled without waiting for a layout change.
+        reportedSurfaces.clear()
         macBasis.clear()
         macBasisInvalidUntil.clear()
-        widthMetrics.clear()
         _gatewayCapabilities.value = emptySet()
         _phoneWidthStates.value = emptyMap()
     }
@@ -1125,6 +1192,7 @@ class TerminalViewModel : ViewModel() {
         const val PHONE_WIDTH_DEBOUNCE_MS = 300L
         const val PHONE_WIDTH_CONFIRM_GRACE_MS = 1_200L
         const val MAC_BASIS_INVALIDATE_NANOS = 700_000_000L
+        const val PHONE_WIDTH_RENEW_INTERVAL_MS = 1_500L
     }
 }
 

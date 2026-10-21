@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, info, warn};
 
@@ -380,13 +380,16 @@ impl CmuxGateway {
             }
         }
 
-        // Cleanup session
+        // Cleanup session. Release the viewport report before waiting on the
+        // writer: a half-dead socket must not keep the Mac grid constrained,
+        // and the release itself is bounded so cleanup cannot hang here.
         session.close();
-        let _ = writer_handle.await;
-
-        // Drop this connection's viewport reports so a disconnected phone
-        // stops constraining the shared grid.
-        self.viewport_leases.release_session(&session_id).await;
+        let _ = timeout(
+            Duration::from_secs(3),
+            self.viewport_leases.release_session(&session_id),
+        )
+        .await;
+        let _ = timeout(Duration::from_secs(2), writer_handle).await;
 
         let mut guard = self.clients.lock();
         guard.retain(|c| c.session_id != session_id);

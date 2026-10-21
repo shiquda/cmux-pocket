@@ -1251,13 +1251,13 @@ private fun TerminalWidthPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(enabled = supported && !enabled) { onEnable() },
+                        .clickable(enabled = supported && !enabled && phase != PhoneWidthPhase.RESTORING) { onEnable() },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     RadioButton(
                         selected = enabled,
                         onClick = { if (!enabled) onEnable() },
-                        enabled = supported,
+                        enabled = supported && phase != PhoneWidthPhase.RESTORING,
                     )
                     Column {
                         Text(

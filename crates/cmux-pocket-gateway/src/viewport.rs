@@ -21,7 +21,7 @@ use cmux_pocket_cmux::{CmuxBackend, CmuxError};
 use parking_lot::Mutex;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio::task::JoinHandle;
-use tokio::time::{sleep, timeout};
+use tokio::time::{sleep, timeout, Instant};
 use tracing::{debug, warn};
 
 use crate::surface_locks::SurfaceLockManager;
@@ -30,6 +30,13 @@ use crate::surface_locks::SurfaceLockManager;
 /// timer, so a fifteen-hundred-millisecond renewal leaves room for a slow
 /// `cmux` CLI call without letting the report lapse.
 pub const VIEWPORT_LEASE_RENEW_INTERVAL: Duration = Duration::from_millis(1500);
+
+/// How long a lease may go without a fresh client report before the Gateway
+/// stops renewing it. Android sends a heartbeat at the renewal cadence; a
+/// one-way network blackhole therefore stops renewals after this window and
+/// the host's own TTL restores the Mac grid. Four missed heartbeats tolerate a
+/// slow runtime without keeping a vanished phone's grid pinned forever.
+pub const VIEWPORT_CLIENT_STALE_AFTER: Duration = Duration::from_secs(6);
 
 /// Host clamps for a reported grid, mirroring `applyMobileViewportReport`.
 pub const VIEWPORT_MIN_COLUMNS: u32 = 20;
@@ -69,6 +76,8 @@ struct Lease {
     client_id: String,
     surface_id: String,
     target: Mutex<LeaseTarget>,
+    /// Last time this client proved it still exists (report or heartbeat).
+    last_seen: Mutex<Instant>,
     /// Last target whose geometry the host confirmed.
     applied: Mutex<Option<LeaseTarget>>,
     /// Serializes host calls for this lease so a stale in-flight report cannot
@@ -83,6 +92,18 @@ struct Inner {
     backend: Arc<dyn CmuxBackend>,
     surface_locks: SurfaceLockManager,
     leases: Mutex<HashMap<String, Arc<Lease>>>,
+    /// Highest generation released per lease key. Kept after the lease is
+    /// removed so a delayed report from before the clear cannot recreate it.
+    generation_floors: Mutex<HashMap<String, u64>>,
+}
+
+/// Result of releasing one client's report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ViewportClearOutcome {
+    /// False when a newer report owned the lease or the generation was already
+    /// released; in that case nothing on the host was cleared.
+    pub cleared: bool,
+    pub geometry: Option<(u32, u32)>,
 }
 
 /// Manages the lifetime of every client's viewport report.
@@ -98,6 +119,7 @@ impl ViewportLeaseManager {
                 backend,
                 surface_locks,
                 leases: Mutex::new(HashMap::new()),
+                generation_floors: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -107,7 +129,8 @@ impl ViewportLeaseManager {
     }
 
     /// Records a client's desired grid, applies it once synchronously, and
-    /// keeps renewing it until cleared or its session ends.
+    /// keeps renewing it until cleared, its session ends, or the client stops
+    /// sending heartbeats.
     pub async fn report(
         &self,
         session_id: &str,
@@ -120,17 +143,36 @@ impl ViewportLeaseManager {
         let columns = columns.clamp(VIEWPORT_MIN_COLUMNS, VIEWPORT_MAX_COLUMNS);
         let rows = rows.clamp(VIEWPORT_MIN_ROWS, VIEWPORT_MAX_ROWS);
 
+        let key = lease_key(session_id, client_id, surface_id);
+        // A report created before a clear must not resurrect the lease. The
+        // floor outlives the lease for the whole session.
+        let floor = *self.inner.generation_floors.lock().get(&key).unwrap_or(&0);
+        if generation <= floor {
+            return Ok(stale_report_outcome(columns, rows, generation));
+        }
+
         let lease = self.get_or_create_lease(session_id, client_id, surface_id);
+        *lease.last_seen.lock() = Instant::now();
         {
             let mut target = lease.target.lock();
             if generation < target.generation {
+                return Ok(stale_report_outcome(columns, rows, generation));
+            }
+            // An identical heartbeat only proves liveness; the renewal task
+            // owns host calls, so it must not add a synchronous apply.
+            if generation == target.generation
+                && columns == target.columns
+                && rows == target.rows
+                && *lease.applied.lock() == Some(*target)
+            {
+                let applied = *lease.applied.lock();
                 return Ok(ViewportReportOutcome {
-                    accepted: false,
+                    accepted: true,
                     pending: false,
                     requested_columns: columns,
                     requested_rows: rows,
-                    effective_columns: None,
-                    effective_rows: None,
+                    effective_columns: applied.map(|t| t.columns),
+                    effective_rows: applied.map(|t| t.rows),
                     generation,
                 });
             }
@@ -164,21 +206,38 @@ impl ViewportLeaseManager {
     }
 
     /// Releases one client's report, then reads back the restored geometry.
+    ///
+    /// A clear that is older than the lease's report (or a second clear for an
+    /// already-released generation) returns `cleared: false`; it never removes
+    /// a newer lease and never claims to have cleared the host.
     pub async fn clear(
         &self,
         session_id: &str,
         client_id: &str,
         surface_id: &str,
         generation: u64,
-    ) -> Result<Option<(u32, u32)>, CmuxError> {
+    ) -> Result<ViewportClearOutcome, CmuxError> {
         let key = lease_key(session_id, client_id, surface_id);
+        {
+            let floor = *self.inner.generation_floors.lock().get(&key).unwrap_or(&0);
+            if generation <= floor {
+                return Ok(ViewportClearOutcome {
+                    cleared: false,
+                    geometry: None,
+                });
+            }
+        }
+
         let lease = {
             let mut leases = self.inner.leases.lock();
             let existing = leases.get(&key).cloned();
             if let Some(lease) = &existing {
                 if generation < lease.target.lock().generation {
                     // A newer report owns this lease; this clear is stale.
-                    return Ok(None);
+                    return Ok(ViewportClearOutcome {
+                        cleared: false,
+                        geometry: None,
+                    });
                 }
             }
             leases.remove(&key);
@@ -196,17 +255,27 @@ impl ViewportLeaseManager {
                     .await
             })
             .await;
-
-        // The host clear is idempotent enough for our purposes; report a hard
-        // failure so the client can retry, but still try to read the geometry.
         clear_result?;
 
-        let snapshot = self
+        {
+            let mut floors = self.inner.generation_floors.lock();
+            let floor = floors.entry(key).or_insert(0);
+            *floor = (*floor).max(generation);
+        }
+
+        // The host clear is the contract; a failed read-back must not turn a
+        // successful release into an error the client would retry forever.
+        let geometry = self
             .with_surface_lock(surface_id, async {
                 self.inner.backend.get_snapshot(surface_id, 0).await
             })
-            .await?;
-        Ok(Some((snapshot.columns as u32, snapshot.rows as u32)))
+            .await
+            .ok()
+            .map(|snapshot| (snapshot.columns as u32, snapshot.rows as u32));
+        Ok(ViewportClearOutcome {
+            cleared: true,
+            geometry,
+        })
     }
 
     /// Drops every lease owned by a closed WebSocket session.
@@ -219,8 +288,8 @@ impl ViewportLeaseManager {
                 .map(|lease| lease.key.clone())
                 .collect()
         };
-        for key in keys {
-            let lease = { self.inner.leases.lock().remove(&key) };
+        for key in &keys {
+            let lease = { self.inner.leases.lock().remove(key) };
             if let Some(lease) = lease {
                 stop_task(&lease).await;
                 let generation = lease.target.lock().generation;
@@ -239,6 +308,10 @@ impl ViewportLeaseManager {
                     );
                 }
             }
+        }
+        let mut floors = self.inner.generation_floors.lock();
+        for key in keys {
+            floors.remove(&key);
         }
     }
 
@@ -275,6 +348,18 @@ impl ViewportLeaseManager {
     ) -> Arc<Lease> {
         let key = lease_key(session_id, client_id, surface_id);
         if let Some(lease) = self.inner.leases.lock().get(&key).cloned() {
+            *lease.last_seen.lock() = Instant::now();
+            let needs_task = {
+                let task = lease.task.lock();
+                task.as_ref().is_none_or(|handle| handle.is_finished())
+            };
+            if needs_task {
+                let inner = self.inner.clone();
+                let task_lease = lease.clone();
+                *lease.task.lock() = Some(tokio::spawn(async move {
+                    run_lease_loop(inner, task_lease).await;
+                }));
+            }
             return lease;
         }
 
@@ -288,6 +373,7 @@ impl ViewportLeaseManager {
                 rows: VIEWPORT_MIN_ROWS,
                 generation: 0,
             }),
+            last_seen: Mutex::new(Instant::now()),
             applied: Mutex::new(None),
             apply_lock: AsyncMutex::new(()),
             cancel: Notify::new(),
@@ -381,8 +467,30 @@ fn lease_key(session_id: &str, client_id: &str, surface_id: &str) -> String {
     format!("{session_id}\u{1f}{client_id}\u{1f}{surface_id}")
 }
 
+fn stale_report_outcome(columns: u32, rows: u32, generation: u64) -> ViewportReportOutcome {
+    ViewportReportOutcome {
+        accepted: false,
+        pending: false,
+        requested_columns: columns,
+        requested_rows: rows,
+        effective_columns: None,
+        effective_rows: None,
+        generation,
+    }
+}
+
 async fn run_lease_loop(inner: Arc<Inner>, lease: Arc<Lease>) {
     loop {
+        // Without fresh client evidence (a report or heartbeat) the phone may
+        // be on a blackholed network path. Stop renewing and let the host's
+        // non-sticky TTL release the shared grid.
+        if lease.last_seen.lock().elapsed() > VIEWPORT_CLIENT_STALE_AFTER {
+            debug!(
+                surface = %lease.surface_id,
+                "viewport lease expired without client heartbeat"
+            );
+            break;
+        }
         let target = *lease.target.lock();
         let last_applied = *lease.applied.lock();
         if target.generation != 0 && last_applied != Some(target) {

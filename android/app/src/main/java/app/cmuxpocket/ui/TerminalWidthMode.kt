@@ -135,3 +135,30 @@ fun phoneWidthTargetSatisfied(state: PhoneWidthState): Boolean {
     val targetRows = state.targetRows ?: return false
     return state.effectiveColumns == targetColumns && state.effectiveRows == targetRows
 }
+
+/**
+ * Applies a clear response only if it still belongs to the release that asked
+ * for it. A newer report or enable (different generation) wins; the old clear
+ * must not overwrite its state.
+ */
+fun settlePhoneWidthClear(
+    state: PhoneWidthState,
+    generation: Long,
+    cleared: Boolean,
+): PhoneWidthState? {
+    if (state.phase != PhoneWidthPhase.RESTORING || state.generation != generation) return null
+    return PhoneWidthState(
+        phase = PhoneWidthPhase.OFF,
+        notice = if (cleared) PhoneWidthNotice.NONE else PhoneWidthNotice.CLEAR_UNCONFIRMED,
+    )
+}
+
+/**
+ * A report may exist on the host even when the local phase is FAILED (the
+ * request timed out after being sent), so a FAILED state still needs a clear.
+ */
+fun phoneWidthNeedsClear(state: PhoneWidthState?, reportMayExist: Boolean): Boolean =
+    reportMayExist ||
+        state?.enabled == true ||
+        state?.phase == PhoneWidthPhase.FAILED ||
+        state?.phase == PhoneWidthPhase.RESTORING

@@ -45,20 +45,32 @@ pretends to know an uncaptured laptop size.
 - **Restore**: the persistent restore button (and the panel's **Restore
   computer layout**) remove this client's report. The Gateway keeps a lease
   renewed every 1.5 s; restoring stops the lease and clears the host report.
+  A clear response from an older generation is ignored, so closing and
+  immediately re-enabling the panel cannot leave it stuck in "restoring".
 - **History and selection**: while reading scrollback or selecting text,
   automatic refits are paused so the resize cannot invalidate anchors. The
   panel's **Refit** first returns to live output, then resizes.
 - **Surface switch, background, connection end**: this client's report is
   released immediately. Releasing one client never clears another client's
   report. The mode is not persisted across launches.
-- **Crash**: reports are non-sticky replays piggybacked on
+- **Crash or network blackhole**: reports are non-sticky replays piggybacked on
   `mobile.terminal.replay`, so they expire about five seconds after the last
   renewal. Killing the Gateway (not just closing the WebSocket) therefore
-  restores the Mac grid by itself.
+  restores the Mac grid by itself. The phone also sends a heartbeat every 1.5 s
+  while the mode is active; the Gateway stops renewing a lease once six seconds
+  pass without one, so a one-way network failure that never delivers a close
+  frame still restores the Mac grid.
+- **Uncertain report**: a report that timed out after being sent is still
+  released on the next restore (the phone tracks that the surface was
+  reported), even when the local phase is "failed".
 
 Every report carries a monotonically increasing generation. The Gateway fences
 reports and clears by generation per `(session, client, surface)`, so an
-in-flight report captured before a newer one cannot land afterwards.
+in-flight report captured before a newer one cannot land afterwards. The highest
+released generation is retained for the session, so a delayed replay from
+before a clear cannot recreate the lease. A clear older than the active lease
+or than that high-water mark returns `"cleared": false` and `"stale": true`
+instead of removing a newer report.
 
 ## Protocol surface
 
@@ -77,8 +89,9 @@ or, to release this client's report:
 ```
 
 The Gateway requires `terminal.viewport.v1` in the host capabilities before it
-advertises the mode; otherwise clients disable the control and the method
-returns `METHOD_NOT_FOUND`. Reports are clamped by the Gateway and again by the
+advertises the mode; otherwise clients disable the control and new reports
+return `METHOD_NOT_FOUND`. Clearing an existing lease bypasses that probe: a
+transient probe failure must not strand a host report until its TTL. Reports are clamped by the Gateway and again by the
 host. A host still resizing answers with `viewport_transition`; the Gateway
 returns `pending: true` immediately and lets the lease task retry, so a slow
 resize never blocks terminal input on the same connection. Effective geometry

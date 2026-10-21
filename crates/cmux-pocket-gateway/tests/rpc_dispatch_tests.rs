@@ -6,15 +6,21 @@ use std::sync::Arc;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
-async fn spawn_test_gateway(token: &str) -> (Arc<CmuxGateway>, u16) {
+async fn spawn_gateway_with_backend(token: &str) -> (Arc<MockCmuxBackend>, Arc<CmuxGateway>, u16) {
     let backend = Arc::new(MockCmuxBackend::default());
-    let gateway = Arc::new(CmuxGateway::new("127.0.0.1", 0, token, backend).expect("Gateway init"));
+    let gateway =
+        Arc::new(CmuxGateway::new("127.0.0.1", 0, token, backend.clone()).expect("Gateway init"));
     let listener = gateway.start().await.expect("Gateway start");
     let port = listener.local_addr().expect("Local addr").port();
     let gw_runner = gateway.clone();
     tokio::spawn(async move {
         let _ = gw_runner.run_with_listener(listener).await;
     });
+    (backend, gateway, port)
+}
+
+async fn spawn_test_gateway(token: &str) -> (Arc<CmuxGateway>, u16) {
+    let (_backend, gateway, port) = spawn_gateway_with_backend(token).await;
     (gateway, port)
 }
 
@@ -303,4 +309,67 @@ async fn test_unknown_method_error() {
         .contains("not implemented"));
 
     gw.stop().await;
+}
+
+#[tokio::test]
+async fn test_viewport_clear_works_when_the_capability_probe_fails() {
+    let token = "test-token";
+    let (backend, _gateway, port) = spawn_gateway_with_backend(token).await;
+    let mut ws = authenticate_ws(port, token).await;
+
+    let report = json!({
+        "id": "req-vp-supported",
+        "method": "mobile.terminal.viewport",
+        "params": {
+            "surface_id": "surf-main-1",
+            "client_id": "test-client",
+            "viewport_generation": 7,
+            "viewport_columns": 44,
+            "viewport_rows": 30,
+        }
+    });
+    ws.send(Message::Text(report.to_string())).await.unwrap();
+    let res: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(res["result"]["accepted"], true);
+
+    // The probe now fails, so new reports are refused. An existing lease must
+    // still be releasable.
+    backend.set_viewport_supported(false);
+    let refused = json!({
+        "id": "req-vp-refused",
+        "method": "mobile.terminal.viewport",
+        "params": {
+            "surface_id": "surf-main-1",
+            "client_id": "test-client",
+            "viewport_generation": 8,
+            "viewport_columns": 40,
+            "viewport_rows": 30,
+        }
+    });
+    ws.send(Message::Text(refused.to_string())).await.unwrap();
+    let res: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(
+        res["error"]["code"],
+        cmux_pocket_protocol::rpc::CODE_METHOD_NOT_FOUND
+    );
+
+    let clear = json!({
+        "id": "req-vp-clear-despite-probe",
+        "method": "mobile.terminal.viewport",
+        "params": {
+            "surface_id": "surf-main-1",
+            "client_id": "test-client",
+            "viewport_generation": 9,
+            "clear": true,
+        }
+    });
+    ws.send(Message::Text(clear.to_string())).await.unwrap();
+    let res: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(res["result"]["cleared"], true);
+    assert_eq!(res["result"]["columns"], 80);
+    assert_eq!(res["result"]["rows"], 24);
+    assert!(backend.viewport_reports_for("surf-main-1").is_empty());
 }

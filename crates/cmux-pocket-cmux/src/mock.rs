@@ -232,6 +232,7 @@ pub struct MockCmuxBackend {
     /// minimum-across-clients viewport reports.
     viewport_reports: Arc<Mutex<ViewportReports>>,
     viewport_report_calls: Arc<AtomicU64>,
+    viewport_supported: Arc<AtomicBool>,
 }
 
 impl Default for MockCmuxBackend {
@@ -375,6 +376,7 @@ impl MockCmuxBackend {
             offline: Arc::new(AtomicBool::new(false)),
             viewport_reports: Arc::new(Mutex::new(HashMap::new())),
             viewport_report_calls: Arc::new(AtomicU64::new(0)),
+            viewport_supported: Arc::new(AtomicBool::new(true)),
         }
     }
 
@@ -385,6 +387,11 @@ impl MockCmuxBackend {
 
     fn is_offline(&self) -> bool {
         self.offline.load(Ordering::SeqCst)
+    }
+
+    /// Simulates a transient capability-probe failure.
+    pub fn set_viewport_supported(&self, supported: bool) {
+        self.viewport_supported.store(supported, Ordering::SeqCst);
     }
 
     /// Number of applied viewport reports (test helper for lease renewal).
@@ -692,7 +699,7 @@ impl CmuxBackend for MockCmuxBackend {
     }
 
     async fn supports_viewport_resize(&self) -> bool {
-        true
+        self.viewport_supported.load(Ordering::SeqCst)
     }
 
     async fn apply_viewport_report(

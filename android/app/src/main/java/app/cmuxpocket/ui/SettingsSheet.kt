@@ -1138,7 +1138,7 @@ fun DisplaySection(
                 FilterChip(
                     selected = phoneWidth?.enabled == true,
                     onClick = { onPhoneWidthEnabledChange(true) },
-                    enabled = viewportResizeSupported,
+                    enabled = viewportResizeSupported && phoneWidth?.phase != PhoneWidthPhase.RESTORING,
                     label = { Text(stringResource(R.string.terminal_width_phone), fontSize = 11.sp) }
                 )
             }
