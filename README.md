@@ -14,6 +14,21 @@ cmux Pocket is an independent Android companion for [cmux](https://cmux.com/) on
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/terminal.png" width="220" alt="Phone-width terminal with the floating island"></td>
+    <td><img src="docs/screenshots/session-drawer.png" width="220" alt="Session drawer listing workspaces and terminals"></td>
+    <td><img src="docs/screenshots/floating-window.png" width="220" alt="Terminal running in an Android picture-in-picture window"></td>
+    <td><img src="docs/screenshots/qr-pairing.png" width="220" alt="Scanning a connection QR code"></td>
+  </tr>
+</table>
+
+Captured on a 1080 × 2400 Android emulator against a local Gateway.
+
+---
+
 ## Highlights
 
 - **Pure Immersive Viewport & Floating Island**: Fullscreen terminal canvas with a dynamic breadcrumb island pill (`[status] workspace > #session [count]`) for instant session context, switching, and status indication.
