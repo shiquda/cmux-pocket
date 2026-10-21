@@ -60,19 +60,19 @@
     <string name="panel_combination_mode">Combination Mode</string>
 
     <!-- QR Code Scanner -->
-    <string name="scan_title">Scan Connection QR</string>
+    <string name="scan_title">Scan Connection QR Code</string>
     <string name="scan_torch_toggle_cd">Toggle Flashlight</string>
     <string name="scan_close_cd">Cancel Scanning</string>
-    <string name="scan_hint_point_camera">Point camera at cmux-pocket QR code</string>
+    <string name="scan_hint_point_camera">Point camera at the QR code on your computer</string>
     <string name="scan_hint_focus">Tap screen to focus if blurry</string>
-    <string name="scan_hint_terminal">To show a QR code, run this in your computer terminal</string>
+    <string name="scan_hint_terminal">Generate a QR code in your computer terminal:</string>
     <string name="scan_command_qr" translatable="false">cmux-pocket qr</string>
     <string name="scan_cancel">Cancel</string>
     <string name="scan_permission_denied_title">Camera Permission Required</string>
-    <string name="scan_permission_denied_desc">Camera access is needed to scan connection QR codes. Please enable it in Settings, or enter connection details manually.</string>
+    <string name="scan_permission_denied_desc">Camera access is needed to scan connection QR codes. Turn it on in Settings, or enter connection details manually.</string>
     <string name="scan_app_settings">App Settings</string>
-    <string name="scan_permission_request_title">Scan Gateway QR Code</string>
-    <string name="scan_permission_request_desc">Grant camera permission to automatically scan and import connection configuration from your computer terminal.</string>
+    <string name="scan_permission_request_title">Scan Connection QR Code</string>
+    <string name="scan_permission_request_desc">Allow camera access to scan and import the connection configuration from your computer terminal.</string>
     <string name="scan_permission_allow">Allow</string>
 
     <!-- Connection Assistant -->

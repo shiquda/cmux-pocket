@@ -686,11 +686,7 @@ fun LanguageSection(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = when (option) {
-                            AppLanguage.SYSTEM -> stringResource(R.string.settings_language_system)
-                            AppLanguage.ENGLISH -> stringResource(R.string.settings_language_english)
-                            AppLanguage.CHINESE -> stringResource(R.string.settings_language_chinese)
-                        },
+                        text = stringResource(option.labelRes),
                         fontSize = 14.sp,
                         color = theme.onContainer
                     )

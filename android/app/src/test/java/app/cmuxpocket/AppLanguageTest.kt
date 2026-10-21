@@ -18,14 +18,12 @@ class AppLanguageTest {
         assertEquals(AppLanguage.SYSTEM, AppLanguage.fromTag(""))
         assertEquals(AppLanguage.SYSTEM, AppLanguage.fromTag("fr"))
     }
-
     @Test
     fun `persisted tags round trip`() {
         AppLanguage.values().forEach { language ->
             assertEquals(language, AppLanguage.fromTag(language.tag))
         }
     }
-
     @Test
     fun `system resolves to the closest shipped dictionary`() {
         assertEquals(AppLanguage.CHINESE, AppLanguage.SYSTEM.resolved(Locale.SIMPLIFIED_CHINESE))
