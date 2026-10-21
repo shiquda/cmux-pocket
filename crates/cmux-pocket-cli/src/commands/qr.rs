@@ -2,7 +2,7 @@
 
 use crate::cli::QrArgs;
 use crate::endpoint::{
-    collect_candidates, resolve_without_picker, EndpointCandidate, EndpointSource,
+    collect_candidates, resolve_default_index, EndpointCandidate, EndpointSource,
 };
 use crate::error::CliError;
 use crate::output::{print_success, token_fingerprint};
@@ -51,6 +51,17 @@ pub fn generate_ansi_qr(content: &str, invert: bool) -> Result<String, CliError>
     Ok(rendered)
 }
 
+/// Profile name stored on the phone: explicit `--name`, otherwise the endpoint label.
+fn profile_name(candidate: &EndpointCandidate, override_name: Option<&str>) -> String {
+    override_name.map(str::to_string).unwrap_or_else(|| {
+        if candidate.parsed.is_loopback {
+            "USB / Local".to_string()
+        } else {
+            candidate.name.clone()
+        }
+    })
+}
+
 /// Handles `cmux-pocket qr` command.
 pub async fn handle_qr(
     paths: &PocketPaths,
@@ -76,34 +87,41 @@ pub async fn handle_qr(
         && args.endpoint.is_none()
         && picker::is_interactive_terminal();
 
-    let chosen = if interactive {
-        match picker::pick(&candidates, &fp)? {
-            PickOutcome::Selected(index) => &candidates[index],
+    // Interactive mode previews the rendered QR for every candidate, starting with the first.
+    let (chosen_index, preview) = if interactive {
+        let mut previews: Vec<(String, String, String)> = Vec::with_capacity(candidates.len());
+        for candidate in &candidates {
+            let name = profile_name(candidate, args.name.as_deref());
+            let uri = build_import_uri(&candidate.parsed, &token, Some(&name));
+            let qr = generate_ansi_qr(&uri, !args.no_invert)?;
+            previews.push((uri, name, qr));
+        }
+        let blocks: Vec<String> = previews.iter().map(|preview| preview.2.clone()).collect();
+        match picker::pick(&candidates, &blocks, &fp)? {
+            PickOutcome::Selected(index) => (index, Some(previews.swap_remove(index))),
             PickOutcome::Cancelled => {
                 println!("Cancelled.");
                 return Ok(());
             }
         }
     } else {
-        resolve_without_picker(&candidates)?
+        (resolve_default_index(&candidates)?, None)
     };
 
-    let profile_name = args.name.clone().unwrap_or_else(|| {
-        if chosen.parsed.is_loopback {
-            "USB / Local".to_string()
-        } else {
-            chosen.name.clone()
+    let chosen = &candidates[chosen_index];
+    let (uri, profile_name, qr_block) = match preview {
+        Some(preview) => preview,
+        None => {
+            let name = profile_name(chosen, args.name.as_deref());
+            let uri = build_import_uri(&chosen.parsed, &token, Some(&name));
+            if args.url_only {
+                println!("{}", uri);
+                return Ok(());
+            }
+            let qr = generate_ansi_qr(&uri, !args.no_invert)?;
+            (uri, name, qr)
         }
-    });
-    let uri = build_import_uri(&chosen.parsed, &token, Some(&profile_name));
-
-    if args.url_only && !json_mode {
-        println!("{}", uri);
-        return Ok(());
-    }
-
-    let invert = !args.no_invert;
-    let qr_block = generate_ansi_qr(&uri, invert)?;
+    };
 
     let data = QrData {
         endpoint: chosen.parsed.raw.clone(),

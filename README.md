@@ -68,10 +68,10 @@ Generate a terminal QR code with automatic Tailscale discovery:
 cmux-pocket qr
 ```
 
-In a terminal this opens an interactive picker: switch between saved endpoints, a verified
-Tailscale Serve route, Cloudflare Tunnel hostnames, and USB with ↑/↓, then press Enter to
-render the QR code. `--endpoint` skips the picker, and `--no-interactive`, `--json`, and
-`--url-only` keep single-shot behavior.
+In a terminal this opens an interactive picker with the first endpoint's QR already rendered:
+switch between saved endpoints, a verified Tailscale Serve route, Cloudflare Tunnel hostnames,
+and USB with ↑/↓ and the QR re-renders live; press Enter to confirm that endpoint. `--endpoint`
+skips the picker, and `--no-interactive`, `--json`, and `--url-only` keep single-shot behavior.
 
 Save additional endpoints once:
 

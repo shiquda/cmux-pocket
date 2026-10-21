@@ -253,16 +253,12 @@ pub fn build_candidates(
     Ok(candidates)
 }
 
-/// Picks the first candidate that is safe to use without asking.
-pub fn default_candidate(candidates: &[EndpointCandidate]) -> Option<&EndpointCandidate> {
-    candidates.iter().find(|candidate| candidate.can_default)
-}
-
-/// Returns the candidate to encode when no interactive picker is used.
-pub fn resolve_without_picker(
-    candidates: &[EndpointCandidate],
-) -> Result<&EndpointCandidate, CliError> {
-    default_candidate(candidates).ok_or_else(no_endpoint_error)
+/// Returns the index of the candidate to encode when no interactive picker is used.
+pub fn resolve_default_index(candidates: &[EndpointCandidate]) -> Result<usize, CliError> {
+    candidates
+        .iter()
+        .position(|candidate| candidate.can_default)
+        .ok_or_else(no_endpoint_error)
 }
 
 pub fn no_endpoint_error() -> CliError {
@@ -323,7 +319,9 @@ mod tests {
         assert_eq!(candidates[1].name, "LAN");
         assert_eq!(candidates[1].source, EndpointSource::NamedEndpoint);
         assert_eq!(
-            default_candidate(&candidates).map(|c| c.url.clone()),
+            candidates
+                .get(resolve_default_index(&candidates).unwrap())
+                .map(|c| c.url.clone()),
             Some("wss://saved.example.com".to_string())
         );
     }
@@ -373,7 +371,7 @@ mod tests {
         };
         let candidates = build_candidates(None, &GatewayConfig::default(), &discovered).unwrap();
         assert_eq!(candidates.len(), 2);
-        assert!(resolve_without_picker(&candidates).is_err());
+        assert!(resolve_default_index(&candidates).is_err());
 
         let default_only = build_candidates(
             Some("ws://127.0.0.1:8088"),
@@ -382,7 +380,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            resolve_without_picker(&default_only).unwrap().name,
+            &default_only[resolve_default_index(&default_only).unwrap()].name,
             "127.0.0.1"
         );
     }

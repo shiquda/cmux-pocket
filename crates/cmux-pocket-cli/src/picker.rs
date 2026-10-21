@@ -45,48 +45,56 @@ pub enum PickOutcome {
     Cancelled,
 }
 
-/// Shows the picker and returns the chosen index.
-pub fn pick(candidates: &[EndpointCandidate], token_fingerprint: &str) -> io::Result<PickOutcome> {
+/// Shows the endpoint picker with a live QR preview and returns the chosen index.
+///
+/// `qr_blocks[i]` must be the rendered QR for `candidates[i]`; the first one is shown before
+/// any keypress so entering interactive mode immediately displays a scannable code.
+pub fn pick(
+    candidates: &[EndpointCandidate],
+    qr_blocks: &[String],
+    token_fingerprint: &str,
+) -> io::Result<PickOutcome> {
     if candidates.is_empty() {
         return Ok(PickOutcome::Cancelled);
     }
-    imp::pick(candidates, token_fingerprint)
+    imp::pick(candidates, qr_blocks, token_fingerprint)
 }
 
 fn render(
     out: &mut impl Write,
     candidates: &[EndpointCandidate],
+    qr_blocks: &[String],
     selected: usize,
     token_fingerprint: &str,
 ) -> io::Result<()> {
     write!(out, "\x1b[2J\x1b[H")?;
-    writeln!(out, "cmux-pocket QR — choose a phone endpoint")?;
-    writeln!(out, "Token: {token_fingerprint}")?;
-    writeln!(out)?;
-    for (index, candidate) in candidates.iter().enumerate() {
-        let marker = if index == selected { ">" } else { " " };
-        let badge = if candidate.verified {
-            "verified"
-        } else {
-            "unverified"
-        };
-        let mut line = format!(
-            "{marker} {:<20} {:<42} [{badge}] {}",
-            candidate.name, candidate.url, candidate.source_label
-        );
-        if let Some(note) = &candidate.note {
-            line.push_str(&format!(" — {note}"));
-        }
-        if index == selected {
-            writeln!(out, "\x1b[7m{line}\x1b[0m")?;
-        } else {
-            writeln!(out, "{line}")?;
-        }
+    let candidate = &candidates[selected];
+    writeln!(
+        out,
+        "cmux-pocket QR — {} ({}/{})",
+        candidate.name,
+        selected + 1,
+        candidates.len()
+    )?;
+    writeln!(out, "\x1b[7m{}\x1b[0m", candidate.url)?;
+    let badge = if candidate.verified {
+        "verified"
+    } else {
+        "unverified"
+    };
+    writeln!(out, "[{badge}] {}", candidate.source_label)?;
+    if let Some(note) = &candidate.note {
+        writeln!(out, "Note: {note}")?;
     }
     writeln!(out)?;
+    if let Some(qr) = qr_blocks.get(selected) {
+        writeln!(out, "{qr}")?;
+    }
+    writeln!(out)?;
+    writeln!(out, "Token: {token_fingerprint}")?;
     write!(
         out,
-        "↑/↓ or j/k to move · Enter to show QR · q/Esc to cancel"
+        "↑/↓ or j/k switch endpoint · Enter confirm · q/Esc cancel"
     )?;
     out.flush()
 }
@@ -182,13 +190,20 @@ mod imp {
 
     pub fn pick(
         candidates: &[EndpointCandidate],
+        qr_blocks: &[String],
         token_fingerprint: &str,
     ) -> io::Result<PickOutcome> {
         let _terminal = RawTerminal::enter()?;
         let mut state = PickerState::new(candidates.len());
         let mut out = io::stdout();
         loop {
-            render(&mut out, candidates, state.selected(), token_fingerprint)?;
+            render(
+                &mut out,
+                candidates,
+                qr_blocks,
+                state.selected(),
+                token_fingerprint,
+            )?;
             match read_byte()? {
                 b'\r' | b'\n' => return Ok(PickOutcome::Selected(state.selected())),
                 b'q' | b'Q' | 0x03 | 0x04 => return Ok(PickOutcome::Cancelled),
@@ -216,6 +231,7 @@ mod imp {
 
     pub fn pick(
         _candidates: &[EndpointCandidate],
+        _qr_blocks: &[String],
         _token_fingerprint: &str,
     ) -> io::Result<PickOutcome> {
         Err(io::Error::new(
@@ -242,31 +258,46 @@ mod tests {
         assert_eq!(state.selected(), 1);
     }
 
-    #[test]
-    fn empty_picker_is_cancelled() {
-        let outcome = pick(&[], "sha256:test").unwrap();
-        assert_eq!(outcome, PickOutcome::Cancelled);
-    }
-
-    #[test]
-    fn render_marks_the_selected_candidate() {
-        let candidate = crate::endpoint::EndpointCandidate {
-            url: "wss://mac.example.ts.net".to_string(),
-            name: "Tailscale".to_string(),
+    fn candidate(name: &str, url: &str) -> crate::endpoint::EndpointCandidate {
+        crate::endpoint::EndpointCandidate {
+            url: url.to_string(),
+            name: name.to_string(),
             source: crate::endpoint::EndpointSource::TailscaleServe,
             source_label: "Tailscale Serve route".to_string(),
             verified: true,
             can_default: true,
             note: None,
-            parsed: cmux_pocket_macos::parse_and_validate_endpoint("wss://mac.example.ts.net")
-                .unwrap(),
-        };
+            parsed: cmux_pocket_macos::parse_and_validate_endpoint(url).unwrap(),
+        }
+    }
+
+    #[test]
+    fn empty_picker_is_cancelled() {
+        let outcome = pick(&[], &[], "sha256:test").unwrap();
+        assert_eq!(outcome, PickOutcome::Cancelled);
+    }
+
+    #[test]
+    fn render_shows_the_selected_endpoint_qr_immediately() {
+        let candidates = [
+            candidate("Tailscale", "wss://mac.example.ts.net"),
+            candidate("LAN", "wss://lan.example"),
+        ];
+        let blocks = ["QR-FIRST".to_string(), "QR-SECOND".to_string()];
         let mut output = Vec::new();
-        render(&mut output, &[candidate], 0, "sha256:abc").unwrap();
-        let text = String::from_utf8(output).unwrap();
-        assert!(text.contains("Tailscale"));
+        render(&mut output, &candidates, &blocks, 0, "sha256:abc").unwrap();
+        let text = String::from_utf8_lossy(&output).to_string();
+        assert!(text.contains("Tailscale (1/2)"));
         assert!(text.contains("[verified]"));
-        assert!(text.contains("\x1b[7m"));
-        assert!(text.contains("Enter to show QR"));
+        assert!(text.contains("QR-FIRST"));
+        assert!(!text.contains("QR-SECOND"));
+        assert!(text.contains("Enter confirm"));
+
+        output.clear();
+        render(&mut output, &candidates, &blocks, 1, "sha256:abc").unwrap();
+        let text = String::from_utf8_lossy(&output).to_string();
+        assert!(text.contains("LAN (2/2)"));
+        assert!(text.contains("QR-SECOND"));
+        assert!(!text.contains("QR-FIRST"));
     }
 }

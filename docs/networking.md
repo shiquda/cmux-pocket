@@ -308,11 +308,11 @@ The CLI renders an ANSI QR code block directly in the terminal, accompanied by t
 
 ### Interactive endpoint picker and discovery
 
-Running `cmux-pocket qr` in a terminal opens a picker by default. It lists every endpoint
-the Mac can offer and lets you move with ↑/↓ (or `j`/`k`) and press Enter to render that
-QR code. `q` or Esc cancels. `--endpoint` skips the picker, and `--no-interactive` keeps the
-old single-shot behavior for scripts. Non-TTY invocations, `--json`, and `--url-only` are
-always non-interactive.
+Running `cmux-pocket qr` in a terminal opens a picker by default. It renders the first
+available endpoint's QR code immediately; ↑/↓ (or `j`/`k`) switches endpoints and re-renders
+the QR for the new one, and Enter confirms. `q` or Esc cancels. `--endpoint` skips the picker,
+and `--no-interactive` keeps the old single-shot behavior for scripts. Non-TTY invocations,
+`--json`, and `--url-only` are always non-interactive.
 
 Candidates are discovered locally:
 
