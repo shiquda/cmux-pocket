@@ -5,7 +5,7 @@ use crate::error::CliError;
 use crate::output::print_success;
 use crate::probe::{probe_gateway, DEFAULT_PROBE_TIMEOUT};
 use cmux_pocket_cmux::LiveCmuxBackend;
-use cmux_pocket_gateway::CmuxGateway;
+use cmux_pocket_gateway::{CmuxGateway, MacOsHostController};
 use cmux_pocket_macos::{load_config, load_token, validate_loopback_host, PocketPaths};
 use serde::Serialize;
 use std::sync::Arc;
@@ -75,12 +75,11 @@ pub async fn handle_gateway(
                 None => Arc::new(LiveCmuxBackend::new()),
             };
 
-            let gateway = Arc::new(CmuxGateway::new(
-                &config.host,
-                config.port,
-                &token,
-                backend,
-            )?);
+            let gateway = Arc::new(
+                CmuxGateway::new(&config.host, config.port, &token, backend)?.with_host_controller(
+                    Arc::new(MacOsHostController::new(config.cmux_path.clone())),
+                ),
+            );
 
             let listener = match gateway.start().await {
                 Ok(l) => l,

@@ -242,6 +242,8 @@ fun CmuxApp(
     val status by viewModel.connectionStatus.collectAsState(initial = ConnectionStatus.DISCONNECTED)
     val statusMsg by viewModel.statusMessage.collectAsState()
     val connectionReadiness by viewModel.connectionReadiness.collectAsState()
+    val wakeState by viewModel.wakeState.collectAsState()
+    val refreshingHostStatus by viewModel.hostStatusRefreshing.collectAsState()
     val workspaces by viewModel.workspaces.collectAsState()
     val activeWorkspace by viewModel.activeWorkspace.collectAsState()
     val activeSurfaces by viewModel.activeSurfaces.collectAsState()
@@ -370,6 +372,9 @@ fun CmuxApp(
                             surfaces = activeSurfaces,
                             screenStateFlow = viewModel.activeScreenState,
                             connectionStatus = status,
+                            connectionReadiness = connectionReadiness,
+                            wakeState = wakeState,
+                            onWakeCmux = viewModel::wakeCmux,
                             displayPreference = terminalDisplay,
                             onDisplayPreferenceChange = changeTerminalDisplay,
                             themeHex = selectedThemeHex,
@@ -427,6 +432,9 @@ fun CmuxApp(
                         surfaces = activeSurfaces,
                         screenStateFlow = viewModel.activeScreenState,
                         connectionStatus = status,
+                        connectionReadiness = connectionReadiness,
+                        wakeState = wakeState,
+                        onWakeCmux = viewModel::wakeCmux,
                         displayPreference = terminalDisplay,
                         onDisplayPreferenceChange = changeTerminalDisplay,
                         themeHex = selectedThemeHex,
@@ -607,6 +615,8 @@ fun CmuxApp(
                 onConnectClick = settingsOnConnect,
                 onScanQrClick = onScanQrClick,
                 onClearScrollback = settingsOnClearScrollback,
+                onRecheckGatewayVersion = viewModel::refreshHostStatus,
+                isRefreshingGatewayVersion = refreshingHostStatus,
                 onDismissRequest = settingsOnDismiss
             )
         }

@@ -182,4 +182,15 @@
     <string name="settings_scrollback_cleared_toast">Terminal scrollback cleared and memory released</string>
     <string name="settings_json_label">JSON</string>
 
+    <!-- Remote wake of the cmux desktop app -->
+    <string name="stage_cmux_stopped_title">Mac online · cmux not running</string>
+    <string name="stage_cmux_stopped_body">The Gateway is connected, but cmux.app is not running on your Mac. Wake it remotely without leaving this screen.</string>
+    <string name="stage_wake_cmux">Wake cmux on Mac</string>
+    <string name="stage_wake_retry">Retry wake</string>
+    <string name="stage_waking_cmux">Launching cmux…</string>
+    <string name="stage_waiting_cmux">Loading workspaces…</string>
+    <string name="stage_wake_timeout">cmux did not respond within 15 seconds. Confirm the Mac is awake, then retry.</string>
+    <string name="stage_wake_background_hint">Starts in the background and keeps your Mac\'s current window in front.</string>
+    <string name="stage_wake_unavailable">This Gateway version cannot wake cmux. Upgrade the Mac Gateway from Settings → Connection.</string>
+
 </resources>

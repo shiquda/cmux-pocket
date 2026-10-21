@@ -2,12 +2,14 @@ use async_trait::async_trait;
 use cmux_pocket_cmux::CmuxBackend;
 use cmux_pocket_protocol::auth::ALL_CAPABILITIES;
 use cmux_pocket_protocol::rpc::{CODE_BACKEND_UNAVAILABLE, CODE_METHOD_NOT_FOUND};
+use cmux_pocket_protocol::{CAP_HOST_WAKE, PROTOCOL_SERVER_VERSION};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 use tracing::warn;
 
 use crate::error::GatewayError;
 use crate::health::HealthTracker;
+use crate::host::SharedHostController;
 use crate::session::ClientSession;
 use crate::surface_locks::SurfaceLockManager;
 
@@ -15,6 +17,8 @@ use crate::surface_locks::SurfaceLockManager;
 pub trait GatewayCallbacks: Send + Sync {
     async fn broadcast(&self, event: &str, data: Value);
     fn request_priority_refresh(&self, surface_id: String);
+    /// Starts a bounded fast poll for cmux readiness after a remote wake request.
+    fn request_wake_watch(&self);
 }
 
 pub struct DispatchContext<'a> {
@@ -22,6 +26,7 @@ pub struct DispatchContext<'a> {
     pub backend: &'a Arc<dyn CmuxBackend>,
     pub health: &'a HealthTracker,
     pub surface_locks: &'a SurfaceLockManager,
+    pub host: &'a SharedHostController,
     pub callbacks: &'a (dyn GatewayCallbacks + 'a),
 }
 
@@ -36,16 +41,80 @@ pub async fn dispatch_rpc<'a>(
 
     match method {
         "mobile.host.status" => {
-            let capabilities = ALL_CAPABILITIES;
+            let running = ctx.backend.ping().await.is_ok();
+            let host = ctx.host.status().await;
+            let capabilities: Vec<&str> = ALL_CAPABILITIES
+                .iter()
+                .copied()
+                .filter(|capability| host.can_wake || *capability != CAP_HOST_WAKE)
+                .collect();
             let res = json!({
                 "id": id_val,
                 "result": {
                     "mac_display_name": "cmux Host",
-                    "mac_app_version": "2.0.0",
+                    "mac_app_version": env!("CARGO_PKG_VERSION"),
+                    "gateway_version": env!("CARGO_PKG_VERSION"),
+                    "protocol_version": PROTOCOL_SERVER_VERSION,
                     "capabilities": capabilities,
+                    "cmux_status": {
+                        "installed": host.installed,
+                        "running": running,
+                        "can_wake": host.can_wake,
+                    },
                 }
             });
             ctx.session.send_json(res).await?;
+        }
+
+        "mobile.host.wake_cmux" => {
+            let host = ctx.host.status().await;
+            if !host.can_wake {
+                let err_res = json!({
+                    "id": id_val,
+                    "error": {
+                        "code": CODE_BACKEND_UNAVAILABLE,
+                        "message": "Remote cmux wake is not available on this Gateway",
+                    }
+                });
+                ctx.session.send_json(err_res).await?;
+            } else if ctx.backend.ping().await.is_ok() {
+                let res = json!({
+                    "id": id_val,
+                    "result": {
+                        "success": true,
+                        "status": "running",
+                        "message": "cmux is already running",
+                    }
+                });
+                ctx.session.send_json(res).await?;
+                ctx.callbacks.request_wake_watch();
+            } else {
+                match ctx.host.wake_cmux().await {
+                    Ok(()) => {
+                        let res = json!({
+                            "id": id_val,
+                            "result": {
+                                "success": true,
+                                "status": "launching",
+                                "message": "cmux launch initiated",
+                            }
+                        });
+                        ctx.session.send_json(res).await?;
+                        ctx.callbacks.request_wake_watch();
+                    }
+                    Err(error) => {
+                        warn!("wake_cmux failed: {}", error);
+                        let err_res = json!({
+                            "id": id_val,
+                            "error": {
+                                "code": CODE_BACKEND_UNAVAILABLE,
+                                "message": "Unable to launch cmux on the host",
+                            }
+                        });
+                        ctx.session.send_json(err_res).await?;
+                    }
+                }
+            }
         }
 
         "mobile.workspace.list" | "workspace.list" => {

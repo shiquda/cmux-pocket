@@ -3,6 +3,7 @@ package app.cmuxpocket.ui
 import app.cmuxpocket.engine.*
 import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.protocol.AgentSessionCompleted
+import app.cmuxpocket.protocol.GatewayHostStatus
 import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.protocol.WorkspaceListResponse
 import app.cmuxpocket.protocol.WorkspaceSelection
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import java.util.concurrent.ConcurrentHashMap
 
@@ -27,6 +29,14 @@ enum class AppSyncPhase {
     AUTHENTICATING,
     SYNCING,
     READY
+}
+
+/** Progress of a remote cmux launch requested from the terminal stage. */
+enum class CmuxWakeState {
+    IDLE,
+    WAKING,
+    SYNCING,
+    FAILED
 }
 
 class TerminalViewModel : ViewModel() {
@@ -47,6 +57,13 @@ class TerminalViewModel : ViewModel() {
 
     private val _connectionReadiness = MutableStateFlow(ConnectionReadiness())
     val connectionReadiness: StateFlow<ConnectionReadiness> = _connectionReadiness.asStateFlow()
+
+    private val _wakeState = MutableStateFlow(CmuxWakeState.IDLE)
+    val wakeState: StateFlow<CmuxWakeState> = _wakeState.asStateFlow()
+
+    private val _hostStatusRefreshing = MutableStateFlow(false)
+    val hostStatusRefreshing: StateFlow<Boolean> = _hostStatusRefreshing.asStateFlow()
+    private var wakeTimeoutJob: Job? = null
 
     private val _pendingImportUri = MutableStateFlow<String?>(null)
     val pendingImportUri: StateFlow<String?> = _pendingImportUri.asStateFlow()
@@ -179,12 +196,20 @@ class TerminalViewModel : ViewModel() {
             wsClient.statusFlow.collect { status ->
                 when (status) {
                     ConnectionStatus.CONNECTING -> {
-                        _connectionReadiness.value = ConnectionReadiness(started = true)
+                        _connectionReadiness.value = _connectionReadiness.value.copy(
+                            step = ConnectionStep.NETWORK,
+                            started = true,
+                            problem = null,
+                        )
                         _syncPhase.value = AppSyncPhase.CONNECTING
                         _statusMessage.value = "Connecting..."
                     }
                     ConnectionStatus.AUTHENTICATING -> {
-                        _connectionReadiness.value = ConnectionReadiness(step = ConnectionStep.AUTHENTICATION, started = true)
+                        _connectionReadiness.value = _connectionReadiness.value.copy(
+                            step = ConnectionStep.AUTHENTICATION,
+                            started = true,
+                            problem = null,
+                        )
                         _syncPhase.value = AppSyncPhase.AUTHENTICATING
                         _statusMessage.value = "Authenticating..."
                     }
@@ -205,7 +230,7 @@ class TerminalViewModel : ViewModel() {
                         val authFailed = wsClient.connectionFailure == ConnectionFailure.AUTHENTICATION
                         val authTimedOut = wsClient.connectionFailure == ConnectionFailure.AUTHENTICATION_TIMEOUT
                         if (authFailed) manualDisconnect = true
-                        _connectionReadiness.value = ConnectionReadiness(
+                        _connectionReadiness.value = _connectionReadiness.value.copy(
                             step = if (authFailed || authTimedOut) ConnectionStep.AUTHENTICATION else ConnectionStep.NETWORK,
                             started = true,
                             problem = when (wsClient.connectionFailure) {
@@ -226,7 +251,7 @@ class TerminalViewModel : ViewModel() {
                         currentBootstrapJob?.cancel()
                         connectionGeneration++
                         if (connectionValidationError != null || _connectionReadiness.value.started) {
-                            _connectionReadiness.value = ConnectionReadiness(
+                            _connectionReadiness.value = _connectionReadiness.value.copy(
                                 started = true,
                                 problem = connectionValidationError ?: "Gateway disconnected",
                             )
@@ -280,6 +305,9 @@ class TerminalViewModel : ViewModel() {
         reconnectJob?.cancel()
         reconnectJob = null
         wsClient.disconnect()
+        _connectionReadiness.value = ConnectionReadiness()
+        _wakeState.value = CmuxWakeState.IDLE
+        wakeTimeoutJob?.cancel()
         lastConnectionTarget = ConnectionTarget(host, port, token)
         reconnectAttempt = 0
         manualDisconnect = false
@@ -346,6 +374,60 @@ class TerminalViewModel : ViewModel() {
         }
     }
 
+    fun wakeCmux() {
+        if (_wakeState.value == CmuxWakeState.WAKING || _wakeState.value == CmuxWakeState.SYNCING) return
+        val host = _connectionReadiness.value.hostStatus ?: return
+        if (!host.cmuxInstalled || !host.canWake) return
+
+        _wakeState.value = CmuxWakeState.WAKING
+        _statusMessage.value = "Waking cmux on Mac..."
+        viewModelScope.launch {
+            try {
+                wsClient.wakeCmux()
+                // A workspace sync can arrive before this coroutine resumes; the
+                // tree collector already settled the state in that case.
+                if (_wakeState.value != CmuxWakeState.WAKING) return@launch
+                _wakeState.value = CmuxWakeState.SYNCING
+                _statusMessage.value = "Waiting for cmux to start..."
+                wakeTimeoutJob?.cancel()
+                wakeTimeoutJob = viewModelScope.launch {
+                    delay(WAKE_TIMEOUT_MS)
+                    if (_wakeState.value == CmuxWakeState.WAKING || _wakeState.value == CmuxWakeState.SYNCING) {
+                        _wakeState.value = CmuxWakeState.FAILED
+                        _statusMessage.value = "cmux did not respond; retry from the wake card"
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to wake cmux", e)
+                _wakeState.value = CmuxWakeState.FAILED
+                _statusMessage.value = "Failed to wake cmux: ${e.message}"
+            }
+        }
+    }
+
+    /** Re-reads `mobile.host.status` without reconnecting (version card and upgrade guide). */
+    fun refreshHostStatus() {
+        if (_hostStatusRefreshing.value) return
+        viewModelScope.launch {
+            _hostStatusRefreshing.value = true
+            try {
+                val status = wsClient.callRpc("mobile.host.status") as? JsonObject ?: return@launch
+                _connectionReadiness.value = _connectionReadiness.value.copy(
+                    hostStatus = decodeHostStatus(status),
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(tag, "Failed to refresh host status", e)
+                _statusMessage.value = "Unable to read Gateway version: ${e.message}"
+            } finally {
+                _hostStatusRefreshing.value = false
+            }
+        }
+    }
+
     fun disconnect() {
         manualDisconnect = true
         connectionValidationError = null
@@ -353,6 +435,8 @@ class TerminalViewModel : ViewModel() {
         reconnectAttempt = 0
         reconnectJob?.cancel()
         reconnectJob = null
+        wakeTimeoutJob?.cancel()
+        _wakeState.value = CmuxWakeState.IDLE
         wsClient.disconnect()
         awaitingReplaySurfaces.clear()
         mutationTracker.clear()
@@ -384,18 +468,27 @@ class TerminalViewModel : ViewModel() {
     private fun subscribeAndBootstrap(generation: Long) {
         currentBootstrapJob?.cancel()
         currentBootstrapJob = viewModelScope.launch {
+            var handshakeStatus: GatewayHostStatus? = null
             try {
-                val listResp = verifyGatewayConnection(
+                val handshake = verifyGatewayConnection(
                     callRpc = { method -> wsClient.callRpc(method) },
                     subscribe = {
                         wsClient.subscribeEvents(listOf("terminal.render_grid", "mobile.sync.delta", "workspace.tree", "agent.session.completed"))
                     },
                     onStep = { step ->
-                        _connectionReadiness.value = ConnectionReadiness(step = step, started = true)
+                        _connectionReadiness.value = _connectionReadiness.value.copy(
+                            step = step,
+                            started = true,
+                            problem = null,
+                        )
+                    },
+                    onHostStatus = { status ->
+                        handshakeStatus = status
+                        _connectionReadiness.value = _connectionReadiness.value.copy(hostStatus = status)
                     },
                 )
                 if (generation == connectionGeneration) {
-                    updateWorkspaces(listResp.workspaces, syncReconciledFocus = false)
+                    updateWorkspaces(handshake.workspaces, syncReconciledFocus = false)
                     _selectedSurfaceId.value?.let { surfaceId ->
                         wsClient.focusSurface(surfaceId)
                         requestSingleFlightReplay(surfaceId)
@@ -405,24 +498,42 @@ class TerminalViewModel : ViewModel() {
                     _connectionReadiness.value = ConnectionReadiness(
                         step = ConnectionStep.READY,
                         started = true,
-                        workspaceCount = listResp.workspaces.size,
-                        terminalCount = listResp.workspaces.sumOf { ws -> ws.surfaces.count { it.type == "terminal" } },
+                        workspaceCount = handshake.workspaces.size,
+                        terminalCount = handshake.workspaces.sumOf { ws -> ws.surfaces.count { it.type == "terminal" } },
+                        hostStatus = handshake.hostStatus,
                     )
-                    Log.i(tag, "Bootstrap complete for generation $generation! Total workspaces=${listResp.workspaces.size}")
+                    Log.i(tag, "Bootstrap complete for generation $generation! Total workspaces=${handshake.workspaces.size}")
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 if (generation == connectionGeneration) {
                     Log.e(tag, "Failed in bootstrap", e)
-                    _syncPhase.value = AppSyncPhase.DISCONNECTED
-                    _statusMessage.value = "Bootstrap failed: ${e.message}"
-                    _connectionReadiness.value = _connectionReadiness.value.failed(
-                        when (_connectionReadiness.value.step) {
-                            ConnectionStep.WORKSPACES -> "Gateway connected, but cmux workspaces are unavailable"
-                            ConnectionStep.GATEWAY -> "Gateway did not complete the readiness handshake"
-                            else -> "Workspace synchronization failed"
-                        }
-                    )
+                    val host = handshakeStatus ?: _connectionReadiness.value.hostStatus
+                    if (host != null && host.cmuxInstalled && !host.cmuxRunning) {
+                        // The Gateway is healthy; a stopped cmux app is a recoverable
+                        // state with its own wake card, not a red connection failure.
+                        updateWorkspaces(emptyList(), syncReconciledFocus = false)
+                        _syncPhase.value = AppSyncPhase.READY
+                        _statusMessage.value = "Mac online · cmux not running"
+                        _connectionReadiness.value = _connectionReadiness.value.copy(
+                            step = ConnectionStep.READY,
+                            started = true,
+                            problem = null,
+                            workspaceCount = 0,
+                            terminalCount = 0,
+                            hostStatus = host,
+                        )
+                    } else {
+                        _syncPhase.value = AppSyncPhase.DISCONNECTED
+                        _statusMessage.value = "Bootstrap failed: ${e.message}"
+                        _connectionReadiness.value = _connectionReadiness.value.failed(
+                            when (_connectionReadiness.value.step) {
+                                ConnectionStep.WORKSPACES -> "Gateway connected, but cmux workspaces are unavailable"
+                                ConnectionStep.GATEWAY -> "Gateway did not complete the readiness handshake"
+                                else -> "Workspace synchronization failed"
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -431,6 +542,21 @@ class TerminalViewModel : ViewModel() {
     fun updateWorkspaces(list: List<WorkspaceInfo>, syncReconciledFocus: Boolean = true) {
         val prevSurfaceId = _selectedSurfaceId.value
         _workspaces.value = list
+        if (_wakeState.value != CmuxWakeState.IDLE) {
+            wakeTimeoutJob?.cancel()
+            _wakeState.value = CmuxWakeState.IDLE
+            refreshHostStatus()
+        }
+        if (_connectionReadiness.value.step == ConnectionStep.READY) {
+            _connectionReadiness.value = _connectionReadiness.value.copy(
+                workspaceCount = list.size,
+                terminalCount = list.sumOf { ws -> ws.surfaces.count { it.type == "terminal" } },
+            )
+        }
+        if (list.isNotEmpty() && _connectionReadiness.value.cmuxStopped) {
+            // cmux came back without another bootstrap; refresh the reported host state.
+            refreshHostStatus()
+        }
         list.forEach { ws ->
             sessionStore.syncFromSurfaces(ws.surfaces, ws.stableKey)
         }
@@ -679,3 +805,6 @@ class TerminalViewModel : ViewModel() {
         }
     }
 }
+
+/** How long the wake card waits for the Gateway's `workspace.tree` sync. */
+private const val WAKE_TIMEOUT_MS = 15_000L

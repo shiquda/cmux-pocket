@@ -266,6 +266,7 @@ impl JsonRpcError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RpcMethod {
     HostStatus,
+    HostWakeCmux,
     WorkspaceList,
     WorkspaceCreate,
     WorkspaceSelect,
@@ -287,6 +288,7 @@ impl RpcMethod {
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "mobile.host.status" => Some(Self::HostStatus),
+            "mobile.host.wake_cmux" => Some(Self::HostWakeCmux),
             "mobile.workspace.list" | "workspace.list" => Some(Self::WorkspaceList),
             "mobile.workspace.create" => Some(Self::WorkspaceCreate),
             "mobile.workspace.select" => Some(Self::WorkspaceSelect),
@@ -309,6 +311,7 @@ impl RpcMethod {
     pub const fn canonical_name(&self) -> &'static str {
         match self {
             Self::HostStatus => "mobile.host.status",
+            Self::HostWakeCmux => "mobile.host.wake_cmux",
             Self::WorkspaceList => "mobile.workspace.list",
             Self::WorkspaceCreate => "mobile.workspace.create",
             Self::WorkspaceSelect => "mobile.workspace.select",

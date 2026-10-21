@@ -87,6 +87,27 @@ pbcopy < "$(cmux-pocket token path)"
 
 `cmux-pocket service uninstall` removes only the CLI-owned LaunchAgent. Homebrew installation and upgrades do not create tokens, start services, or mutate user configuration.
 
+### Remote wake and Gateway version checks
+
+The Gateway runs as a login agent, but the cmux desktop app may not be running after a reboot or a manual quit. When the phone is connected and the Gateway reports `cmux_status.running: false`, the terminal replaces its empty state with a **Wake cmux on Mac** card:
+
+1. The phone sends `mobile.host.wake_cmux`; the Gateway verifies it is an authenticated session.
+2. The Gateway runs `/usr/bin/open -g -b com.cmuxterm.app`. `-g` launches in the background, so the Mac's current window keeps focus, and repeated requests are absorbed for 10 seconds.
+3. The Gateway probes `cmux ping` every 500 ms for up to 15 seconds. When the socket answers, it broadcasts a full `workspace.tree` sync and the phone switches to the live terminal.
+
+Remote wake only covers a Mac that is powered on and awake with the Gateway online. A sleeping or offline Mac is a network reachability problem, not a wake problem.
+
+`mobile.host.status` reports `gateway_version`, `protocol_version`, `capabilities`, and `cmux_status` (`installed`, `running`, `can_wake`). Android compares this against its own version in **Settings → Connection → Host & connection**:
+
+| State | Meaning | Action offered |
+| --- | --- | --- |
+| Match | Same feature level and the wake capability is present | None |
+| Gateway outdated | Missing `mobile.host.wake_cmux.v1` or older than the app | Copy `brew update && brew upgrade cmux-pocket && cmux-pocket setup`, then recheck |
+| Incompatible | Different protocol major version | Upgrade the Mac Gateway |
+| Client outdated | Gateway is newer than the app | Download the latest APK from GitHub Releases |
+
+The version card reads live state, so **Recheck version** refreshes it without reconnecting.
+
 ## 2. Choose a secure boundary
 
 ### Tailscale connection assistant

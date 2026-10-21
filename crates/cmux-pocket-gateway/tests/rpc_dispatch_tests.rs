@@ -66,8 +66,20 @@ async fn test_host_status_rpc() {
     );
     assert_eq!(
         result.get("mac_app_version").and_then(|v| v.as_str()),
+        Some(env!("CARGO_PKG_VERSION"))
+    );
+    assert_eq!(
+        result.get("gateway_version").and_then(|v| v.as_str()),
+        Some(env!("CARGO_PKG_VERSION"))
+    );
+    assert_eq!(
+        result
+            .get("protocol_version")
+            .and_then(|v| v.as_str()),
         Some("2.0.0")
     );
+    assert_eq!(result["cmux_status"]["running"], true);
+    assert_eq!(result["cmux_status"]["can_wake"], false);
     assert!(result.get("capabilities").is_some());
 
     gw.stop().await;

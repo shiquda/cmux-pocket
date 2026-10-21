@@ -85,4 +85,28 @@
     <string name="conn_btn_copy_setup_cmd">复制设置命令</string>
     <string name="conn_host_setup_details">Mac 上的命令将启动或复用 Gateway，验证工作区访问权限，并配置私有 HTTPS 转发。输入输出的手机端点（端口 443）及现有的 Gateway Token，然后在此处检查连接。保存的配置文件将使用加密存储。</string>
     <string name="conn_notice_check_in_settings">在设置中检查连接</string>
+    <!-- Gateway version and upgrade guidance -->
+    <string name="conn_versions_title">宿主与连接版本</string>
+    <string name="conn_version_client">Android 客户端</string>
+    <string name="conn_version_gateway">Pocket 网关</string>
+    <string name="conn_version_protocol">cmux 协议</string>
+    <string name="conn_version_wake">远程唤醒</string>
+    <string name="conn_version_match">匹配</string>
+    <string name="conn_version_outdated_badge">过旧</string>
+    <string name="conn_version_update_badge">待更新</string>
+    <string name="conn_version_incompatible_badge">不兼容</string>
+    <string name="conn_version_unknown">未上报</string>
+    <string name="conn_version_wake_ready">已就绪</string>
+    <string name="conn_version_wake_unavailable">不可用</string>
+    <string name="conn_version_gateway_outdated_body">当前网关缺少远程唤醒能力，升级 Mac 网关后即可使用。</string>
+    <string name="conn_version_incompatible_body">网关协议 v%1$s 与本应用不兼容（需要 v%2$d.x）。</string>
+    <string name="conn_version_client_outdated_body">网关版本高于当前应用，更新应用即可使用最新能力。</string>
+    <string name="conn_btn_recheck_version">重新检测版本</string>
+    <string name="conn_btn_upgrade_guide">升级方案</string>
+    <string name="conn_btn_download_client">下载新版 APK</string>
+    <string name="conn_upgrade_title">升级 Mac 网关</string>
+    <string name="conn_upgrade_body">在 Mac 的终端中运行以下命令，然后回到这里重新检测。已保存的配置与 Token 不受影响。</string>
+    <string name="conn_upgrade_copied">已复制升级命令</string>
+    <string name="conn_btn_copy_upgrade_cmd">复制命令</string>
+
 </resources>

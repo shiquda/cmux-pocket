@@ -4,6 +4,7 @@
 //! strict loopback network validation, launchd plist generation, and safe command
 //! specifications.
 
+pub mod app_launch;
 pub mod command;
 pub mod config;
 pub mod error;
@@ -14,6 +15,10 @@ pub mod permissions;
 pub mod token;
 
 // Re-export common types and functions for ergonomic access
+pub use app_launch::{
+    cmux_app_bundle_paths, resolve_executable, CmuxLauncher, CMUX_BUNDLE_ID, OPEN_PROGRAM,
+    WAKE_DEBOUNCE,
+};
 pub use command::CommandSpec;
 pub use config::{
     ensure_config, load_config, parse_and_validate_endpoint, save_config, validate_remote_endpoint,
