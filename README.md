@@ -127,6 +127,14 @@ uv run --with websockets python3 -m unittest test_gateway test_replay_normalize 
 
 The repository's Android–Gateway protocol test uses a mock Gateway bound to loopback and fixed test credentials; those values are for tests only.
 
+### Releases
+
+Release bodies come from `CHANGELOG.md`, not from commit history. Before pushing a `v*` tag, add a
+`## [X.Y.Z] - YYYY-MM-DD` section for it; the release workflow extracts that section with
+`scripts/release-notes-from-changelog.sh` and fails instead of publishing empty notes. After editing
+`CHANGELOG.md` for an existing release, run the **Sync release notes from the changelog** workflow
+manually with that tag to refresh the GitHub Release page.
+
 ## Security and privacy
 
 - The Gateway refuses non-loopback binds and does not expose a public listener by itself.
