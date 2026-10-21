@@ -1059,6 +1059,16 @@ fun TerminalCanvas(
                 )
             }
         }
+        LaunchedEffect(phoneWidth?.notice) {
+            val message = when (phoneWidth?.notice) {
+                PhoneWidthNotice.REQUEST_FAILED -> R.string.terminal_width_failed
+                PhoneWidthNotice.CLEAR_UNCONFIRMED -> R.string.terminal_width_restore_failed
+                PhoneWidthNotice.NO_BASELINE -> R.string.terminal_width_waiting
+                PhoneWidthNotice.UNSUPPORTED -> R.string.terminal_width_unsupported
+                else -> null
+            } ?: return@LaunchedEffect
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
         TerminalTextControls(
             preference = displayPreference,
             renderedFontSizeSp = geometry?.let { with(density) { it.fontSizePx.toSp().value } } ?: displayPreference.fontSizeSp,
@@ -1115,6 +1125,8 @@ private fun TerminalTextControls(
     val theme = CmuxTheme.colors
     val phoneWidthActive = phoneWidth?.enabled == true
     val restoring = phoneWidth?.phase == PhoneWidthPhase.RESTORING
+    val requesting = phoneWidth?.phase == PhoneWidthPhase.REQUESTING
+    val busy = restoring || requesting
     val modeLabel = stringResource(
         if (phoneWidthActive) R.string.terminal_width_mode_phone else R.string.terminal_width_mode_desktop
     )
@@ -1146,10 +1158,13 @@ private fun TerminalTextControls(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = { onToggleMode(!phoneWidthActive) },
-                    enabled = enabled && supported && !restoring,
+                    // Keep the button clickable when the host cannot resize so a tap
+                    // explains why instead of looking broken. Questions of state
+                    // (selection, in-flight request) still gate it.
+                    enabled = enabled && !busy,
                     modifier = Modifier.size(48.dp)
                 ) {
-                    if (restoring) {
+                    if (busy) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
@@ -1159,7 +1174,11 @@ private fun TerminalTextControls(
                         Icon(
                             if (phoneWidthActive) Icons.Default.Smartphone else Icons.Default.Computer,
                             contentDescription = modeLabel,
-                            tint = if (phoneWidthActive) theme.primary else theme.onContainer,
+                            tint = when {
+                                phoneWidthActive -> theme.primary
+                                !supported || !enabled -> theme.onContainerMuted
+                                else -> theme.onContainer
+                            },
                             modifier = Modifier.size(20.dp)
                         )
                     }

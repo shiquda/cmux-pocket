@@ -99,13 +99,20 @@ or, to release this client's report:
 ```
 
 The Gateway requires `terminal.viewport.v1` in the host capabilities before it
-advertises the mode; otherwise clients disable the control and new reports
-return `METHOD_NOT_FOUND`. Clearing an existing lease bypasses that probe: a
-transient probe failure must not strand a host report until its TTL. Reports are clamped by the Gateway and again by the
+advertises the mode; without that capability the control renders muted and a tap
+explains why, while new reports return `METHOD_NOT_FOUND`. Clearing an existing
+lease bypasses that probe: a transient probe failure must not strand a host
+report until its TTL. Reports are clamped by the Gateway and again by the
 host. A host still resizing answers with `viewport_transition`; the Gateway
 returns `pending: true` immediately and lets the lease task retry, so a slow
 resize never blocks terminal input on the same connection. Effective geometry
 is then confirmed by the next authoritative baseline frames.
+
+The mode button reflects the request lifecycle instead of silencing taps: it
+shows a spinner while a report is being applied or cleared, and it is never
+disabled merely because the host cannot resize — tapping then shows the
+unsupported explanation. Failed applies and unconfirmed clears surface a toast
+instead of only changing internal state.
 
 ## Verified behaviour
 
@@ -132,3 +139,5 @@ showing `当前 148 列 × 46 行 / 预计 44 列 × 46 行`:
 | Home (background) | 148 × 46 | release completed within 4 s |
 | Enable from Settings → Display | 37 × 46 | mirror showed `已生效 37 列 × 46 行` |
 | Gateway process killed | 148 × 46 | connection error surfaced; grid restored via TTL |
+| Pixel 5, tap mode on `b2f8271` successor | 39 × 46 | toast with the estimate; terminal reflowed; phone icon shown |
+| Pixel 5, tap again within 1 s | 148 × 46 | restoring spinner then computer icon; wide grid restored |
