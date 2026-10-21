@@ -19,12 +19,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import kotlin.math.floor
 
@@ -37,7 +39,8 @@ import kotlin.math.floor
 fun FloatingTerminalView(
     viewModel: TerminalViewModel,
     themeHex: String,
-    fontSizeSp: Float
+    fontSizeSp: Float,
+    adaptTerminal: Boolean = false
 ) {
     val screenState by viewModel.activeScreenState.collectAsState()
     val surface by viewModel.activeSurface.collectAsState()
@@ -48,6 +51,60 @@ fun FloatingTerminalView(
             Color(AndroidColor.parseColor(themeHex))
         } catch (_: Exception) {
             Color(0xFF1E1E1E)
+        }
+    }
+
+    // The floating window is the only on-screen canvas in PiP, so it owns the width report:
+    // its measured content box plus the chosen font define how many columns the host should
+    // use. A resize (drag, rotation, aspect change) re-measures and refits.
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val metricsTypeface = remember(context) { FontLoader.getMapleMonoTypeface(context) }
+    val metricsPaint = remember(metricsTypeface) {
+        Paint().apply {
+            isAntiAlias = true
+            typeface = metricsTypeface
+        }
+    }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    val pipMetrics = remember(canvasSize, fontSizeSp, density, metricsPaint) {
+        if (canvasSize.width <= 0 || canvasSize.height <= 0) {
+            null
+        } else {
+            val fontSizePx = with(density) { fontSizeSp.sp.toPx() }
+            metricsPaint.textSize = 100f
+            val referenceAdvance = metricsPaint.measureText("M").coerceAtLeast(1f)
+            terminalWidthMetricsForCanvas(
+                canvasWidthPx = canvasSize.width.toFloat(),
+                canvasHeightPx = canvasSize.height.toFloat(),
+                horizontalPaddingPx = with(density) { 6.dp.toPx() },
+                verticalPaddingPx = with(density) { 4.dp.toPx() },
+                cellWidthPx = fontSizePx * referenceAdvance / 100f,
+                rowHeightPx = fontSizePx * 1.4f,
+            )
+        }
+    }
+    val surfaceId = surface?.id.orEmpty()
+    var adaptedSurfaceId by remember { mutableStateOf<String?>(null) }
+    // Leaving PiP restores the full-screen layout; only release what this window enabled.
+    DisposableEffect(Unit) {
+        onDispose {
+            adaptedSurfaceId?.let { viewModel.setPhoneWidthEnabled(it, false) }
+        }
+    }
+    LaunchedEffect(adaptTerminal, surfaceId, pipMetrics) {
+        if (!adaptTerminal || surfaceId.isBlank() || pipMetrics == null) return@LaunchedEffect
+        viewModel.updatePhoneWidthMetrics(surfaceId, pipMetrics, false)
+        val state = viewModel.phoneWidthStates.value[surfaceId]
+        if (state?.enabled == true ||
+            state?.phase == PhoneWidthPhase.RESTORING ||
+            state?.phase == PhoneWidthPhase.UNSUPPORTED
+        ) {
+            return@LaunchedEffect
+        }
+        viewModel.setPhoneWidthEnabled(surfaceId, true)
+        if (viewModel.phoneWidthStates.value[surfaceId]?.enabled == true) {
+            adaptedSurfaceId = surfaceId
         }
     }
 
@@ -104,6 +161,7 @@ fun FloatingTerminalView(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .onSizeChanged { canvasSize = it }
         )
     }
 }
