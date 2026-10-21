@@ -28,6 +28,7 @@ extracts the section for the pushed tag while publishing, and
 - Language choice between System default, English, and 简体中文, persisted in encrypted preferences; a fresh install follows the device locale and falls back to English.
 - In-app update check against the latest GitHub Release with a semver comparison and direct APK download prompt.
 - Diagnostics: opt-in network and RPC logger with a 500-line buffer, token redaction, in-app viewer, and redacted JSON export; connection profiles can also be exported to and imported from JSON.
+- Homebrew distribution follows releases automatically: `shiquda/homebrew-cmux-pocket` renders its formula from the latest GitHub Release tag and commit, so `brew upgrade` reaches a new Gateway without editing the tap by hand. The formula now installs the tagged source rather than the moving `main` branch.
 
 ### Changed
 
@@ -43,6 +44,7 @@ extracts the section for the pushed tag while publishing, and
 - Pending RPC requests now time out when the Gateway becomes unreachable, rejected credentials and DNS/TLS failures are reported distinctly, and queued messages from a previous socket are ignored.
 - A long-press on the terminal shows exactly one contextual bubble (Copy, Paste, Interrupt, Clear) with drag handles, replacing the duplicate Copy pill.
 - Settings content is no longer squeezed by the section rail, and palette swatch labels ellipsise instead of being cut mid-word.
+- `cmux-pocket setup` now restarts a healthy Gateway whose reported build is older than the CLI it is invoked from. Previously `brew upgrade` replaced the binary on disk while launchd kept the previous process, so the phone stayed on old Gateway behaviour until logout.
 
 ## [0.2.0] - 2026-10-14
 
