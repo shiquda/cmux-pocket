@@ -116,7 +116,7 @@
     <string name="settings_port">Port</string>
     <string name="settings_auth_token">Auth token</string>
     <string name="settings_toggle_token">Toggle token visibility</string>
-    <string name="settings_scan_none_found">No open gateway ports found on this subnet</string>
+    <string name="settings_scan_none_found">No open hosts found on this network</string>
     <string name="settings_scan_found">Found %1$s</string>
     <string name="settings_scan_host_one">1 host</string>
     <string name="settings_scan_host_many">%1$d hosts</string>

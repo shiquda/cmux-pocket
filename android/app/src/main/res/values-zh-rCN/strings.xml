@@ -112,7 +112,7 @@
     <string name="settings_port">端口</string>
     <string name="settings_auth_token">认证 Token</string>
     <string name="settings_toggle_token">切换 Token 可见性</string>
-    <string name="settings_scan_none_found">当前子网未发现开放的 Gateway 端口</string>
+    <string name="settings_scan_none_found">当前网络未发现可用主机</string>
     <string name="settings_scan_found">发现 %1$s</string>
     <string name="settings_scan_host_one">1 个主机</string>
     <string name="settings_scan_host_many">%1$d 个主机</string>
