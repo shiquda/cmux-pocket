@@ -102,12 +102,29 @@ fun SettingsScreen(
     var showUpdateDialog by remember { mutableStateOf(false) }
     var showLicensesDialog by remember { mutableStateOf(false) }
     var showDiagnosticsDialog by remember { mutableStateOf(false) }
+    var showExportProfilesDialog by remember { mutableStateOf(false) }
     var isDiagnosticsEnabled by remember { mutableStateOf(settingsManager.isDiagnosticsEnabled) }
     // Ordinal rather than the enum itself so the page survives the activity recreation that a
     // language switch triggers; [ROOT_MENU] means the root list is showing.
     var openSectionOrdinal by rememberSaveable { mutableStateOf(ROOT_MENU) }
     val openSection = SettingsSection.entries.getOrNull(openSectionOrdinal)
     var appLanguage by remember { mutableStateOf(settingsManager.appLanguage) }
+
+    fun copyProfilesToClipboard(includeCredentials: Boolean) {
+        val count = settingsManager.profiles.size
+        val json = settingsManager.exportProfilesJson(includeCredentials)
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket host profiles", json))
+        Toast.makeText(
+            context,
+            context.getString(
+                if (includeCredentials) R.string.settings_exported_with_credentials_toast
+                else R.string.settings_exported_toast,
+                count
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
 
     BackHandler(enabled = openSection != null) { openSectionOrdinal = ROOT_MENU }
 
@@ -375,20 +392,7 @@ fun SettingsScreen(
                             StorageSection(
                                 profileCount = settingsManager.profiles.size,
                                 onExportProfiles = {
-                                    val json = settingsManager.exportProfilesJson()
-                                    val clipboard =
-                                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(
-                                        ClipData.newPlainText("cmux pocket host profiles", json)
-                                    )
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(
-                                            R.string.settings_exported_toast,
-                                            settingsManager.profiles.size
-                                        ),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                    showExportProfilesDialog = true
                                 },
                                 onImportProfiles = {
                                     val clipboard =
@@ -434,6 +438,21 @@ fun SettingsScreen(
             settingsManager = settingsManager,
             connectionStatus = connectionStatus,
             onDismissRequest = { showDiagnosticsDialog = false }
+        )
+    }
+
+    if (showExportProfilesDialog) {
+        ExportProfilesDialog(
+            profileCount = settingsManager.profiles.size,
+            onDismiss = { showExportProfilesDialog = false },
+            onExportWithoutCredentials = {
+                showExportProfilesDialog = false
+                copyProfilesToClipboard(includeCredentials = false)
+            },
+            onExportWithCredentials = {
+                showExportProfilesDialog = false
+                copyProfilesToClipboard(includeCredentials = true)
+            }
         )
     }
 

@@ -171,7 +171,13 @@
 
     <!-- Settings · Storage -->
     <string name="settings_export_profiles">Export host profiles</string>
-    <string name="settings_export_profiles_desc">Back up all %1$d profiles as JSON on the clipboard</string>
+    <string name="settings_export_profiles_desc">Choose whether the clipboard JSON carries access keys (all %1$d profiles)</string>
+    <string name="settings_export_dialog_title">Export host profiles</string>
+    <string name="settings_export_dialog_body">%1$d profiles are written to the clipboard as JSON. Gateway access keys are included only when you choose to carry them; otherwise fill a key in after importing.</string>
+    <string name="settings_export_without_credentials">Copy without keys</string>
+    <string name="settings_export_with_credentials">Copy with keys</string>
+    <string name="settings_export_dialog_cancel">Cancel</string>
+    <string name="settings_exported_with_credentials_toast">Exported %1$d host profiles including access keys to clipboard</string>
     <string name="settings_import_profiles">Import profiles from clipboard</string>
     <string name="settings_import_profiles_desc">Read JSON from the clipboard and merge it into your profiles</string>
     <string name="settings_clear_scrollback">Clear terminal scrollback</string>

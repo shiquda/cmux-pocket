@@ -61,10 +61,8 @@ class SettingsManager(context: Context) {
             AppLanguageStore.current = value
         }
 
-    fun exportProfilesJson(): String {
-        val prettyJson = Json { prettyPrint = true; encodeDefaults = true }
-        return prettyJson.encodeToString(profiles)
-    }
+    fun exportProfilesJson(includeCredentials: Boolean): String =
+        encodeProfilesBackup(profiles, includeCredentials)
 
     fun importProfilesJson(jsonString: String): Int {
         val parsedJson = Json { ignoreUnknownKeys = true }
@@ -78,8 +76,9 @@ class SettingsManager(context: Context) {
             }
         }
         if (importedList.isEmpty()) return 0
+        val mergedList = mergeImportedProfiles(importedList, profiles)
         var count = 0
-        importedList.forEach { profile ->
+        mergedList.forEach { profile ->
             if (profile.host.isNotBlank()) {
                 upsertProfile(profile)
                 count++
