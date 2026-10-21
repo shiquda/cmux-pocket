@@ -151,7 +151,10 @@ fun PipTerminalTailCanvas(
         val cellWidth = textPaint.measureText("M").coerceAtLeast(1f)
         val maxColumns = floor(contentWidth / cellWidth).toInt().coerceAtLeast(1)
         val fontMetrics = textPaint.fontMetrics
-        val rowHeight = ((fontMetrics.bottom - fontMetrics.top) * 1.15f).coerceAtLeast(fontSizePx)
+        // Maple Mono's font metrics include generous line gaps; using them verbatim
+        // wastes roughly a third of the tiny PiP window and leaves only one or two
+        // agent lines visible. 1.4em keeps glyphs from touching while showing more rows.
+        val rowHeight = (fontSizePx * 1.4f).coerceAtLeast(fontSizePx)
         val maxLines = floor(contentHeight / rowHeight).toInt().coerceAtLeast(1)
 
         val grid = screenState.grid
