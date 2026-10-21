@@ -1065,6 +1065,9 @@ private fun TerminalTextControls(
     }
 }
 
+// Lines scrolled per 50 ms tick when the joystick is at full deflection.
+private const val JOYSTICK_LINES_PER_TICK = 4.8
+
 @Composable
 private fun VerticalScrollJoystick(
     onScrollLines: (Double) -> Unit,
@@ -1081,7 +1084,7 @@ private fun VerticalScrollJoystick(
             if (kotlin.math.abs(knobY) >= 0.08f) {
                 // Joystick-up (knobY < 0) emits positive (older output);
                 // Joystick-down (knobY > 0) emits negative (newer output).
-                onScrollLines(-knobY.toDouble() * 3.0)
+                onScrollLines(-knobY.toDouble() * JOYSTICK_LINES_PER_TICK)
             }
             kotlinx.coroutines.delay(50)
         }
