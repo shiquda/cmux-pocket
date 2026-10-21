@@ -15,8 +15,8 @@ permissions:
 
 # A release published with the repository's own GITHUB_TOKEN (as release-apk.yml does) does not
 # start a new workflow run, and it already carries the changelog notes. This workflow refreshes
-# the description for releases published elsewhere, and workflow_dispatch re-syncs after
-# CHANGELOG.md edits.
+# the description for releases published elsewhere, and workflow_dispatch re-syncs a release after
+# CHANGELOG.md is edited on the branch it runs from.
 concurrency:
   group: release-notes-${{ github.event.release.tag_name || inputs.release_tag }}
   cancel-in-progress: false
@@ -26,10 +26,12 @@ jobs:
     name: Refresh the GitHub Release description
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out the released source
+      - name: Check out the changelog source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+          # A published release is described by its own tag; a manual sync reads the branch it was
+          # dispatched on, which is where post-release changelog edits live.
+          ref: ${{ github.event.release.tag_name || github.ref }}
 
       - name: Update release notes from the changelog
         env:
