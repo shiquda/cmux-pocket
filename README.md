@@ -94,7 +94,7 @@ Your cmux workspaces and tabs appear immediately on Android.
 - **Contextual Action Bubble**: Long-press any terminal text to select and access one-tap actions: Copy selection, Copy screen, Paste at cursor, Send interrupt (Ctrl+C), or Clear screen.
 
 ### Accessory Keyboard Bar
-A persistent bottom bar provides essential developer keys missing from mobile software keyboards: `ESC`, `TAB`, `CTRL`, `ALT`, navigation arrows, and a toggle for the full Computer Keyboard panel (F1–F12, function combinations).
+A persistent bottom bar provides essential developer keys missing from mobile software keyboards: `ESC`, `Enter`, `TAB`, `^C`, navigation arrows (`↑`, `↓`, `←`, `→`), symbol shortcuts (`|`, `/`, `-`, `~`), and a toggle for the full Computer Keyboard panel (F1–F12, function combinations).
 
 ---
 
