@@ -65,6 +65,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         // Connection lifecycle tests run on the JVM with Android logging stubbed out.

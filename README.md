@@ -20,6 +20,7 @@ cmux Pocket is an independent Android companion for [cmux](https://cmux.com/) on
 - **Authoritative Terminal Streaming**: Renders `cmux.render-grid.v1` differential grid frames directly over WebSocket (`wss://`). The Mac owns the PTY and VT parsing—Android runs zero local shells, ensuring 100% terminal state fidelity.
 - **Decoupled Dual-End Navigation**: Switch workspaces or tabs on the phone without changing your Mac's active focus; main-screen scrollback stays local to Android while alternate-screen/TUI scrollback remains cmux-managed.
 - **One-Tap Pairing via CLI QR Code**: Generate pairing QR codes in your Mac terminal (`cmux-pocket qr`) and scan with the in-app camera for instant, validated profile import with overwrite protection.
+- **Remote Wake & Version Transparency**: If the Gateway is online but cmux.app is not running, the terminal offers **Wake cmux on Mac** and switches to the live terminal once the socket is ready. Settings → Connection shows the Gateway, app, and protocol versions with a compatibility badge and a copyable Mac upgrade command.
 - **Modernized Settings Hub**: Clean secondary-menu navigation with live diagnostics ring buffer (500-frame replay), profile backup/restore via clipboard, and in-app GitHub Releases update checker.
 - **P3 Neon Grid Color System**: Unified violet/neon-cyan/lime color palette optimized for OLED screens, with a first-class tuned light mode and contrast WCAG AA compliance.
 - **High-Performance Rendering**: Batched text runs, memoized ARGB cell parsing, dirty-row caching, and GPU-accelerated scaling drop janky frames from 58.5% down to 13.0%.
@@ -101,6 +102,7 @@ A persistent bottom bar provides essential developer keys missing from mobile so
 ![cmux Pocket connection settings](docs/assets/connection-settings.png)
 
 - **Connection Profiles**: Manage multiple hosts (Tailscale, LAN, USB Reverse) with encrypted credential storage in Android Keystore.
+- **Gateway Versions & Upgrades**: The Connection page reports Gateway, app, and cmux protocol versions, flags protocol mismatches or a Gateway that lacks remote wake, and offers a one-tap copy of the Mac upgrade command plus a direct latest-APK link.
 - **Live Diagnostics**: Built-in 500-frame circular buffer captures WebSocket handshakes, frame timings, and RPC payloads. Export redacted JSON logs directly to clipboard for troubleshooting.
 - **Data & Backup**: Export and import host profiles via clipboard JSON without risking credential leakage.
 - **In-App Updates**: Check for new releases directly against GitHub Releases and download updated APKs in one tap.

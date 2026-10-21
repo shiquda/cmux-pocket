@@ -8,7 +8,7 @@ use cmux_pocket_protocol::{
 use parking_lot::Mutex;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -219,6 +219,7 @@ pub struct MockCmuxBackend {
     sessions: Arc<Mutex<HashMap<String, MockTerminalSession>>>,
     notifications: Arc<Mutex<Vec<String>>>,
     id_counter: Arc<AtomicU64>,
+    offline: Arc<AtomicBool>,
 }
 
 impl Default for MockCmuxBackend {
@@ -359,7 +360,17 @@ impl MockCmuxBackend {
             sessions: Arc::new(Mutex::new(sessions)),
             notifications: Arc::new(Mutex::new(Vec::new())),
             id_counter: Arc::new(AtomicU64::new(100)),
+            offline: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Simulates the cmux app being stopped; `ping` and `list_workspaces` then fail.
+    pub fn set_offline(&self, offline: bool) {
+        self.offline.store(offline, Ordering::SeqCst);
+    }
+
+    fn is_offline(&self) -> bool {
+        self.offline.load(Ordering::SeqCst)
     }
 
     /// Adds a mock notification record.
@@ -385,14 +396,23 @@ impl MockCmuxBackend {
 #[async_trait]
 impl CmuxBackend for MockCmuxBackend {
     async fn ping(&self) -> Result<(), CmuxError> {
+        if self.is_offline() {
+            return Err(CmuxError::unavailable("Socket not found"));
+        }
         Ok(())
     }
 
     async fn health(&self) -> Result<BackendHealth, CmuxError> {
+        if self.is_offline() {
+            return Ok(BackendHealth::unhealthy("Socket not found"));
+        }
         Ok(BackendHealth::Healthy)
     }
 
     async fn list_workspaces(&self) -> Result<Vec<WorkspaceInfo>, CmuxError> {
+        if self.is_offline() {
+            return Err(CmuxError::unavailable("Socket not found"));
+        }
         let ws = self.workspaces.lock().clone();
         Ok(ws)
     }

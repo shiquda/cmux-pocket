@@ -1,5 +1,11 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.BuildConfig
+import app.cmuxpocket.protocol.GatewayCompatibility
+import app.cmuxpocket.protocol.GatewayHostStatus
+import app.cmuxpocket.protocol.GatewayVersions
+import app.cmuxpocket.protocol.HostStatusResponse
+import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.protocol.WorkspaceListResponse
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -22,10 +28,15 @@ data class ConnectionReadiness(
     val problem: String? = null,
     val workspaceCount: Int = 0,
     val terminalCount: Int = 0,
+    val hostStatus: GatewayHostStatus? = null,
 ) {
     val ready: Boolean get() = started && step == ConnectionStep.READY && problem == null
+    val compatibility: GatewayCompatibility
+        get() = GatewayVersions.evaluate(BuildConfig.VERSION_NAME, hostStatus)
+    val cmuxStopped: Boolean get() = hostStatus?.let { !it.cmuxRunning } == true
     val summary: String get() = when {
         problem != null -> problem
+        cmuxStopped -> "Mac online · cmux not running"
         ready -> "Ready · $workspaceCount workspaces · $terminalCount terminals"
         !started -> "Connection has not been checked"
         else -> "${step.label}…"
@@ -39,18 +50,33 @@ data class ConnectionReadiness(
         ConnectionStep.GATEWAY -> "Run cmux-pocket gateway probe on the Mac. Check that your HTTPS endpoint forwards WebSocket connections to the Pocket Gateway."
         ConnectionStep.WORKSPACES -> "Open cmux on the Mac and run cmux-pocket gateway probe. If cmux allows only cmux processes, stop the login service and run cmux-pocket gateway run in a cmux terminal. See Host setup below."
         ConnectionStep.SYNC -> "Reconnect to retry workspace updates. If this persists, update the Gateway and run cmux-pocket gateway probe on the Mac."
-        ConnectionStep.READY -> if (terminalCount == 0) "The handshake succeeded. Open or create a terminal in cmux to see it here." else "The authenticated Gateway can read cmux workspaces."
+        ConnectionStep.READY -> when {
+            cmuxStopped -> "The Gateway is online but cmux is not running. Tap Wake cmux on Mac to launch it remotely."
+            terminalCount == 0 -> "The handshake succeeded. Open or create a terminal in cmux to see it here."
+            else -> "The authenticated Gateway can read cmux workspaces."
+        }
     }
 }
+
+/** Host status and workspaces captured by one readiness handshake. */
+data class GatewayHandshake(
+    val hostStatus: GatewayHostStatus,
+    val workspaces: List<WorkspaceInfo>,
+)
 
 /** Readiness requires a real workspace query from the Gateway's process. */
 suspend fun verifyGatewayConnection(
     callRpc: suspend (String) -> JsonElement,
     subscribe: suspend () -> Unit,
     onStep: (ConnectionStep) -> Unit,
-): WorkspaceListResponse {
+    onHostStatus: (GatewayHostStatus) -> Unit = {},
+): GatewayHandshake {
     onStep(ConnectionStep.GATEWAY)
-    require(callRpc("mobile.host.status") is JsonObject) { "Invalid Gateway status response" }
+    val statusJson = callRpc("mobile.host.status") as? JsonObject
+        ?: error("Invalid Gateway status response")
+    val hostStatus = decodeHostStatus(statusJson)
+    onHostStatus(hostStatus)
+
     // Subscribe before fetching the baseline so changes during discovery are
     // still delivered to the session.
     onStep(ConnectionStep.SYNC)
@@ -59,5 +85,24 @@ suspend fun verifyGatewayConnection(
     val result = callRpc("mobile.workspace.list") as? JsonObject
         ?: error("Invalid workspace response")
     require(result["workspaces"] is JsonArray) { "Gateway response has no workspace list" }
-    return Json { ignoreUnknownKeys = true }.decodeFromJsonElement(result)
+    val list = Json { ignoreUnknownKeys = true }.decodeFromJsonElement<WorkspaceListResponse>(result)
+    return GatewayHandshake(hostStatus, list.workspaces)
+}
+
+/** Parses `mobile.host.status`, tolerating Gateways that predate the new fields. */
+fun decodeHostStatus(statusJson: JsonObject): GatewayHostStatus {
+    val response = runCatching {
+        Json { ignoreUnknownKeys = true }
+            .decodeFromJsonElement<HostStatusResponse>(statusJson)
+    }.getOrNull() ?: return GatewayHostStatus()
+
+    return GatewayHostStatus(
+        gatewayVersion = response.gatewayVersion ?: response.macAppVersion,
+        protocolVersion = response.protocolVersion,
+        capabilities = response.capabilities,
+        cmuxInstalled = response.cmuxStatus?.installed ?: false,
+        // An older Gateway cannot report cmux state; do not claim it is stopped.
+        cmuxRunning = response.cmuxStatus?.running ?: true,
+        canWake = response.cmuxStatus?.canWake ?: false,
+    )
 }

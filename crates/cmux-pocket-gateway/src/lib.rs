@@ -5,6 +5,7 @@ pub mod auth;
 pub mod dispatch;
 pub mod error;
 pub mod health;
+pub mod host;
 pub mod poller;
 pub mod server;
 pub mod session;
@@ -18,6 +19,10 @@ pub use auth::{
 pub use dispatch::{dispatch_rpc, DispatchContext, GatewayCallbacks};
 pub use error::GatewayError;
 pub use health::HealthTracker;
+pub use host::{
+    HostAppStatus, HostController, MacOsHostController, SharedHostController,
+    UnsupportedHostController,
+};
 pub use poller::{fanout_screen_snapshots, ScreenPoller, TreePoller};
 pub use server::CmuxGateway;
 pub use session::{ClientSession, ControlMessage, RenderSlot, SessionState};

@@ -6,10 +6,13 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
+use tokio::time::sleep;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, info, warn};
 
@@ -20,9 +23,15 @@ use crate::auth::{
 use crate::dispatch::{dispatch_rpc, DispatchContext, GatewayCallbacks};
 use crate::error::GatewayError;
 use crate::health::HealthTracker;
+use crate::host::{SharedHostController, UnsupportedHostController};
 use crate::poller::{ScreenPoller, TreePoller};
 use crate::session::ClientSession;
 use crate::surface_locks::SurfaceLockManager;
+
+/// Interval between readiness probes after a remote wake request.
+const WAKE_PROBE_INTERVAL: Duration = Duration::from_millis(500);
+/// How long a wake request waits for the cmux socket to become usable.
+const WAKE_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Core Cmux Gateway server instance managing WebSocket listener, sessions, and background pollers.
 pub struct CmuxGateway {
@@ -32,6 +41,8 @@ pub struct CmuxGateway {
     pub backend: Arc<dyn CmuxBackend>,
     pub health: HealthTracker,
     pub surface_locks: SurfaceLockManager,
+    host_controller: SharedHostController,
+    wake_watch_active: Arc<AtomicBool>,
     clients: Arc<Mutex<Vec<ClientSession>>>,
     priority_surfaces: Arc<Mutex<HashSet<String>>>,
     refresh_trigger: Arc<Notify>,
@@ -47,6 +58,33 @@ impl GatewayCallbacks for CmuxGateway {
 
     fn request_priority_refresh(&self, surface_id: String) {
         self.request_priority_refresh(surface_id);
+    }
+
+    fn request_wake_watch(&self) {
+        self.spawn_wake_watch();
+    }
+}
+
+/// Delivers one event frame to every authenticated client subscribed to the topic.
+async fn broadcast_clients(
+    clients: &Arc<Mutex<Vec<ClientSession>>>,
+    event_name: &str,
+    data: Value,
+) {
+    let client_list: Vec<ClientSession> = {
+        let guard = clients.lock();
+        guard.clone()
+    };
+
+    let event_msg = json!({
+        "event": event_name,
+        "data": data,
+    });
+
+    for client in client_list {
+        if client.is_authenticated() && client.is_subscribed_to(event_name) {
+            let _ = client.send_json(event_msg.clone()).await;
+        }
     }
 }
 
@@ -77,6 +115,8 @@ impl CmuxGateway {
             backend,
             health: HealthTracker::new(),
             surface_locks: SurfaceLockManager::new(),
+            host_controller: Arc::new(UnsupportedHostController),
+            wake_watch_active: Arc::new(AtomicBool::new(false)),
             clients: Arc::new(Mutex::new(Vec::new())),
             priority_surfaces: Arc::new(Mutex::new(HashSet::new())),
             refresh_trigger: Arc::new(Notify::new()),
@@ -88,6 +128,52 @@ impl CmuxGateway {
     /// Returns the configured bind address formatted as host:port.
     pub fn bind_addr(&self) -> String {
         format!("{}:{}", self.host, self.port)
+    }
+
+    /// Installs the host controller that serves `mobile.host.*` RPCs.
+    pub fn with_host_controller(mut self, host_controller: SharedHostController) -> Self {
+        self.host_controller = host_controller;
+        self
+    }
+
+    /// Polls cmux every 500ms for up to 15s after a wake request, then broadcasts the tree once.
+    fn spawn_wake_watch(&self) {
+        if self.wake_watch_active.swap(true, Ordering::AcqRel) {
+            return;
+        }
+
+        let backend = self.backend.clone();
+        let health = self.health.clone();
+        let clients = self.clients.clone();
+        let active = self.wake_watch_active.clone();
+        // Bounded (15s) and self-terminating; not tracked so repeated wakes cannot
+        // accumulate completed handles for the lifetime of the Gateway.
+        drop(tokio::spawn(async move {
+            let deadline = Instant::now() + WAKE_PROBE_TIMEOUT;
+            let ready = loop {
+                if backend.ping().await.is_ok() {
+                    break true;
+                }
+                if Instant::now() >= deadline {
+                    break false;
+                }
+                sleep(WAKE_PROBE_INTERVAL).await;
+            };
+
+            if ready {
+                health.mark_healthy();
+                if let Ok(workspaces) = backend.list_workspaces().await {
+                    broadcast_clients(
+                        &clients,
+                        "workspace.tree",
+                        json!({ "action": "sync", "workspaces": workspaces }),
+                    )
+                    .await;
+                }
+            }
+
+            active.store(false, Ordering::Release);
+        }));
     }
 
     /// Triggers an immediate priority refresh for a specific surface.
@@ -102,21 +188,7 @@ impl CmuxGateway {
 
     /// Broadcasts an event to all connected and authenticated clients subscribed to `event_name`.
     pub async fn broadcast_event(&self, event_name: &str, data: Value) {
-        let client_list: Vec<ClientSession> = {
-            let guard = self.clients.lock();
-            guard.clone()
-        };
-
-        let event_msg = json!({
-            "event": event_name,
-            "data": data,
-        });
-
-        for client in client_list {
-            if client.is_authenticated() && client.is_subscribed_to(event_name) {
-                let _ = client.send_json(event_msg.clone()).await;
-            }
-        }
+        broadcast_clients(&self.clients, event_name, data).await;
     }
 
     /// Fetches a surface snapshot while holding the per-surface lock.
@@ -283,6 +355,7 @@ impl CmuxGateway {
                 backend: &self.backend,
                 health: &self.health,
                 surface_locks: &self.surface_locks,
+                host: &self.host_controller,
                 callbacks: self.as_ref(),
             };
 

@@ -86,4 +86,28 @@
     <string name="conn_btn_copy_setup_cmd">Copy setup command</string>
     <string name="conn_host_setup_details">The Mac command starts or reuses the Gateway, verifies workspace access, and sets up private HTTPS forwarding. Enter the printed phone endpoint with port 443 and the existing Gateway token, then check the connection here. Saved profiles use encrypted storage.</string>
     <string name="conn_notice_check_in_settings">Check connection in Settings</string>
+    <!-- Gateway version and upgrade guidance -->
+    <string name="conn_versions_title">Host &amp; connection</string>
+    <string name="conn_version_client">Android client</string>
+    <string name="conn_version_gateway">Pocket gateway</string>
+    <string name="conn_version_protocol">cmux protocol</string>
+    <string name="conn_version_wake">Remote wake</string>
+    <string name="conn_version_match">MATCH</string>
+    <string name="conn_version_outdated_badge">OUTDATED</string>
+    <string name="conn_version_update_badge">UPDATE</string>
+    <string name="conn_version_incompatible_badge">INCOMPATIBLE</string>
+    <string name="conn_version_unknown">Not reported</string>
+    <string name="conn_version_wake_ready">READY</string>
+    <string name="conn_version_wake_unavailable">Unavailable</string>
+    <string name="conn_version_gateway_outdated_body">This Gateway is missing remote wake. Upgrade the Mac Gateway to use it.</string>
+    <string name="conn_version_incompatible_body">Gateway protocol v%1$s is not compatible with this app (needs v%2$d.x).</string>
+    <string name="conn_version_client_outdated_body">The Gateway is newer than this app. Update the app to use its latest features.</string>
+    <string name="conn_btn_recheck_version">Recheck version</string>
+    <string name="conn_btn_upgrade_guide">Upgrade guide</string>
+    <string name="conn_btn_download_client">Download APK</string>
+    <string name="conn_upgrade_title">Upgrade the Mac Gateway</string>
+    <string name="conn_upgrade_body">Run this in a terminal on your Mac, then recheck here. Saved profiles and tokens are unaffected.</string>
+    <string name="conn_upgrade_copied">Upgrade command copied</string>
+    <string name="conn_btn_copy_upgrade_cmd">Copy command</string>
+
 </resources>

@@ -286,6 +286,14 @@ class CmuxWebSocketClient(
         }
     }
 
+    suspend fun wakeCmux(background: Boolean = true): WakeCmuxResponse {
+        val params = buildJsonObject {
+            put("background", background)
+        }
+        val result = callRpc("mobile.host.wake_cmux", params)
+        return json.decodeFromJsonElement(WakeCmuxResponse.serializer(), result)
+    }
+
     suspend fun sendTerminalInput(surfaceId: String, text: String) {
         val params = buildJsonObject {
             put("surface_id", surfaceId)

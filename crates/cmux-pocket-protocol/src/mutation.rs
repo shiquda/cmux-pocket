@@ -1,11 +1,15 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::auth::default_capabilities;
+use crate::auth::{default_capabilities, PROTOCOL_SERVER_VERSION};
 use crate::workspace::{SurfaceInfo, WorkspaceInfo};
 
 fn default_ok_status() -> String {
     "ok".to_string()
+}
+
+fn default_protocol_version() -> String {
+    PROTOCOL_SERVER_VERSION.to_string()
 }
 
 fn default_workspace_name() -> String {
@@ -36,22 +40,55 @@ fn default_true() -> bool {
 // Host Status
 // ---------------------------------------------------------------------------
 
+/// Host-side cmux application state reported by a running Gateway.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CmuxAppStatus {
+    /// A cmux installation was found on the host.
+    pub installed: bool,
+    /// `cmux ping` currently succeeds, so a terminal can be opened.
+    pub running: bool,
+    /// This host can launch the cmux app for a remote client.
+    pub can_wake: bool,
+}
+
+impl CmuxAppStatus {
+    pub fn new(installed: bool, running: bool, can_wake: bool) -> Self {
+        Self {
+            installed,
+            running,
+            can_wake,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HostStatusResponse {
     pub mac_display_name: String,
+    /// Legacy alias of `gateway_version`, kept for older clients.
+    #[serde(default)]
     pub mac_app_version: String,
+    #[serde(default)]
+    pub gateway_version: String,
+    #[serde(default = "default_protocol_version")]
+    pub protocol_version: String,
     #[serde(default = "default_capabilities")]
     pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub cmux_status: CmuxAppStatus,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
 
 impl HostStatusResponse {
     pub fn new(mac_display_name: impl Into<String>, mac_app_version: impl Into<String>) -> Self {
+        let version = mac_app_version.into();
         Self {
             mac_display_name: mac_display_name.into(),
-            mac_app_version: mac_app_version.into(),
+            mac_app_version: version.clone(),
+            gateway_version: version,
+            protocol_version: default_protocol_version(),
             capabilities: default_capabilities(),
+            cmux_status: CmuxAppStatus::default(),
             extra: Map::new(),
         }
     }

@@ -1,6 +1,9 @@
 package app.cmuxpocket.ui
 
 import app.cmuxpocket.R
+import app.cmuxpocket.BuildConfig
+import app.cmuxpocket.protocol.GatewayCompatibility
+import app.cmuxpocket.protocol.GatewayVersions
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -33,7 +36,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -78,6 +85,8 @@ fun SettingsScreen(
     onConnectClick: () -> Unit,
     onScanQrClick: () -> Unit = {},
     onClearScrollback: () -> Unit = {},
+    onRecheckGatewayVersion: () -> Unit = {},
+    isRefreshingGatewayVersion: Boolean = false,
     onDismissRequest: () -> Unit
 ) {
     val theme = CmuxTheme.colors
@@ -85,7 +94,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val currentVersion = "0.2.0"
+    val currentVersion = BuildConfig.VERSION_NAME
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -262,6 +271,8 @@ fun SettingsScreen(
                                 onTokenChange = onTokenChange,
                                 onConnectClick = onConnectClick,
                                 onScanQrClick = onScanQrClick,
+                                onRecheckGatewayVersion = onRecheckGatewayVersion,
+                                isRefreshingGatewayVersion = isRefreshingGatewayVersion,
                             )
                         }
 
@@ -709,6 +720,8 @@ fun ConnectionSection(
     onTokenChange: (String) -> Unit,
     onConnectClick: () -> Unit,
     onScanQrClick: () -> Unit = {},
+    onRecheckGatewayVersion: () -> Unit = {},
+    isRefreshingGatewayVersion: Boolean = false,
 ) {
     val theme = CmuxTheme.colors
     val scope = rememberCoroutineScope()
@@ -857,6 +870,13 @@ fun ConnectionSection(
             ConnectionAssistant(
                 readiness = connectionReadiness,
                 onCheckConnection = onConnectClick,
+            )
+
+            GatewayVersionCard(
+                readiness = connectionReadiness,
+                canRecheck = connectionStatus == ConnectionStatus.CONNECTED,
+                isRefreshing = isRefreshingGatewayVersion,
+                onRecheck = onRecheckGatewayVersion,
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -1574,5 +1594,219 @@ fun StorageSection(
                 Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
             }
         }
+    }
+}
+
+
+private const val MAC_GATEWAY_UPGRADE_COMMAND =
+    "brew update && brew upgrade cmux-pocket && cmux-pocket setup"
+private const val LATEST_RELEASE_URL = "https://github.com/shiquda/cmux-pocket/releases/latest"
+
+/** Version transparency for the connected host plus the one-tap upgrade paths. */
+@Composable
+fun GatewayVersionCard(
+    readiness: ConnectionReadiness,
+    canRecheck: Boolean,
+    isRefreshing: Boolean,
+    onRecheck: () -> Unit,
+) {
+    val theme = CmuxTheme.colors
+    val host = readiness.hostStatus
+    val compatibility = readiness.compatibility
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    var showUpgradeGuide by remember { mutableStateOf(false) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = theme.surfaceVariant),
+        shape = RoundedCornerShape(10.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.conn_versions_title),
+                    fontSize = 11.sp,
+                    color = theme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                CompatibilityBadge(compatibility)
+            }
+
+            GatewayVersionRow(
+                label = stringResource(R.string.conn_version_client),
+                value = "v${BuildConfig.VERSION_NAME}",
+            )
+            GatewayVersionRow(
+                label = stringResource(R.string.conn_version_gateway),
+                value = host?.gatewayVersion?.let { "v$it" }
+                    ?: stringResource(R.string.conn_version_unknown),
+            )
+            GatewayVersionRow(
+                label = stringResource(R.string.conn_version_protocol),
+                value = host?.protocolVersion?.let { "v$it" }
+                    ?: stringResource(R.string.conn_version_unknown),
+            )
+            GatewayVersionRow(
+                label = stringResource(R.string.conn_version_wake),
+                value = when {
+                    host == null -> stringResource(R.string.conn_version_unknown)
+                    host.supportsWake -> stringResource(R.string.conn_version_wake_ready)
+                    else -> stringResource(R.string.conn_version_wake_unavailable)
+                },
+                valueColor = when {
+                    host == null -> theme.onSurfaceVariant
+                    host.supportsWake -> theme.accentGreen
+                    else -> theme.accentOrange
+                },
+            )
+
+            when (compatibility) {
+                GatewayCompatibility.GATEWAY_OUTDATED -> Text(
+                    stringResource(R.string.conn_version_gateway_outdated_body),
+                    fontSize = 11.sp,
+                    color = theme.accentOrange,
+                )
+                GatewayCompatibility.INCOMPATIBLE -> Text(
+                    stringResource(
+                        R.string.conn_version_incompatible_body,
+                        host?.protocolVersion ?: "—",
+                        GatewayVersions.EXPECTED_PROTOCOL_MAJOR,
+                    ),
+                    fontSize = 11.sp,
+                    color = theme.accentRed,
+                )
+                GatewayCompatibility.CLIENT_OUTDATED -> Text(
+                    stringResource(R.string.conn_version_client_outdated_body),
+                    fontSize = 11.sp,
+                    color = theme.accentBlue,
+                )
+                else -> Unit
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(
+                    onClick = onRecheck,
+                    enabled = canRecheck && !isRefreshing,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.heightIn(min = 44.dp),
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Text(stringResource(R.string.conn_btn_recheck_version), fontSize = 12.sp)
+                }
+                if (compatibility == GatewayCompatibility.GATEWAY_OUTDATED ||
+                    compatibility == GatewayCompatibility.INCOMPATIBLE
+                ) {
+                    TextButton(onClick = { showUpgradeGuide = true }) {
+                        Text(stringResource(R.string.conn_btn_upgrade_guide), fontSize = 12.sp)
+                    }
+                }
+                if (compatibility == GatewayCompatibility.CLIENT_OUTDATED) {
+                    TextButton(onClick = { uriHandler.openUri(LATEST_RELEASE_URL) }) {
+                        Text(stringResource(R.string.conn_btn_download_client), fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    if (showUpgradeGuide) {
+        AlertDialog(
+            onDismissRequest = { showUpgradeGuide = false },
+            title = { Text(stringResource(R.string.conn_upgrade_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.conn_upgrade_body))
+                    Text(
+                        MAC_GATEWAY_UPGRADE_COMMAND,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        color = theme.onSurface,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(MAC_GATEWAY_UPGRADE_COMMAND))
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.conn_upgrade_copied),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                ) {
+                    Text(stringResource(R.string.conn_btn_copy_upgrade_cmd))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showUpgradeGuide = false
+                        onRecheck()
+                    }
+                ) {
+                    Text(stringResource(R.string.conn_btn_recheck_version))
+                }
+            },
+            containerColor = theme.containerBg,
+            titleContentColor = theme.onContainer,
+            textContentColor = theme.onContainer,
+        )
+    }
+}
+
+@Composable
+private fun GatewayVersionRow(
+    label: String,
+    value: String,
+    valueColor: Color = CmuxTheme.colors.onSurface,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, fontSize = 12.sp, color = CmuxTheme.colors.onSurfaceVariant)
+        Text(value, fontSize = 12.sp, color = valueColor, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun CompatibilityBadge(compatibility: GatewayCompatibility) {
+    val theme = CmuxTheme.colors
+    val (label, color) = when (compatibility) {
+        GatewayCompatibility.MATCHED -> stringResource(R.string.conn_version_match) to theme.accentGreen
+        GatewayCompatibility.GATEWAY_OUTDATED -> stringResource(R.string.conn_version_outdated_badge) to theme.accentOrange
+        GatewayCompatibility.CLIENT_OUTDATED -> stringResource(R.string.conn_version_update_badge) to theme.accentBlue
+        GatewayCompatibility.INCOMPATIBLE -> stringResource(R.string.conn_version_incompatible_badge) to theme.accentRed
+        GatewayCompatibility.UNKNOWN -> stringResource(R.string.conn_version_unknown) to theme.onSurfaceVariant
+    }
+    Surface(
+        color = color.copy(alpha = 0.16f),
+        contentColor = color,
+        shape = RoundedCornerShape(6.dp),
+    ) {
+        Text(
+            label,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
     }
 }
