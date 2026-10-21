@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use cmux_pocket_cmux::CmuxBackend;
 use cmux_pocket_macos::loopback::validate_loopback_host;
+use cmux_pocket_protocol::auth::{
+    default_capabilities, AuthOk, CAP_TERMINAL_VIEWPORT, PROTOCOL_SERVER_VERSION,
+};
 use futures_util::StreamExt;
 use parking_lot::Mutex;
 use serde_json::{json, Value};
@@ -12,14 +15,12 @@ use std::time::{Duration, Instant};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, info, warn};
 
 use crate::agent::AgentEventSupervisor;
-use crate::auth::{
-    build_auth_error_invalid_token, build_auth_error_unauthenticated, build_auth_ok, verify_token,
-};
+use crate::auth::{build_auth_error_invalid_token, build_auth_error_unauthenticated, verify_token};
 use crate::dispatch::{dispatch_rpc, DispatchContext, GatewayCallbacks};
 use crate::error::GatewayError;
 use crate::health::HealthTracker;
@@ -27,6 +28,7 @@ use crate::host::{SharedHostController, UnsupportedHostController};
 use crate::poller::{ScreenPoller, TreePoller};
 use crate::session::ClientSession;
 use crate::surface_locks::SurfaceLockManager;
+use crate::viewport::ViewportLeaseManager;
 
 /// Interval between readiness probes after a remote wake request.
 const WAKE_PROBE_INTERVAL: Duration = Duration::from_millis(500);
@@ -43,6 +45,7 @@ pub struct CmuxGateway {
     pub surface_locks: SurfaceLockManager,
     host_controller: SharedHostController,
     wake_watch_active: Arc<AtomicBool>,
+    pub viewport_leases: ViewportLeaseManager,
     clients: Arc<Mutex<Vec<ClientSession>>>,
     priority_surfaces: Arc<Mutex<HashSet<String>>>,
     refresh_trigger: Arc<Notify>,
@@ -108,15 +111,19 @@ impl CmuxGateway {
             ));
         }
 
+        let surface_locks = SurfaceLockManager::new();
+        let viewport_leases = ViewportLeaseManager::new(backend.clone(), surface_locks.clone());
+
         Ok(Self {
             host: h,
             port,
             auth_token: token,
             backend,
             health: HealthTracker::new(),
-            surface_locks: SurfaceLockManager::new(),
+            surface_locks,
             host_controller: Arc::new(UnsupportedHostController),
             wake_watch_active: Arc::new(AtomicBool::new(false)),
+            viewport_leases,
             clients: Arc::new(Mutex::new(Vec::new())),
             priority_surfaces: Arc::new(Mutex::new(HashSet::new())),
             refresh_trigger: Arc::new(Notify::new()),
@@ -308,7 +315,15 @@ impl CmuxGateway {
                     if verify_token(&self.auth_token, token) {
                         session.set_authenticated(true);
                         info!("Client {} authenticated successfully", session_id);
-                        let auth_ok_payload = build_auth_ok(&session_id);
+                        let mut capabilities = default_capabilities();
+                        if !self.viewport_leases.supported().await {
+                            capabilities.retain(|cap| cap != CAP_TERMINAL_VIEWPORT);
+                        }
+                        let auth_ok_payload = AuthOk::with_capabilities(
+                            &session_id,
+                            PROTOCOL_SERVER_VERSION,
+                            capabilities,
+                        );
                         let _ = session
                             .send_json(serde_json::to_value(&auth_ok_payload).unwrap())
                             .await;
@@ -356,6 +371,7 @@ impl CmuxGateway {
                 health: &self.health,
                 surface_locks: &self.surface_locks,
                 host: &self.host_controller,
+                viewport_leases: &self.viewport_leases,
                 callbacks: self.as_ref(),
             };
 
@@ -364,9 +380,14 @@ impl CmuxGateway {
             }
         }
 
-        // Cleanup session
+        // Cleanup session. Release the viewport report before waiting on the
+        // writer: a half-dead socket must not keep the Mac grid constrained,
+        // and the release itself is bounded so cleanup cannot hang here.
+        // Entries are removed from the lease maps before the first await, so
+        // this call cannot strand state even if one host clear is slow.
         session.close();
-        let _ = writer_handle.await;
+        self.viewport_leases.release_session(&session_id).await;
+        let _ = timeout(Duration::from_secs(2), writer_handle).await;
 
         let mut guard = self.clients.lock();
         guard.retain(|c| c.session_id != session_id);
@@ -469,9 +490,11 @@ impl CmuxGateway {
         self.shutdown_notify.notify_waiters();
 
         // Abort background tasks
-        let mut tasks = self.tasks.lock();
-        for handle in tasks.drain(..) {
-            handle.abort();
+        {
+            let mut tasks = self.tasks.lock();
+            for handle in tasks.drain(..) {
+                handle.abort();
+            }
         }
 
         // Close all client sessions
@@ -485,6 +508,8 @@ impl CmuxGateway {
         for client in clients {
             client.close();
         }
+
+        self.viewport_leases.shutdown().await;
 
         info!("Gateway stopped");
     }

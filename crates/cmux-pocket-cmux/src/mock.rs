@@ -16,6 +16,9 @@ use crate::backend::CmuxBackend;
 use crate::error::CmuxError;
 use crate::events::CmuxEventStream;
 
+/// Per-surface reports: `client_id -> (columns, rows, generation)`.
+type ViewportReports = HashMap<String, HashMap<String, (usize, usize, u64)>>;
+
 /// Simulates a live cmux terminal session with RenderGrid frames for testing.
 #[derive(Debug, Clone)]
 pub struct MockTerminalSession {
@@ -23,6 +26,9 @@ pub struct MockTerminalSession {
     pub title: String,
     pub columns: usize,
     pub rows: usize,
+    /// Geometry before any mobile viewport report; restored when all reports clear.
+    pub base_columns: usize,
+    pub base_rows: usize,
     pub state_seq: u64,
     pub render_epoch: String,
     pub render_revision: u64,
@@ -49,6 +55,8 @@ impl MockTerminalSession {
             title,
             columns,
             rows,
+            base_columns: columns,
+            base_rows: rows,
             state_seq: 1,
             render_epoch: "epoch-mock-1".to_string(),
             render_revision: 1,
@@ -220,6 +228,11 @@ pub struct MockCmuxBackend {
     notifications: Arc<Mutex<Vec<String>>>,
     id_counter: Arc<AtomicU64>,
     offline: Arc<AtomicBool>,
+    /// surface -> client_id -> (columns, rows, generation), mirroring the host's
+    /// minimum-across-clients viewport reports.
+    viewport_reports: Arc<Mutex<ViewportReports>>,
+    viewport_report_calls: Arc<AtomicU64>,
+    viewport_supported: Arc<AtomicBool>,
 }
 
 impl Default for MockCmuxBackend {
@@ -361,6 +374,9 @@ impl MockCmuxBackend {
             notifications: Arc::new(Mutex::new(Vec::new())),
             id_counter: Arc::new(AtomicU64::new(100)),
             offline: Arc::new(AtomicBool::new(false)),
+            viewport_reports: Arc::new(Mutex::new(HashMap::new())),
+            viewport_report_calls: Arc::new(AtomicU64::new(0)),
+            viewport_supported: Arc::new(AtomicBool::new(true)),
         }
     }
 
@@ -371,6 +387,58 @@ impl MockCmuxBackend {
 
     fn is_offline(&self) -> bool {
         self.offline.load(Ordering::SeqCst)
+    }
+
+    /// Simulates a transient capability-probe failure.
+    pub fn set_viewport_supported(&self, supported: bool) {
+        self.viewport_supported.store(supported, Ordering::SeqCst);
+    }
+
+    /// Number of applied viewport reports (test helper for lease renewal).
+    pub fn viewport_report_calls(&self) -> u64 {
+        self.viewport_report_calls.load(Ordering::SeqCst)
+    }
+
+    /// Applies the minimum viewport across all reported clients for a surface.
+    fn recompute_viewport(&self, surface_id: &str) {
+        let reports = self.viewport_reports.lock().clone();
+        let mut sessions = self.sessions.lock();
+        let session = sessions
+            .entry(surface_id.to_string())
+            .or_insert_with(|| MockTerminalSession::new(surface_id, "zsh"));
+        let limit = reports
+            .get(surface_id)
+            .and_then(|by_client| {
+                let columns = by_client.values().map(|(c, _, _)| *c).min()?;
+                let rows = by_client.values().map(|(_, r, _)| *r).min()?;
+                Some((columns, rows))
+            })
+            .unwrap_or((session.base_columns, session.base_rows));
+        if (session.columns, session.rows) == limit {
+            return;
+        }
+        session.columns = limit.0;
+        session.rows = limit.1;
+        session.lines.resize(limit.1, String::new());
+        session.lines.truncate(limit.1);
+        session.state_seq += 1;
+        session.render_revision += 1;
+        session.cursor_row = session.cursor_row.min(limit.1.saturating_sub(1));
+        session.cursor_col = session.cursor_col.min(limit.0.saturating_sub(1));
+    }
+
+    /// Returns the reports currently held for a surface (test helper).
+    pub fn viewport_reports_for(&self, surface_id: &str) -> Vec<(String, usize, usize, u64)> {
+        let reports = self.viewport_reports.lock();
+        reports
+            .get(surface_id)
+            .map(|by_client| {
+                by_client
+                    .iter()
+                    .map(|(client, (c, r, g))| (client.clone(), *c, *r, *g))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Adds a mock notification record.
@@ -439,12 +507,18 @@ impl CmuxBackend for MockCmuxBackend {
         Ok(new_ws)
     }
 
-    async fn rename_workspace(&self, workspace_key: &str, title: &str) -> Result<WorkspaceInfo, CmuxError> {
+    async fn rename_workspace(
+        &self,
+        workspace_key: &str,
+        title: &str,
+    ) -> Result<WorkspaceInfo, CmuxError> {
         let mut workspaces = self.workspaces.lock();
         let ws = workspaces
             .iter_mut()
             .find(|w| w.id == workspace_key || w.key.as_deref() == Some(workspace_key))
-            .ok_or_else(|| CmuxError::parse_error(format!("workspace not found: {workspace_key}")))?;
+            .ok_or_else(|| {
+                CmuxError::parse_error(format!("workspace not found: {workspace_key}"))
+            })?;
         ws.name = title.to_string();
         Ok(ws.clone())
     }
@@ -561,7 +635,10 @@ impl CmuxBackend for MockCmuxBackend {
         let mut workspaces = self.workspaces.lock();
         let mut found_surface = None;
         for ws in workspaces.iter_mut() {
-            if workspace_key.is_none() || ws.id == workspace_key.unwrap() || ws.key.as_deref() == workspace_key {
+            if workspace_key.is_none()
+                || ws.id == workspace_key.unwrap()
+                || ws.key.as_deref() == workspace_key
+            {
                 if let Some(surf) = ws.surfaces.iter_mut().find(|s| s.id == surface_id) {
                     surf.title = Some(title.to_string());
                     found_surface = Some(surf.clone());
@@ -576,7 +653,9 @@ impl CmuxBackend for MockCmuxBackend {
             }
             Ok(surf)
         } else {
-            Err(CmuxError::parse_error(format!("surface not found: {surface_id}")))
+            Err(CmuxError::parse_error(format!(
+                "surface not found: {surface_id}"
+            )))
         }
     }
 
@@ -617,6 +696,55 @@ impl CmuxBackend for MockCmuxBackend {
     async fn list_notifications(&self) -> Result<Vec<String>, CmuxError> {
         let notes = self.notifications.lock().clone();
         Ok(notes)
+    }
+
+    async fn supports_viewport_resize(&self) -> bool {
+        self.viewport_supported.load(Ordering::SeqCst)
+    }
+
+    async fn apply_viewport_report(
+        &self,
+        surface_id: &str,
+        columns: u32,
+        rows: u32,
+        client_id: &str,
+        generation: u64,
+    ) -> Result<RenderGridFrame, CmuxError> {
+        self.viewport_report_calls.fetch_add(1, Ordering::SeqCst);
+        {
+            let mut reports = self.viewport_reports.lock();
+            let by_client = reports.entry(surface_id.to_string()).or_default();
+            if let Some((_, _, existing_generation)) = by_client.get(client_id) {
+                if *existing_generation > generation {
+                    return Err(CmuxError::ViewportTransition);
+                }
+            }
+            by_client.insert(
+                client_id.to_string(),
+                (columns as usize, rows as usize, generation),
+            );
+        }
+        self.recompute_viewport(surface_id);
+        Ok(self.get_or_create_session(surface_id).get_full_snapshot(0))
+    }
+
+    async fn clear_viewport_report(
+        &self,
+        surface_id: &str,
+        client_id: &str,
+        _generation: u64,
+    ) -> Result<(), CmuxError> {
+        {
+            let mut reports = self.viewport_reports.lock();
+            if let Some(by_client) = reports.get_mut(surface_id) {
+                by_client.remove(client_id);
+                if by_client.is_empty() {
+                    reports.remove(surface_id);
+                }
+            }
+        }
+        self.recompute_viewport(surface_id);
+        Ok(())
     }
 
     async fn spawn_events_stream(&self) -> Result<CmuxEventStream, CmuxError> {

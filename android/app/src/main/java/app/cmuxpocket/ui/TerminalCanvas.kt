@@ -29,7 +29,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.FitScreen
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,8 +43,11 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -337,9 +342,15 @@ fun TerminalCanvas(
     themeHex: String = "#1E1E1E",
     onSendKey: (String) -> Unit = {},
     onClearScreen: () -> Unit = {},
-    renderEnabled: Boolean = true
+    renderEnabled: Boolean = true,
+    phoneWidth: PhoneWidthState? = null,
+    viewportResizeSupported: Boolean = false,
+    onPhoneWidthModeChange: (String, Boolean) -> Unit = { _, _ -> },
+    onPhoneWidthMetrics: (String, TerminalWidthMetrics?, Boolean) -> Unit = { _, _, _ -> },
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    var showUnsupportedDialog by remember { mutableStateOf(false) }
     val readyLabel = stringResource(R.string.canvas_ready)
     val connectingLabel = stringResource(R.string.canvas_connecting)
     val startHandleLabel = stringResource(R.string.canvas_selection_start_handle)
@@ -556,6 +567,65 @@ fun TerminalCanvas(
         }
     }
     val currentGeometry by rememberUpdatedState(geometry)
+
+    // Font metrics for the phone-width target. This paint is separate from the
+    // renderer's, which is resized per frame.
+    val metricsPaint = remember(mapleTypeface) {
+        Paint().apply {
+            isAntiAlias = true
+            typeface = mapleTypeface
+        }
+    }
+    val widthMetrics = remember(canvasSizePx, requestedFontSizePx, mapleTypeface) {
+        if (canvasSizePx.width <= 0f || canvasSizePx.height <= 0f) {
+            null
+        } else {
+            metricsPaint.textSize = 100f
+            val referenceAdvance = metricsPaint.measureText("M").coerceAtLeast(1f)
+            val cellWidth = requestedFontSizePx * referenceAdvance / 100f
+            metricsPaint.textSize = requestedFontSizePx
+            val fontMetrics = metricsPaint.fontMetrics
+            TerminalWidthMetrics(
+                availableWidthPx = (canvasSizePx.width - 8f).coerceAtLeast(10f),
+                canvasHeightPx = canvasSizePx.height,
+                cellWidthPx = cellWidth,
+                rowHeightPx = (fontMetrics.bottom - fontMetrics.top) * 1.10f,
+            )
+        }
+    }
+    // Reading history or selecting text freezes the grid; resizing then would
+    // discard the anchors the user is interacting with.
+    val autoRefitPaused = isSelecting || effectiveOffset > 0
+    val currentOnPhoneWidthMetrics by rememberUpdatedState(onPhoneWidthMetrics)
+    LaunchedEffect(surfaceId, widthMetrics, autoRefitPaused, currentOnPhoneWidthMetrics) {
+        currentOnPhoneWidthMetrics(surfaceId, widthMetrics, autoRefitPaused)
+    }
+
+    // The phone layout already derives its host width from the chosen font, so
+    // fit-width would only nudge that font by a rounding step. Drop the local
+    // fit before hiding its control, otherwise A-/A+ would stay locked.
+    LaunchedEffect(phoneWidth?.enabled) {
+        if (phoneWidth?.enabled == true && displayPreference.fitWidth) {
+            onDisplayPreferenceChange(
+                displayPreference.copy(fitWidth = false, panX = 0f, panY = null, panAnchorRow = null)
+            )
+        }
+    }
+    // A grid geometry change invalidates frozen selection coordinates and pan
+    // anchors; keep the user at live output instead of pointing at old cells.
+    LaunchedEffect(surfaceId, screenState.columns, screenState.rows) {
+        localScrollOffsets[surfaceId] = 0
+        localScrollAccumulators[surfaceId] = 0f
+        if (selectionState != null) {
+            clearSelection()
+            contextualBubbleOffset = null
+        }
+        if (displayPreference.panX != 0f || displayPreference.panY != null) {
+            onDisplayPreferenceChange(
+                displayPreference.copy(panX = 0f, panY = null, panAnchorRow = null)
+            )
+        }
+    }
 
     Box(
         modifier = modifier
@@ -1004,13 +1074,86 @@ fun TerminalCanvas(
                 )
             }
         }
+        LaunchedEffect(phoneWidth?.notice) {
+            if (phoneWidth?.notice == PhoneWidthNotice.UNSUPPORTED) {
+                showUnsupportedDialog = true
+                return@LaunchedEffect
+            }
+            val message = when (phoneWidth?.notice) {
+                PhoneWidthNotice.REQUEST_FAILED -> R.string.terminal_width_failed
+                PhoneWidthNotice.CLEAR_UNCONFIRMED -> R.string.terminal_width_restore_failed
+                PhoneWidthNotice.NO_BASELINE -> R.string.terminal_width_waiting
+                else -> null
+            } ?: return@LaunchedEffect
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
         TerminalTextControls(
             preference = displayPreference,
             renderedFontSizeSp = geometry?.let { with(density) { it.fontSizePx.toSp().value } } ?: displayPreference.fontSizeSp,
             enabled = !isSelecting,
+            phoneWidth = phoneWidth,
+            supported = viewportResizeSupported,
             onChange = onDisplayPreferenceChange,
+            onToggleMode = { phoneMode ->
+                if (!phoneMode) {
+                    onPhoneWidthModeChange(surfaceId, false)
+                } else if (!viewportResizeSupported) {
+                    showUnsupportedDialog = true
+                } else {
+                    val estimate = computePhoneWidthTarget(widthMetrics, maxOf(screenState.rows, 1))
+                    if (estimate == null || screenState.columns <= 0) {
+                        Toast.makeText(context, R.string.terminal_width_waiting, Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(
+                            context,
+                            context.getString(
+                                R.string.terminal_width_enabled_toast,
+                                estimate.first,
+                                estimate.second
+                            ),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        onPhoneWidthModeChange(surfaceId, true)
+                    }
+                }
+            },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+        if (showUnsupportedDialog) {
+            AlertDialog(
+                onDismissRequest = { showUnsupportedDialog = false },
+                title = { Text(stringResource(R.string.conn_upgrade_title)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(R.string.terminal_width_unsupported_dialog))
+                        Text(
+                            MAC_GATEWAY_UPGRADE_COMMAND,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(MAC_GATEWAY_UPGRADE_COMMAND))
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.conn_upgrade_copied),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    ) {
+                        Text(stringResource(R.string.conn_btn_copy_upgrade_cmd))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showUnsupportedDialog = false }) {
+                        Text(stringResource(R.string.terminal_width_unsupported_close))
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -1019,14 +1162,27 @@ private fun TerminalTextControls(
     preference: TerminalDisplayPreference,
     renderedFontSizeSp: Float,
     enabled: Boolean,
+    phoneWidth: PhoneWidthState?,
+    supported: Boolean,
     onChange: (TerminalDisplayPreference) -> Unit,
+    onToggleMode: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val canDecrease = enabled && !preference.fitWidth && preference.fontSizeSp > 2f
     val canIncrease = enabled && !preference.fitWidth && preference.fontSizeSp < 48f
     val decreaseLabel = stringResource(R.string.canvas_decrease_text_size)
     val increaseLabel = stringResource(R.string.canvas_increase_text_size)
+    val fitWidthLabel = stringResource(
+        if (preference.fitWidth) R.string.canvas_readable else R.string.canvas_fit_width
+    )
     val theme = CmuxTheme.colors
+    val phoneWidthActive = phoneWidth?.enabled == true
+    val restoring = phoneWidth?.phase == PhoneWidthPhase.RESTORING
+    val requesting = phoneWidth?.phase == PhoneWidthPhase.REQUESTING
+    val busy = restoring || requesting
+    val modeLabel = stringResource(
+        if (phoneWidthActive) R.string.terminal_width_mode_phone else R.string.terminal_width_mode_desktop
+    )
     Surface(modifier = modifier, color = theme.containerBg) {
         Row(
             modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp),
@@ -1052,14 +1208,57 @@ private fun TerminalTextControls(
                         .semantics { contentDescription = increaseLabel }
                 ) { Text("A+", color = if (canIncrease) theme.onContainer else theme.onContainerMuted) }
             }
-            TextButton(
-                onClick = { onChange(preference.copy(fitWidth = !preference.fitWidth, panX = 0f, panY = null)) },
-                enabled = enabled,
-                modifier = Modifier.heightIn(min = 48.dp)
-            ) {
-                Icon(Icons.Default.FitScreen, contentDescription = null, tint = theme.primary, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(if (preference.fitWidth) stringResource(R.string.canvas_readable) else stringResource(R.string.canvas_fit_width), color = theme.onContainer, fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { onToggleMode(!phoneWidthActive) },
+                    // Keep the button clickable when the host cannot resize so a tap
+                    // explains why instead of looking broken. Questions of state
+                    // (selection, in-flight request) still gate it.
+                    enabled = enabled && !busy,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    if (busy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = theme.onContainerMuted
+                        )
+                    } else {
+                        Icon(
+                            if (phoneWidthActive) Icons.Default.Smartphone else Icons.Default.Computer,
+                            contentDescription = modeLabel,
+                            tint = when {
+                                phoneWidthActive -> theme.primary
+                                !supported || !enabled -> theme.onContainerMuted
+                                else -> theme.onContainer
+                            },
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                if (!phoneWidthActive) {
+                    IconButton(
+                        onClick = {
+                            onChange(
+                                preference.copy(
+                                    fitWidth = !preference.fitWidth,
+                                    panX = 0f,
+                                    panY = null,
+                                    panAnchorRow = null
+                                )
+                            )
+                        },
+                        enabled = enabled,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.FitScreen,
+                            contentDescription = fitWidthLabel,
+                            tint = if (preference.fitWidth) theme.primary else theme.onContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
         }
     }

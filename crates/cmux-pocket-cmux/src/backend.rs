@@ -148,7 +148,11 @@ pub trait CmuxBackend: Send + Sync {
     async fn select_workspace(&self, workspace_key: &str) -> Result<(), CmuxError>;
 
     /// Renames a workspace by key/ID.
-    async fn rename_workspace(&self, _workspace_key: &str, _title: &str) -> Result<WorkspaceInfo, CmuxError> {
+    async fn rename_workspace(
+        &self,
+        _workspace_key: &str,
+        _title: &str,
+    ) -> Result<WorkspaceInfo, CmuxError> {
         Err(CmuxError::unavailable("rename_workspace not supported"))
     }
 
@@ -219,6 +223,41 @@ pub trait CmuxBackend: Send + Sync {
 
     /// Lists compact notification records from cmux.
     async fn list_notifications(&self) -> Result<Vec<String>, CmuxError>;
+
+    /// Whether the connected host advertises real terminal viewport resizing.
+    ///
+    /// Implementations must probe the host rather than assume the Gateway's own
+    /// protocol version implies the capability.
+    async fn supports_viewport_resize(&self) -> bool {
+        false
+    }
+
+    /// Sends a non-sticky viewport report for one client and returns the
+    /// authoritative frame captured after the host applied it.
+    ///
+    /// `CmuxError::ViewportTransition` means the host accepted the report but
+    /// has not settled on the new grid yet; callers retry rather than reporting
+    /// a backend failure.
+    async fn apply_viewport_report(
+        &self,
+        _surface_id: &str,
+        _columns: u32,
+        _rows: u32,
+        _client_id: &str,
+        _generation: u64,
+    ) -> Result<RenderGridFrame, CmuxError> {
+        Err(CmuxError::unavailable("viewport resize not supported"))
+    }
+
+    /// Clears this client's viewport report so the host can restore the grid.
+    async fn clear_viewport_report(
+        &self,
+        _surface_id: &str,
+        _client_id: &str,
+        _generation: u64,
+    ) -> Result<(), CmuxError> {
+        Err(CmuxError::unavailable("viewport resize not supported"))
+    }
 
     /// Spawns the long-lived events stream child process.
     async fn spawn_events_stream(&self) -> Result<CmuxEventStream, CmuxError>;

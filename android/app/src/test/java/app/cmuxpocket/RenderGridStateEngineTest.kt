@@ -786,4 +786,46 @@ class RenderGridStateEngineTest {
         assertEquals("term-1", engine.screenState.value.surfaceId)
     }
 
+
+    @Test
+    fun geometryChangeDropsStaleScrollbackAndRequestsReplay() {
+        val engine = RenderGridStateEngine()
+
+        val wide = MobileTerminalRenderGridFrame(
+            surfaceId = "term-1",
+            stateSeq = 1,
+            renderEpoch = "epoch-1",
+            columns = 80,
+            rows = 24,
+            full = true,
+            styles = listOf(Style(id = 0, foreground = "#FFFFFF", background = "#000000")),
+            rowSpans = listOf(RowSpan(row = 0, column = 0, styleId = 0, text = "wide")),
+            historyRows = 2,
+            scrollbackRows = 2,
+            scrollbackSpans = listOf(
+                RowSpan(row = 0, column = 0, styleId = 0, text = "old one"),
+                RowSpan(row = 1, column = 0, styleId = 0, text = "old two"),
+            ),
+        )
+        assertEquals(FrameApplyResult.BASELINE_APPLIED, engine.applyFrame(wide))
+        assertEquals(2, engine.screenState.value.scrollback.size)
+
+        val narrow = MobileTerminalRenderGridFrame(
+            surfaceId = "term-1",
+            stateSeq = 2,
+            renderEpoch = "epoch-1",
+            columns = 44,
+            rows = 30,
+            full = true,
+            styles = listOf(Style(id = 0, foreground = "#FFFFFF", background = "#000000")),
+            rowSpans = listOf(RowSpan(row = 0, column = 0, styleId = 0, text = "narrow")),
+        )
+
+        // Old-width history cannot be reflowed locally; the caller must replay.
+        assertEquals(FrameApplyResult.NEED_REPLAY, engine.applyFrame(narrow))
+        assertEquals(44, engine.screenState.value.columns)
+        assertEquals(30, engine.screenState.value.rows)
+        assertTrue(engine.screenState.value.scrollback.isEmpty())
+    }
+
 }

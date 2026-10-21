@@ -103,7 +103,8 @@ impl CliError {
             CliError::Cmux(e) => match e {
                 CmuxError::NonZeroExit { .. }
                 | CmuxError::Timeout { .. }
-                | CmuxError::Unavailable { .. } => CliExitCode::DependencyUnavailable,
+                | CmuxError::Unavailable { .. }
+                | CmuxError::ViewportTransition => CliExitCode::DependencyUnavailable,
                 CmuxError::ParseError { .. } | CmuxError::Protocol(_) => {
                     CliExitCode::RuntimeFailure
                 }

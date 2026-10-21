@@ -183,6 +183,16 @@ class MainActivity : ComponentActivity() {
         handleDeepLinkIntent(intent)
     }
 
+    /**
+     * A backgrounded phone must not keep the shared terminal narrow. The report
+     * is cleared explicitly; if the process dies first, the Gateway stops
+     * renewing and cmux expires the report on its own.
+     */
+    override fun onStop() {
+        viewModel.releaseAllPhoneWidths()
+        super.onStop()
+    }
+
     private fun requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -376,6 +386,20 @@ fun CmuxApp(
     val activeWorkspace by viewModel.activeWorkspace.collectAsState()
     val activeSurfaces by viewModel.activeSurfaces.collectAsState()
     val selectedSurfaceId by viewModel.selectedSurfaceId.collectAsState()
+    val phoneWidthStates by viewModel.phoneWidthStates.collectAsState()
+    val gatewayCapabilities by viewModel.gatewayCapabilities.collectAsState()
+    val activePhoneWidth = selectedSurfaceId?.let { phoneWidthStates[it] }
+    val viewportResizeSupported = gatewayCapabilities.contains("terminal.viewport.v1")
+    val onPhoneWidthMetrics: (String, TerminalWidthMetrics?, Boolean) -> Unit = { sid, metrics, paused ->
+        if (sid.isNotEmpty()) viewModel.updatePhoneWidthMetrics(sid, metrics, paused)
+    }
+    val onPhoneWidthModeChange: (String, Boolean) -> Unit = { sid, enabled ->
+        if (sid.isNotEmpty()) viewModel.setPhoneWidthEnabled(sid, enabled)
+    }
+    var defaultPhoneWidthMode by remember { mutableStateOf(settingsManager.defaultPhoneWidthMode) }
+    LaunchedEffect(defaultPhoneWidthMode) {
+        viewModel.setDefaultPhoneWidthMode(defaultPhoneWidthMode)
+    }
 
     val displaySurfaceId = selectedSurfaceId.orEmpty()
     val displayPort = portInput.toIntOrNull() ?: 8088
@@ -566,7 +590,11 @@ fun CmuxApp(
                             onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
                             onSendKey = { key -> viewModel.sendInput(key, TerminalInputKind.KEY) },
                             onClearScreen = { viewModel.clearScrollback() },
-                            renderEnabled = !showSettingsDialog
+                            renderEnabled = !showSettingsDialog,
+                            phoneWidth = activePhoneWidth,
+                            viewportResizeSupported = viewportResizeSupported,
+                            onPhoneWidthModeChange = onPhoneWidthModeChange,
+                            onPhoneWidthMetrics = onPhoneWidthMetrics,
                         )
 
                         // D2 breadcrumb pill: same entry point in landscape
@@ -638,7 +666,11 @@ fun CmuxApp(
                         onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
                         onSendKey = { key -> viewModel.sendInput(key, TerminalInputKind.KEY) },
                         onClearScreen = { viewModel.clearScrollback() },
-                        renderEnabled = !showSettingsDialog
+                        renderEnabled = !showSettingsDialog,
+                        phoneWidth = activePhoneWidth,
+                        viewportResizeSupported = viewportResizeSupported,
+                        onPhoneWidthModeChange = onPhoneWidthModeChange,
+                        onPhoneWidthMetrics = onPhoneWidthMetrics,
                     )
 
                     // Minimalist frosted Floating Island Pill overlaid at top center
@@ -827,7 +859,12 @@ fun CmuxApp(
                 onRecheckGatewayVersion = viewModel::refreshHostStatus,
                 isRefreshingGatewayVersion = refreshingHostStatus,
                 onFloatingWindowSettingsChanged = onFloatingWindowSettingsChanged,
-                onDismissRequest = settingsOnDismiss
+                onDismissRequest = settingsOnDismiss,
+                defaultPhoneWidthMode = defaultPhoneWidthMode,
+                onDefaultPhoneWidthModeChange = { enabled ->
+                    defaultPhoneWidthMode = enabled
+                    settingsManager.defaultPhoneWidthMode = enabled
+                },
             )
         }
     }

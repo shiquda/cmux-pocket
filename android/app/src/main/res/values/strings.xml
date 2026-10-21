@@ -50,6 +50,18 @@
     <string name="canvas_increase_text_size">Increase terminal text size</string>
     <string name="canvas_fit_width">Fit Width</string>
     <string name="canvas_readable">Readable</string>
+    <string name="terminal_width_follow_mac">Follow computer</string>
+    <string name="terminal_width_phone">Lay out for this phone</string>
+    <string name="terminal_width_unsupported_dialog">The Gateway is out of date. Run this on your Mac, then reconnect:</string>
+    <string name="terminal_width_unsupported_close">Close</string>
+    <string name="terminal_width_default_title">Default terminal layout</string>
+    <string name="terminal_width_default_hint">Applies to newly opened terminals. Use the button left of fit-width in the terminal bar to switch the current one.</string>
+    <string name="terminal_width_mode_phone">Phone layout active. Switch to desktop layout.</string>
+    <string name="terminal_width_mode_desktop">Desktop layout active. Switch to phone layout.</string>
+    <string name="terminal_width_enabled_toast">Phone layout: about %1$d × %2$d, syncing with the Mac</string>
+    <string name="terminal_width_waiting">Measuring the canvas; try again in a moment.</string>
+    <string name="terminal_width_failed">Couldn\'t apply the phone layout. Check the connection and try again.</string>
+    <string name="terminal_width_restore_failed">Couldn\'t restore the desktop layout; that terminal clears it when the app reconnects.</string>
 
     <!-- Terminal stage -->
     <string name="stage_no_tabs">No active terminal tabs</string>

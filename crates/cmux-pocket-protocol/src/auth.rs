@@ -22,6 +22,10 @@ pub const CAP_CLIENT_FOCUS: &str = "client_focus.v1";
 pub const CAP_MULTI_SURFACE: &str = "multi_surface.v1";
 pub const CAP_HOST_WAKE: &str = "mobile.host.wake_cmux.v1";
 
+/// The Gateway can forward a phone's grid to a host that resizes the real PTY.
+/// Advertised only after probing that host capability.
+pub const CAP_TERMINAL_VIEWPORT: &str = "terminal.viewport.v1";
+
 /// List of all default capabilities advertised to clients on successful auth.
 pub const ALL_CAPABILITIES: &[&str] = &[
     CAP_RENDER_GRID,
@@ -31,6 +35,7 @@ pub const ALL_CAPABILITIES: &[&str] = &[
     CAP_CLIENT_FOCUS,
     CAP_MULTI_SURFACE,
     CAP_HOST_WAKE,
+    CAP_TERMINAL_VIEWPORT,
 ];
 
 fn default_auth_type() -> String {

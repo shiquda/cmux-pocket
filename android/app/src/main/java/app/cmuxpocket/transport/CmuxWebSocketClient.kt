@@ -88,7 +88,19 @@ class CmuxWebSocketClient(
     private var isAuthCompleted = false
     private var connectionTimeoutJob: Job? = null
 
+    /**
+     * Identity this connection uses for viewport reports. It is regenerated per
+     * connection so a delayed clear from an old socket cannot release the new
+     * socket's report.
+     */
+    @Volatile
+    var viewportClientId: String = newViewportClientId()
+        private set
+
+    private fun newViewportClientId(): String = "android-viewport-${UUID.randomUUID()}"
+
     fun connect(url: String, token: String) {
+        viewportClientId = newViewportClientId()
         // Validate before publishing CONNECTING so rejected URLs remain disconnected.
         val request = Request.Builder().url(url).build()
         this.authToken = token
@@ -278,7 +290,11 @@ class CmuxWebSocketClient(
         _statusFlow.value = ConnectionStatus.DISCONNECTED
     }
 
-    suspend fun callRpc(method: String, params: JsonObject = JsonObject(emptyMap())): JsonElement {
+    suspend fun callRpc(
+        method: String,
+        params: JsonObject = JsonObject(emptyMap()),
+        timeoutMillis: Long = 5_000,
+    ): JsonElement {
         val reqId = UUID.randomUUID().toString()
         val rpcReq = JsonRpcRequest(id = reqId, method = method, params = params)
         val deferred = CompletableDeferred<JsonElement>()
@@ -294,7 +310,7 @@ class CmuxWebSocketClient(
         }
 
         return try {
-            withTimeoutOrNull(5000) { deferred.await() }
+            withTimeoutOrNull(timeoutMillis) { deferred.await() }
                 ?: throw java.io.IOException("Gateway request timed out")
         } finally {
             pendingRequests.remove(reqId)
@@ -457,6 +473,38 @@ class CmuxWebSocketClient(
         } catch (e: Exception) {
             Log.w(tag, "focusSurface failed non-fatally", e)
         }
+    }
+
+    /**
+     * Reports this phone's desired grid. The Gateway turns it into a renewable
+     * host report; the response only acknowledges the request, it does not prove
+     * the grid changed.
+     */
+    suspend fun requestViewportReport(
+        surfaceId: String,
+        columns: Int,
+        rows: Int,
+        generation: Long,
+    ): JsonElement {
+        val params = buildJsonObject {
+            put("surface_id", surfaceId)
+            put("client_id", viewportClientId)
+            put("viewport_generation", generation)
+            put("viewport_columns", columns)
+            put("viewport_rows", rows)
+        }
+        return callRpc("mobile.terminal.viewport", params, timeoutMillis = 9_000)
+    }
+
+    /** Releases this client's report so the host can restore the laptop grid. */
+    suspend fun clearViewportReport(surfaceId: String, generation: Long): JsonElement {
+        val params = buildJsonObject {
+            put("surface_id", surfaceId)
+            put("client_id", viewportClientId)
+            put("viewport_generation", generation)
+            put("clear", true)
+        }
+        return callRpc("mobile.terminal.viewport", params, timeoutMillis = 9_000)
     }
 
     suspend fun requestReplay(

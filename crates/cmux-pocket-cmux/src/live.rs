@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use cmux_pocket_protocol::{
@@ -19,9 +19,10 @@ use tokio::time::timeout;
 use tracing::{debug, warn};
 
 use crate::args::{
-    close_surface_args, close_workspace_args, list_notifications_args, new_surface_args,
-    new_workspace_args, ping_args, read_screen_args, rename_surface_args, rename_workspace_args,
-    rpc_replay_args, rpc_scroll_args, select_workspace_args, send_input_args, tree_args,
+    capabilities_args, close_surface_args, close_workspace_args, list_notifications_args,
+    new_surface_args, new_workspace_args, ping_args, read_screen_args, rename_surface_args,
+    rename_workspace_args, rpc_replay_args, rpc_scroll_args, rpc_viewport_clear_args,
+    rpc_viewport_report_args, select_workspace_args, send_input_args, tree_args,
 };
 use crate::backend::{CmuxBackend, CmuxCapabilities, TerminalInputKind};
 use crate::error::CmuxError;
@@ -30,6 +31,9 @@ use crate::tree_parser::{extract_surface_id, parse_workspace_tree};
 
 /// Default timeout for short cmux CLI commands (e.g. ping, tree, send).
 pub const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// How long a host capability probe stays valid.
+const VIEWPORT_CAPABILITY_CACHE_TTL: Duration = Duration::from_secs(60);
 
 /// How long probed CLI capabilities stay trusted before another probe runs.
 ///
@@ -45,6 +49,7 @@ pub struct LiveCmuxBackend {
     state_seqs: Arc<Mutex<HashMap<String, u64>>>,
     render_epochs: Arc<Mutex<HashMap<String, String>>>,
     epoch_counter: Arc<AtomicU64>,
+    viewport_capability: Arc<Mutex<Option<(Instant, bool)>>>,
     capabilities: Arc<tokio::sync::Mutex<Option<(std::time::Instant, CmuxCapabilities)>>>,
 }
 
@@ -63,6 +68,7 @@ impl LiveCmuxBackend {
             state_seqs: Arc::new(Mutex::new(HashMap::new())),
             render_epochs: Arc::new(Mutex::new(HashMap::new())),
             epoch_counter: Arc::new(AtomicU64::new(1)),
+            viewport_capability: Arc::new(Mutex::new(None)),
             capabilities: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
@@ -75,6 +81,7 @@ impl LiveCmuxBackend {
             state_seqs: Arc::new(Mutex::new(HashMap::new())),
             render_epochs: Arc::new(Mutex::new(HashMap::new())),
             epoch_counter: Arc::new(AtomicU64::new(1)),
+            viewport_capability: Arc::new(Mutex::new(None)),
             capabilities: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
@@ -87,6 +94,7 @@ impl LiveCmuxBackend {
             state_seqs: Arc::new(Mutex::new(HashMap::new())),
             render_epochs: Arc::new(Mutex::new(HashMap::new())),
             epoch_counter: Arc::new(AtomicU64::new(1)),
+            viewport_capability: Arc::new(Mutex::new(None)),
             capabilities: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
@@ -226,6 +234,79 @@ impl LiveCmuxBackend {
         let stdout_str = String::from_utf8_lossy(&stdout).trim().to_string();
         Ok(stdout_str)
     }
+
+    /// Runs a cmux CLI subcommand and returns the raw process output.
+    ///
+    /// Callers that must distinguish between host-level outcomes (for example a
+    /// `viewport_transition` pending signal) inspect stderr themselves; the
+    /// text is never forwarded to clients.
+    async fn run_cmux_output(
+        &self,
+        args: &[impl AsRef<str>],
+    ) -> Result<std::process::Output, CmuxError> {
+        let op = args
+            .first()
+            .map(|a| a.as_ref().to_string())
+            .unwrap_or_else(|| "cmux".to_string());
+        let str_args: Vec<&str> = args.iter().map(|a| a.as_ref()).collect();
+
+        debug!(op = %op, path = %self.cmux_path.display(), "Executing cmux command");
+
+        let mut cmd = Command::new(&self.cmux_path);
+        cmd.args(&str_args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            // A cancelled lease must not leave a `cmux` child running.
+            .kill_on_drop(true);
+
+        match timeout(self.default_timeout, cmd.output()).await {
+            Ok(Ok(out)) => Ok(out),
+            Ok(Err(e)) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    Err(CmuxError::unavailable(format!(
+                        "cmux executable not found at {}",
+                        self.cmux_path.display()
+                    )))
+                } else {
+                    Err(CmuxError::unavailable(format!(
+                        "failed to execute cmux {op}: {e}"
+                    )))
+                }
+            }
+            Err(_) => Err(CmuxError::timeout(op, self.default_timeout)),
+        }
+    }
+
+    /// Probes the host capability list, cached briefly so polling does not
+    /// spawn a `cmux capabilities` process per frame.
+    async fn probe_viewport_capability(&self) -> bool {
+        {
+            let cached = self.viewport_capability.lock();
+            if let Some((checked_at, supported)) = *cached {
+                if checked_at.elapsed() < VIEWPORT_CAPABILITY_CACHE_TTL {
+                    return supported;
+                }
+            }
+        }
+
+        let supported = match self.run_cmux(&capabilities_args()).await {
+            Ok(raw) => serde_json::from_str::<Value>(&raw)
+                .ok()
+                .and_then(|val| val.get("capabilities").and_then(Value::as_array).cloned())
+                .is_some_and(|caps| {
+                    caps.iter().filter_map(Value::as_str).any(|cap| {
+                        cap == "terminal.viewport.v1" || cap == "mobile.terminal.viewport"
+                    })
+                }),
+            Err(e) => {
+                warn!("cmux capability probe failed: {e}");
+                false
+            }
+        };
+
+        *self.viewport_capability.lock() = Some((Instant::now(), supported));
+        supported
+    }
 }
 
 #[async_trait]
@@ -257,12 +338,19 @@ impl CmuxBackend for LiveCmuxBackend {
         Ok(target)
     }
 
-    async fn rename_workspace(&self, workspace_key: &str, title: &str) -> Result<WorkspaceInfo, CmuxError> {
-        self.run_cmux(&rename_workspace_args(workspace_key, title)).await?;
+    async fn rename_workspace(
+        &self,
+        workspace_key: &str,
+        title: &str,
+    ) -> Result<WorkspaceInfo, CmuxError> {
+        self.run_cmux(&rename_workspace_args(workspace_key, title))
+            .await?;
         let workspaces = self.list_workspaces().await?;
         let target = workspaces
             .into_iter()
-            .find(|w| w.id == workspace_key || w.key.as_deref() == Some(workspace_key) || w.name == title)
+            .find(|w| {
+                w.id == workspace_key || w.key.as_deref() == Some(workspace_key) || w.name == title
+            })
             .unwrap_or_else(|| WorkspaceInfo::new(workspace_key, title));
         Ok(target)
     }
@@ -335,7 +423,8 @@ impl CmuxBackend for LiveCmuxBackend {
         title: &str,
         workspace_key: Option<&str>,
     ) -> Result<SurfaceInfo, CmuxError> {
-        self.run_cmux(&rename_surface_args(surface_id, title)).await?;
+        self.run_cmux(&rename_surface_args(surface_id, title))
+            .await?;
         if let Ok(workspaces) = self.list_workspaces().await {
             for ws in workspaces {
                 if let Some(surf) = ws.surfaces.into_iter().find(|s| s.id == surface_id) {
@@ -457,6 +546,62 @@ impl CmuxBackend for LiveCmuxBackend {
             .map(ToString::to_string)
             .collect();
         Ok(lines)
+    }
+
+    async fn supports_viewport_resize(&self) -> bool {
+        self.probe_viewport_capability().await
+    }
+
+    async fn apply_viewport_report(
+        &self,
+        surface_id: &str,
+        columns: u32,
+        rows: u32,
+        client_id: &str,
+        generation: u64,
+    ) -> Result<RenderGridFrame, CmuxError> {
+        let seq = self.next_state_seq(surface_id);
+        let args = rpc_viewport_report_args(surface_id, columns, rows, client_id, generation);
+        let output = self.run_cmux_output(&args).await?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("viewport_transition") {
+                // The host has accepted the report and is still settling. This is
+                // a normal step of a resize, not a backend outage.
+                debug!(
+                    surface = %surface_id,
+                    "host reported viewport_transition; retry after the grid settles"
+                );
+                return Err(CmuxError::ViewportTransition);
+            }
+            let code = output.status.code();
+            warn!(
+                surface = %surface_id,
+                exit_code = ?code,
+                stderr_len = stderr.len(),
+                "viewport report command returned non-zero exit code"
+            );
+            debug!("viewport report stderr: {stderr}");
+            return Err(CmuxError::non_zero_exit("mobile.terminal.replay", code));
+        }
+
+        let raw = String::from_utf8_lossy(&output.stdout);
+        let payload: Value = serde_json::from_str(raw.trim()).map_err(|e| {
+            CmuxError::parse_error(format!("viewport report returned invalid JSON: {e}"))
+        })?;
+        Ok(normalize_official_replay(&payload, surface_id, seq, false)?)
+    }
+
+    async fn clear_viewport_report(
+        &self,
+        surface_id: &str,
+        client_id: &str,
+        generation: u64,
+    ) -> Result<(), CmuxError> {
+        let args = rpc_viewport_clear_args(surface_id, client_id, generation);
+        self.run_cmux(&args).await?;
+        Ok(())
     }
 
     async fn spawn_events_stream(&self) -> Result<CmuxEventStream, CmuxError> {

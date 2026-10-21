@@ -30,6 +30,11 @@ pub enum CmuxError {
     #[error("protocol error: {0}")]
     Protocol(#[from] ProtocolError),
 
+    /// The host accepted a viewport report but its grid has not settled yet.
+    /// Callers must retry instead of treating this as a backend failure.
+    #[error("terminal viewport is still resizing")]
+    ViewportTransition,
+
     /// Standard I/O error during child process execution.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -70,5 +75,10 @@ impl CmuxError {
     /// Returns true if the error was caused by a command timeout.
     pub fn is_timeout(&self) -> bool {
         matches!(self, Self::Timeout { .. })
+    }
+
+    /// Returns true when a viewport report was accepted but not applied yet.
+    pub fn is_viewport_transition(&self) -> bool {
+        matches!(self, Self::ViewportTransition)
     }
 }

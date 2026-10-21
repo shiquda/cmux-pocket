@@ -10,6 +10,7 @@ pub mod poller;
 pub mod server;
 pub mod session;
 pub mod surface_locks;
+pub mod viewport;
 
 pub use agent::{AgentEventSupervisor, EventDedup};
 pub use auth::{
@@ -27,6 +28,10 @@ pub use poller::{fanout_screen_snapshots, ScreenPoller, TreePoller};
 pub use server::CmuxGateway;
 pub use session::{ClientSession, ControlMessage, RenderSlot, SessionState};
 pub use surface_locks::SurfaceLockManager;
+pub use viewport::{
+    ViewportLeaseManager, ViewportReportOutcome, VIEWPORT_MAX_COLUMNS, VIEWPORT_MAX_ROWS,
+    VIEWPORT_MIN_COLUMNS, VIEWPORT_MIN_ROWS,
+};
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

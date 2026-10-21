@@ -91,7 +91,9 @@ fun SettingsScreen(
     onClearScrollback: () -> Unit = {},
     onRecheckGatewayVersion: () -> Unit = {},
     isRefreshingGatewayVersion: Boolean = false,
-    onDismissRequest: () -> Unit
+    onDismissRequest: () -> Unit,
+    defaultPhoneWidthMode: Boolean = false,
+    onDefaultPhoneWidthModeChange: (Boolean) -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
     val uriHandler = LocalUriHandler.current
@@ -332,6 +334,8 @@ fun SettingsScreen(
                                 onFontSizeChange = onFontSizeChange,
                                 onThemeChange = onThemeChange,
                                 onThemeModeChange = onThemeModeChange,
+                                defaultPhoneWidthMode = defaultPhoneWidthMode,
+                                onDefaultPhoneWidthModeChange = onDefaultPhoneWidthModeChange,
                             )
                         }
 
@@ -1144,6 +1148,8 @@ fun DisplaySection(
     onFontSizeChange: (Float) -> Unit,
     onThemeChange: (String) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
+    defaultPhoneWidthMode: Boolean = false,
+    onDefaultPhoneWidthModeChange: (Boolean) -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
 
@@ -1197,6 +1203,32 @@ fun DisplaySection(
                     activeTrackColor = theme.primary,
                     inactiveTrackColor = theme.divider
                 )
+            )
+
+            // Default layout for newly opened terminals. The live switch lives
+            // in the terminal bar; this page only stores the default.
+            Text(
+                stringResource(R.string.terminal_width_default_title),
+                fontSize = 12.sp,
+                color = theme.onSurface,
+                fontWeight = FontWeight.SemiBold
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(
+                    selected = !defaultPhoneWidthMode,
+                    onClick = { onDefaultPhoneWidthModeChange(false) },
+                    label = { Text(stringResource(R.string.terminal_width_follow_mac), fontSize = 11.sp) }
+                )
+                FilterChip(
+                    selected = defaultPhoneWidthMode,
+                    onClick = { onDefaultPhoneWidthModeChange(true) },
+                    label = { Text(stringResource(R.string.terminal_width_phone), fontSize = 11.sp) }
+                )
+            }
+            Text(
+                stringResource(R.string.terminal_width_default_hint),
+                fontSize = 10.sp,
+                color = theme.onSurfaceVariant
             )
 
             // Built-in Font Notice
@@ -1740,7 +1772,7 @@ fun StorageSection(
 }
 
 
-private const val MAC_GATEWAY_UPGRADE_COMMAND =
+internal const val MAC_GATEWAY_UPGRADE_COMMAND =
     "brew update && brew upgrade cmux-pocket && cmux-pocket setup"
 private const val LATEST_RELEASE_URL = "https://github.com/shiquda/cmux-pocket/releases/latest"
 

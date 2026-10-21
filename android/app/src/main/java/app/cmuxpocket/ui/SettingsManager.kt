@@ -65,6 +65,11 @@ class SettingsManager(context: Context) {
         }
         set(value) = prefs.edit().putString(KEY_THEME_MODE, value.name).apply()
 
+    /** Default layout for terminals opened from now on; the live switch stays in the terminal bar. */
+    var defaultPhoneWidthMode: Boolean
+        get() = prefs.getBoolean(KEY_DEFAULT_PHONE_WIDTH, false)
+        set(value) = prefs.edit().putBoolean(KEY_DEFAULT_PHONE_WIDTH, value).apply()
+
     var terminalBgTheme: String
         get() = prefs.getString(KEY_TERMINAL_BG, "#1E1E1E") ?: "#1E1E1E"
         set(value) = prefs.edit().putString(KEY_TERMINAL_BG, value).apply()
@@ -228,6 +233,7 @@ class SettingsManager(context: Context) {
         private const val KEY_FONT_SIZE = "font_size_sp"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_TERMINAL_BG = "terminal_bg"
+        private const val KEY_DEFAULT_PHONE_WIDTH = "default_phone_width"
         private const val KEY_TERMINAL_DISPLAY_PREFIX = "terminal_display:"
         private const val KEY_PROFILES = "connection_profiles"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
