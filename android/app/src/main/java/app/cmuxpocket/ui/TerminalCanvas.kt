@@ -410,6 +410,23 @@ fun TerminalCanvas(
         selectionBackgroundColor = null
     }
 
+    // The joystick and a drag that runs past the rendered edge both feed this one handler, so the
+    // viewport offset, the knob position, and accumulated fractional lines can never disagree.
+    fun applyScrollLines(deltaLines: Double) {
+        if (deltaLines == 0.0) return
+        if (isConfirmedPrimary && screenState.scrollback.isNotEmpty()) {
+            val maxScroll = screenState.scrollback.size.toFloat()
+            val curAcc = localScrollAccumulators[surfaceId] ?: 0f
+            val newAcc = (curAcc + deltaLines.toFloat()).coerceIn(0f, maxScroll)
+            val newOff = kotlin.math.round(newAcc).toInt().coerceIn(0, screenState.scrollback.size)
+            localScrollAccumulators[surfaceId] = newAcc
+            localScrollOffsets[surfaceId] = newOff
+        } else {
+            onTerminalScroll(deltaLines)
+        }
+    }
+    val currentApplyScrollLines by rememberUpdatedState<(Double) -> Unit>({ applyScrollLines(it) })
+
     LaunchedEffect(surfaceId) {
         clearSelection()
     }
@@ -603,16 +620,18 @@ fun TerminalCanvas(
                                 (with(density) { geom.fontSizePx.toSp().value } * zoom).coerceIn(2f, 48f)
                             } else pref.fontSizeSp
                             val ratio = if (zoom != 1f) with(density) { nextFont.sp.toPx() } / geom.fontSizePx else 1f
+                            val boundaryPan = chainTerminalBoundaryPan(geom, pan, zoom != 1f)
                             currentOnDisplayPreferenceChange(transformTerminalDisplay(
                                 preference = pref,
                                 geometry = geom,
                                 nextFontSizeSp = nextFont,
                                 scaleRatio = ratio,
                                 centroid = centroid,
-                                pan = pan,
+                                pan = boundaryPan.pan,
                                 isZooming = zoom != 1f,
                                 focusRow = activeFocusRow
                             ))
+                            currentApplyScrollLines(boundaryPan.scrollLines.toDouble())
                         }
                     }
                 }
@@ -978,18 +997,10 @@ fun TerminalCanvas(
         ) {
             if (selectionState == null) {
                 VerticalScrollJoystick(
-                    onScrollLines = { deltaLines ->
-                        if (isConfirmedPrimary && screenState.scrollback.isNotEmpty()) {
-                            val maxScroll = screenState.scrollback.size.toFloat()
-                            val curAcc = localScrollAccumulators[surfaceId] ?: 0f
-                            val newAcc = (curAcc + deltaLines.toFloat()).coerceIn(0f, maxScroll)
-                            val newOff = kotlin.math.round(newAcc).toInt().coerceIn(0, screenState.scrollback.size)
-                            localScrollAccumulators[surfaceId] = newAcc
-                            localScrollOffsets[surfaceId] = newOff
-                        } else {
-                            onTerminalScroll(deltaLines)
-                        }
-                    }
+                    onScrollLines = { deltaLines -> applyScrollLines(deltaLines) },
+                    historyFraction = if (scrollbackSize > 0) {
+                        effectiveOffset.toFloat() / scrollbackSize
+                    } else 0f
                 )
             }
         }
@@ -1057,6 +1068,7 @@ private fun TerminalTextControls(
 @Composable
 private fun VerticalScrollJoystick(
     onScrollLines: (Double) -> Unit,
+    historyFraction: Float = 0f,
     modifier: Modifier = Modifier
 ) {
     var knobY by remember { mutableFloatStateOf(0f) }
@@ -1110,7 +1122,20 @@ private fun VerticalScrollJoystick(
                 .fillMaxHeight(0.72f)
                 .clip(RoundedCornerShape(2.dp))
                 .background(theme.controlBorder)
-        )
+        ) {
+            // The fill mirrors the history offset a drag or the joystick produced, so the control
+            // shows where the viewport sits in the scrollback instead of only reacting to touch.
+            val filled = historyFraction.coerceIn(0f, 1f)
+            if (filled > 0f) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(filled)
+                        .background(theme.primary.copy(alpha = 0.55f))
+                )
+            }
+        }
         Box(
             modifier = Modifier
                 .offset(y = (knobY * 46).dp)

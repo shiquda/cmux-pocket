@@ -10,6 +10,7 @@ import app.cmuxpocket.ui.terminalPanX
 import app.cmuxpocket.ui.terminalPanY
 import app.cmuxpocket.ui.terminalViewportIsDetached
 import app.cmuxpocket.ui.TerminalGeometry
+import app.cmuxpocket.ui.chainTerminalBoundaryPan
 import app.cmuxpocket.ui.transformTerminalDisplay
 import androidx.compose.ui.geometry.Offset
 import org.junit.Assert.assertEquals
@@ -124,6 +125,56 @@ class TerminalDisplayTest {
 
         assertTrue(terminalViewportIsDetached(detached, 50))
         assertEquals(false, terminalViewportIsDetached(detached, 0))
+    }
+
+    @Test
+    fun aPanThatFitsTheViewportDoesNotScrollHistory() {
+        // 60x20 rows in a 400 px canvas: originY -600 means 200 px of upward pan remain.
+        val geometry = TerminalGeometry(360f, 400f, 160, 60, 8f, 20f, 16f, 4f, -600f, 20f)
+        val result = chainTerminalBoundaryPan(geometry, Offset(-30f, 50f), isZooming = false)
+
+        assertEquals(-30f, result.pan.x, 0.001f)
+        assertEquals(50f, result.pan.y, 0.001f)
+        assertEquals(0f, result.scrollLines, 0.001f)
+    }
+
+    @Test
+    fun pullingPastTheOldestRenderedRowScrollsBackIntoHistory() {
+        // originY 0 is the topmost pan (panY == contentHeight - canvasHeight == 800).
+        val geometry = TerminalGeometry(360f, 400f, 160, 60, 8f, 20f, 16f, 4f, 0f, 20f)
+        val result = chainTerminalBoundaryPan(geometry, Offset(0f, 100f), isZooming = false)
+
+        assertEquals(0f, result.pan.y, 0.001f)
+        assertEquals(4.25f, result.scrollLines, 0.001f)
+    }
+
+    @Test
+    fun pullingPastTheNewestRowScrollsBackTowardsLiveOutput() {
+        // originY -800 is the bottommost pan (panY == 0): the live viewport edge.
+        val geometry = TerminalGeometry(360f, 400f, 160, 60, 8f, 20f, 16f, 4f, -800f, 20f)
+        val result = chainTerminalBoundaryPan(geometry, Offset(0f, -50f), isZooming = false)
+
+        assertEquals(0f, result.pan.y, 0.001f)
+        assertEquals(-2.125f, result.scrollLines, 0.001f)
+    }
+
+    @Test
+    fun aGridShorterThanTheCanvasChainsEveryDownwardDragIntoHistory() {
+        // 10 rows of 20 px in a 500 px canvas leave no vertical pan range at all.
+        val geometry = TerminalGeometry(360f, 500f, 160, 10, 8f, 20f, 16f, 4f, 300f, 20f)
+        val result = chainTerminalBoundaryPan(geometry, Offset(0f, 40f), isZooming = false)
+
+        assertEquals(0f, result.pan.y, 0.001f)
+        assertEquals(1.7f, result.scrollLines, 0.001f)
+    }
+
+    @Test
+    fun pinchZoomNeverConvertsPanIntoHistoryScrolling() {
+        val geometry = TerminalGeometry(360f, 400f, 160, 60, 8f, 20f, 16f, 4f, 0f, 20f)
+        val result = chainTerminalBoundaryPan(geometry, Offset(0f, 100f), isZooming = true)
+
+        assertEquals(100f, result.pan.y, 0.001f)
+        assertEquals(0f, result.scrollLines, 0.001f)
     }
 
     private fun width(
