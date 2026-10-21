@@ -63,6 +63,7 @@ fun SessionSurfaceDrawer(
         onDismissRequest = onDismissRequest,
         containerColor = theme.containerBg,
         contentColor = theme.onContainer,
+        scrimColor = theme.scrim,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -327,7 +328,7 @@ private fun SurfaceCard(
                             text = stringResource(R.string.drawer_state_working),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = theme.accentOrange
+                            color = theme.accentOrangeInk
                         )
                     }
                 } else if (surface.dead) {
@@ -341,7 +342,7 @@ private fun SurfaceCard(
                             text = stringResource(R.string.drawer_state_dead),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = theme.accentRed
+                            color = theme.accentRedInk
                         )
                     }
                 } else {
@@ -484,7 +485,7 @@ private fun WorkspaceCard(
             Icon(
                 imageVector = Icons.Default.Folder,
                 contentDescription = null,
-                tint = if (isCurrent) theme.accentGreen else theme.onContainerMuted,
+                tint = if (isCurrent) theme.accentGreenInk else theme.onContainerMuted,
                 modifier = Modifier.size(20.dp)
             )
 
@@ -518,7 +519,7 @@ private fun WorkspaceCard(
                 Text(
                     text = "● " + stringResource(R.string.drawer_connected),
                     fontSize = 12.sp,
-                    color = theme.accentGreen,
+                    color = theme.accentGreenInk,
                     fontWeight = FontWeight.Medium
                 )
             } else {

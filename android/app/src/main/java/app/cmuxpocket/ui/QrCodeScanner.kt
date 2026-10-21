@@ -388,7 +388,7 @@ fun ScannerOverlay(
                     Icon(
                         imageVector = if (isTorchEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
                         contentDescription = stringResource(R.string.scan_torch_toggle_cd),
-                        tint = if (isTorchEnabled) theme.primary else Color.White
+                        tint = Color.White
                     )
                 }
 
@@ -560,7 +560,7 @@ fun PermissionDeniedView(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
                 ) {
-                    Text(stringResource(R.string.scan_app_settings), color = Color.White)
+                    Text(stringResource(R.string.scan_app_settings))
                 }
             }
         }
@@ -623,7 +623,7 @@ fun PermissionRequestView(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
                 ) {
-                    Text(stringResource(R.string.scan_permission_allow), color = Color.White)
+                    Text(stringResource(R.string.scan_permission_allow))
                 }
             }
         }

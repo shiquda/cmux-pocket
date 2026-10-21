@@ -12,6 +12,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -87,12 +88,24 @@ data class CmuxColors(
     val accentPurple: Color,
     /** Neon cyan: info / in-progress state. */
     val accentBlue: Color,
+    /**
+     * Text/icon ink for a chip whose fill is the same accent at low alpha ([accentGreen] @20 % …).
+     * Dark mode reuses the accent; light mode darkens it until the 4.5:1 floor holds, because the
+     * tinted fill lightens the background and the raw accent drops to ~2.7:1 there.
+     */
+    val accentGreenInk: Color,
+    val accentOrangeInk: Color,
+    val accentRedInk: Color,
+    val accentBlueInk: Color,
     /** GitHub brand tile; light theme uses the brand black, dark theme an inverted light tile. */
     val brandGithub: Color,
     /** Glyph colour for [brandGithub]. */
     val onBrandGithub: Color,
     /** Content colour for a bright accent fill, where [onPrimary] would be unreadable. */
-    val onAccentBright: Color
+    val onAccentBright: Color,
+    /** Ink for a fill chosen at runtime; pick with [Color.luminance] (terminal palette swatches). */
+    val inkOnLightFill: Color,
+    val inkOnDarkFill: Color
 )
 
 /** Canonical palette P3 · Neon Grid — see `DESIGN.md` for the full table and usage rules. */
@@ -115,7 +128,7 @@ val DarkCmuxColors = CmuxColors(
     accessoryBg = Color(0xFF12121E),
     accessoryKeyBg = Color(0xFF202033),
     accessoryKeyText = Color(0xFFDBDBEA),
-    islandBg = Color(0xD912121E),
+    islandBg = Color(0xE612121E),
     islandBorder = Color(0xFF2E2E48),
     onIsland = Color(0xFFF0F0F8),
     onIslandMuted = Color(0xFF8888A3),
@@ -134,9 +147,15 @@ val DarkCmuxColors = CmuxColors(
     accentRed = Color(0xFFFF6E7F),
     accentPurple = Color(0xFFA68CFF),
     accentBlue = Color(0xFF3EE6D8),
+    accentGreenInk = Color(0xFFA6E22E),
+    accentOrangeInk = Color(0xFFFFC857),
+    accentRedInk = Color(0xFFFF6E7F),
+    accentBlueInk = Color(0xFF3EE6D8),
     brandGithub = Color(0xFFE8EAED),
     onBrandGithub = Color(0xFF1C1C1E),
-    onAccentBright = Color(0xFF150B33)
+    onAccentBright = Color(0xFF150B33),
+    inkOnLightFill = Color(0xFF150B33),
+    inkOnDarkFill = Color(0xFFF0F0F8)
 )
 
 val LightCmuxColors = CmuxColors(
@@ -158,7 +177,7 @@ val LightCmuxColors = CmuxColors(
     accessoryBg = Color(0xFFE8E8F2),
     accessoryKeyBg = Color(0xFFFFFFFF),
     accessoryKeyText = Color(0xFF1A1A26),
-    islandBg = Color(0xE6FFFFFF),
+    islandBg = Color(0xF2FFFFFF),
     islandBorder = Color(0xFFD8D8E5),
     onIsland = Color(0xFF14141F),
     onIslandMuted = Color(0xFF5C5C75),
@@ -177,9 +196,15 @@ val LightCmuxColors = CmuxColors(
     accentRed = Color(0xFFD43D51),
     accentPurple = Color(0xFF6D28D9),
     accentBlue = Color(0xFF0D9488),
+    accentGreenInk = Color(0xFF35600F),
+    accentOrangeInk = Color(0xFF7A4E00),
+    accentRedInk = Color(0xFF99182B),
+    accentBlueInk = Color(0xFF0A5C55),
     brandGithub = Color(0xFF24292E),
     onBrandGithub = Color.White,
-    onAccentBright = Color(0xFF1A1A26)
+    onAccentBright = Color(0xFF1A1A26),
+    inkOnLightFill = Color(0xFF150B33),
+    inkOnDarkFill = Color(0xFFF0F0F8)
 )
 
 val LocalCmuxColors = staticCompositionLocalOf { DarkCmuxColors }
@@ -202,11 +227,15 @@ private fun CmuxColors.toMaterialScheme(): ColorScheme {
         primary = primary,
         onPrimary = onPrimary,
         primaryContainer = primaryContainer,
-        onPrimaryContainer = onPrimary,
+        onPrimaryContainer = if (isDark) Color(0xFFE9E2FF) else Color(0xFF4C1D95),
         secondary = accentGreen,
-        onSecondary = Color.White,
+        onSecondary = onAccentBright,
+        secondaryContainer = primaryContainer,
+        onSecondaryContainer = if (isDark) Color(0xFFE9E2FF) else Color(0xFF4C1D95),
         tertiary = accentBlue,
         onTertiary = if (isDark) Color.Black else Color.White,
+        tertiaryContainer = primaryContainer,
+        onTertiaryContainer = if (isDark) Color(0xFFE9E2FF) else Color(0xFF4C1D95),
         background = background,
         onBackground = onBackground,
         surface = surface,
@@ -218,26 +247,33 @@ private fun CmuxColors.toMaterialScheme(): ColorScheme {
         outline = divider,
         outlineVariant = cardBorder,
         error = accentRed,
-        onError = Color.White,
+        onError = if (isDark) onAccentBright else Color.White,
         errorContainer = accentRed.copy(alpha = if (isDark) 0.24f else 0.14f),
-        onErrorContainer = accentRed
+        onErrorContainer = accentRedInk
     )
 }
 
 /**
- * Keeps the system status/navigation bar glyphs legible for the active theme: dark glyphs on a
- * light UI, light glyphs on a dark UI.
+ * Keeps the system status/navigation bars legible for the active theme.
+ *
+ * The platform window theme is a stock dark `Theme.Material.NoActionBar`, so its bar colour is
+ * black regardless of the selected app theme. Painting the bars from the palette is what prevents
+ * light mode from showing a black band with dark (invisible) glyphs on top.
  */
 @Composable
-private fun SystemBarAppearance(isDark: Boolean) {
+private fun SystemBarAppearance(colors: CmuxColors) {
     val view = LocalView.current
     val context = LocalContext.current
     if (view.isInEditMode) return
     SideEffect {
         val window = (context as? Activity)?.window ?: return@SideEffect
         val controller = WindowCompat.getInsetsController(window, view)
-        controller.isAppearanceLightStatusBars = !isDark
-        controller.isAppearanceLightNavigationBars = !isDark
+        controller.isAppearanceLightStatusBars = !colors.isDark
+        controller.isAppearanceLightNavigationBars = !colors.isDark
+        @Suppress("DEPRECATION")
+        window.statusBarColor = colors.background.toArgb()
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = colors.background.toArgb()
     }
 }
 
@@ -254,7 +290,7 @@ fun CmuxAppTheme(
 
     val colors = if (isDark) DarkCmuxColors else LightCmuxColors
 
-    SystemBarAppearance(isDark)
+    SystemBarAppearance(colors)
 
     CompositionLocalProvider(LocalCmuxColors provides colors) {
         MaterialTheme(colorScheme = colors.toMaterialScheme(), content = content)

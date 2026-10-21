@@ -75,6 +75,7 @@ fun ComputerKeyboardPanel(
         sheetState = sheetState,
         containerColor = theme.surface,
         contentColor = theme.onSurface,
+        scrimColor = theme.scrim,
         modifier = modifier
     ) {
         Column(
@@ -164,7 +165,13 @@ fun ComputerKeyboardPanel(
                             onCheckedChange = {
                                 controller.setCombinationMode(it)
                                 syncController()
-                            }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = theme.onPrimary,
+                                checkedTrackColor = theme.primary,
+                                uncheckedThumbColor = theme.onSurfaceVariant,
+                                uncheckedTrackColor = theme.surfaceVariant
+                            )
                         )
                     }
                 }
@@ -190,7 +197,13 @@ fun ComputerKeyboardPanel(
                         onCheckedChange = {
                             controller.setCombinationMode(it)
                             syncController()
-                        }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = theme.onPrimary,
+                            checkedTrackColor = theme.primary,
+                            uncheckedThumbColor = theme.onSurfaceVariant,
+                            uncheckedTrackColor = theme.surfaceVariant
+                        )
                     )
                 }
             }

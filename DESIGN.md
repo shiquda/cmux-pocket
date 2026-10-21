@@ -24,6 +24,8 @@ Unified color system for the cmux Pocket Android app. This file is the **canonic
 | `divider` | Hairlines, separators, key borders |
 | `accessoryBg` / `accessoryKeyBg` / `accessoryKeyText` | Bottom accessory keyboard bar |
 | `accentGreen` / `accentOrange` / `accentRed` / `accentPurple` / `accentBlue` | Status dot, agent states, log severities, terminal ANSI-mapped accents |
+| `accent*Ink` (`accentGreenInk`, `accentOrangeInk`, `accentRedInk`, `accentBlueInk`) | Text/icon ink on an accent-tinted chip of the same hue (`accentX.copy(alpha = 0.16–0.20f)`). Dark mode reuses the accent; light mode darkens it to hold the 4.5:1 floor |
+| `inkOnLightFill` / `inkOnDarkFill` | Label ink for a fill chosen at runtime (terminal palette swatches). Pick by the fill's luminance, never by the app theme |
 | `islandBg` / `islandBorder` | Floating island pill (frosted; includes alpha) |
 | `scrim` | Modal overlay dimming |
 
@@ -54,7 +56,7 @@ Night-ops neon: violet primary with a neon-cyan secondary accent and a Monokai-l
 | `accentRed` | `#FF6E7F` | `#D43D51` |
 | `accentPurple` | `#A68CFF` | `#6D28D9` |
 | `accentBlue` | `#3EE6D8` | `#0D9488` |
-| `islandBg` | `#12121ED9` | `#FFFFFFE6` |
+| `islandBg` | `#12121EE6` | `#FFFFFFF2` |
 | `islandBorder` | `#2E2E48` | `#D8D8E5` |
 
 ## References and deliberate divergence
@@ -70,3 +72,5 @@ Night-ops neon: violet primary with a neon-cyan secondary accent and a Monokai-l
 3. `islandBg` always carries alpha (frosted glass over the canvas); `islandBorder` is a hairline, never a solid outline.
 4. The terminal canvas (`terminalBg`/`terminalFg`) is part of the app theme, not the remote host's ANSI palette — ANSI colors from cmux render unchanged; these two tokens only set the well and default foreground.
 5. Light mode re-tunes accent lightness; hues never shift between modes.
+6. **Tint needs ink.** Text or an icon drawn on an accent-tinted chip uses the matching `accent*Ink`, not the raw accent: in light mode the tint lifts the fill towards white and drops the raw accent to ~2.7:1. The raw accents remain for dots, bars, borders, and fills.
+7. **System bars follow the palette.** The window's status and navigation bars are painted with `background` and their glyphs switch with `isDark`; the platform window theme is a fixed dark `Theme.Material.NoActionBar`, so leaving the bars unset produces a black band with dark glyphs in light mode.

@@ -179,7 +179,7 @@ private fun KeyButton(
 
     val textColor = when {
         isHighlighted -> theme.onPrimary
-        isSpecial -> theme.accentOrange
+        isSpecial -> theme.accentOrangeInk
         isPrimary -> theme.primary
         else -> theme.accessoryKeyText
     }

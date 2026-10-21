@@ -181,7 +181,7 @@ private fun LicenseCard(
             text = license,
             fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
-            color = theme.accentGreen,
+            color = theme.onContainerMuted,
             modifier = Modifier.padding(top = 2.dp, bottom = 6.dp)
         )
         Text(
