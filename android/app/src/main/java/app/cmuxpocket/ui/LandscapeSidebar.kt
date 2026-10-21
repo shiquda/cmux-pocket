@@ -50,6 +50,7 @@ fun LandscapeSidebar(
     onCloseWorkspace: ((String) -> Unit)? = null,
     onRenameSurface: ((SurfaceInfo) -> Unit)? = null,
     onSettingsClick: () -> Unit,
+    onFloatingWindowClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val theme = CmuxTheme.colors
@@ -426,7 +427,20 @@ fun LandscapeSidebar(
 
             HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
 
-            // Bottom Actions: Settings with 48dp Touch Target
+            // Bottom Actions: floating window + settings with 48dp touch targets
+            if (onFloatingWindowClick != null) {
+                IconButton(
+                    onClick = onFloatingWindowClick,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PictureInPictureAlt,
+                        contentDescription = stringResource(R.string.floating_window_open),
+                        tint = theme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
             IconButton(
                 onClick = onSettingsClick,
                 modifier = Modifier.size(48.dp)

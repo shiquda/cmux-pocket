@@ -86,6 +86,20 @@
     <string name="settings_section_diagnostics">诊断</string>
     <string name="settings_section_storage">存储</string>
     <string name="settings_section_notifications">通知</string>
+    <string name="settings_section_floating_window">悬浮窗</string>
+
+    <!-- Settings · Floating window -->
+    <string name="settings_floating_window_title">悬浮窗</string>
+    <string name="settings_floating_window_desc">在系统画中画窗口中显示终端的最新输出。</string>
+    <string name="settings_floating_window_auto">离开应用时自动打开</string>
+    <string name="settings_floating_window_auto_desc_on">类似 YouTube：应用退到后台时自动打开小窗。</string>
+    <string name="settings_floating_window_auto_desc_off">使用底部工具栏的悬浮窗按钮手动打开。</string>
+    <string name="settings_floating_window_aspect">宽高比（宽 : 高）</string>
+    <string name="settings_floating_window_aspect_value">%1$.2f : 1</string>
+    <string name="settings_floating_window_font">悬浮窗字号</string>
+    <string name="settings_floating_window_preview">预览</string>
+    <string name="floating_window_open">打开悬浮窗</string>
+    <string name="floating_window_no_surface">请先打开一个终端标签页</string>
 
     <!-- Settings · Notifications -->
     <string name="settings_notif_vibrate">当前会话完成时震动</string>

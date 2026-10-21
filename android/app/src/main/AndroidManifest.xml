@@ -32,6 +32,8 @@
             android:exported="true"
             android:windowSoftInputMode="adjustResize"
             android:screenOrientation="fullUser"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:hardwareAccelerated="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize">
             <intent-filter>

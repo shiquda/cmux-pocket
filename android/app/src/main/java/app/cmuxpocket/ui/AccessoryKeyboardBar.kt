@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.sp
 fun AccessoryKeyboardBar(
     onSendKey: (String) -> Unit,
     onOpenKeyboardPanel: () -> Unit,
+    onFloatingWindowClick: (() -> Unit)? = null,
     onSettingsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -145,7 +147,20 @@ fun AccessoryKeyboardBar(
                 .padding(horizontal = 3.dp)
         )
 
-        // Right side: settings only (Tabs (N) removed in D2)
+        // Right side: floating window shortcut plus settings (Tabs (N) removed in D2)
+        if (onFloatingWindowClick != null) {
+            IconButton(
+                onClick = onFloatingWindowClick,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PictureInPictureAlt,
+                    contentDescription = stringResource(R.string.floating_window_open),
+                    tint = theme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
         IconButton(
             onClick = onSettingsClick,
             modifier = Modifier.size(40.dp)
