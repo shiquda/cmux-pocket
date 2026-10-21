@@ -47,6 +47,26 @@
     <string name="canvas_increase_text_size">增大终端字号</string>
     <string name="canvas_fit_width">适应宽度</string>
     <string name="canvas_readable">可读模式</string>
+    <string name="terminal_width_title">终端宽度</string>
+    <string name="terminal_width_follow_mac">跟随电脑</string>
+    <string name="terminal_width_phone">按手机宽度排版</string>
+    <string name="terminal_width_estimate">预计 %1$d 列 × %2$d 行</string>
+    <string name="terminal_width_current">当前 %1$d 列 × %2$d 行</string>
+    <string name="terminal_width_shared_warning">这会同时改变电脑上同一终端的排版；所有已连接设备共享取最小值后的网格。</string>
+    <string name="terminal_width_active">已生效 %1$d 列 × %2$d 行</string>
+    <string name="terminal_width_adapting">正在适配…</string>
+    <string name="terminal_width_restoring">正在恢复…</string>
+    <string name="terminal_width_unsupported">当前主机或网关不支持真实调整终端尺寸。</string>
+    <string name="terminal_width_failed">适配失败，仍按原尺寸显示。</string>
+    <string name="terminal_width_no_baseline">尚未收到电脑端网格，请稍后重试。</string>
+    <string name="terminal_width_clear_unconfirmed">本机约束已释放；电脑端会在数秒内自动恢复。</string>
+    <string name="terminal_width_history_paused">正在阅读历史，回到实时画面后再适配。</string>
+    <string name="terminal_width_reapply">重新适配</string>
+    <string name="terminal_width_restore">恢复电脑排版</string>
+    <string name="terminal_width_close">关闭</string>
+    <string name="terminal_width_button">宽度</string>
+    <string name="terminal_width_columns_value">%1$d 列</string>
+    <string name="terminal_width_local_display">本地显示</string>
 
     <!-- Terminal stage -->
     <string name="stage_no_tabs">暂无活跃终端标签</string>

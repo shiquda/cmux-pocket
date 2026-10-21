@@ -11,6 +11,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 
 enum class ConnectionStep(val label: String) {
@@ -70,12 +72,14 @@ suspend fun verifyGatewayConnection(
     subscribe: suspend () -> Unit,
     onStep: (ConnectionStep) -> Unit,
     onHostStatus: (GatewayHostStatus) -> Unit = {},
+    onCapabilities: (Set<String>) -> Unit = {},
 ): GatewayHandshake {
     onStep(ConnectionStep.GATEWAY)
     val statusJson = callRpc("mobile.host.status") as? JsonObject
         ?: error("Invalid Gateway status response")
     val hostStatus = decodeHostStatus(statusJson)
     onHostStatus(hostStatus)
+    onCapabilities(hostStatus.capabilities.toSet())
 
     // Subscribe before fetching the baseline so changes during discovery are
     // still delivered to the session.

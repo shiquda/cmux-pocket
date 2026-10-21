@@ -77,6 +77,16 @@ class MainActivity : ComponentActivity() {
         handleDeepLinkIntent(intent)
     }
 
+    /**
+     * A backgrounded phone must not keep the shared terminal narrow. The report
+     * is cleared explicitly; if the process dies first, the Gateway stops
+     * renewing and cmux expires the report on its own.
+     */
+    override fun onStop() {
+        viewModel.releaseAllPhoneWidths()
+        super.onStop()
+    }
+
     private fun requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -248,6 +258,28 @@ fun CmuxApp(
     val activeWorkspace by viewModel.activeWorkspace.collectAsState()
     val activeSurfaces by viewModel.activeSurfaces.collectAsState()
     val selectedSurfaceId by viewModel.selectedSurfaceId.collectAsState()
+    val phoneWidthStates by viewModel.phoneWidthStates.collectAsState()
+    val gatewayCapabilities by viewModel.gatewayCapabilities.collectAsState()
+    val activePhoneWidth = selectedSurfaceId?.let { phoneWidthStates[it] }
+    val viewportResizeSupported = gatewayCapabilities.contains("terminal.viewport.v1")
+    val widthSurfaceKey = selectedSurfaceId.orEmpty()
+    val onPhoneWidthMetrics: (TerminalWidthMetrics?, Boolean) -> Unit = remember(widthSurfaceKey) {
+        { metrics, paused ->
+            if (widthSurfaceKey.isNotEmpty()) {
+                viewModel.updatePhoneWidthMetrics(widthSurfaceKey, metrics, paused)
+            }
+        }
+    }
+    val onPhoneWidthEnabledChange: (Boolean) -> Unit = remember(widthSurfaceKey) {
+        { enabled ->
+            if (widthSurfaceKey.isNotEmpty()) {
+                viewModel.setPhoneWidthEnabled(widthSurfaceKey, enabled)
+            }
+        }
+    }
+    val onPhoneWidthReapply: () -> Unit = remember(widthSurfaceKey) {
+        { if (widthSurfaceKey.isNotEmpty()) viewModel.reapplyPhoneWidth(widthSurfaceKey) }
+    }
 
     val displaySurfaceId = selectedSurfaceId.orEmpty()
     val displayPort = portInput.toIntOrNull() ?: 8088
@@ -385,7 +417,12 @@ fun CmuxApp(
                             onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
                             onSendKey = { key -> viewModel.sendInput(key) },
                             onClearScreen = { viewModel.clearScrollback() },
-                            renderEnabled = !showSettingsDialog
+                            renderEnabled = !showSettingsDialog,
+                            phoneWidth = activePhoneWidth,
+                            viewportResizeSupported = viewportResizeSupported,
+                            onPhoneWidthEnabledChange = onPhoneWidthEnabledChange,
+                            onPhoneWidthReapply = onPhoneWidthReapply,
+                            onPhoneWidthMetrics = onPhoneWidthMetrics,
                         )
 
                         // D2 breadcrumb pill: same entry point in landscape
@@ -445,7 +482,12 @@ fun CmuxApp(
                         onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
                         onSendKey = { key -> viewModel.sendInput(key) },
                         onClearScreen = { viewModel.clearScrollback() },
-                        renderEnabled = !showSettingsDialog
+                        renderEnabled = !showSettingsDialog,
+                        phoneWidth = activePhoneWidth,
+                        viewportResizeSupported = viewportResizeSupported,
+                        onPhoneWidthEnabledChange = onPhoneWidthEnabledChange,
+                        onPhoneWidthReapply = onPhoneWidthReapply,
+                        onPhoneWidthMetrics = onPhoneWidthMetrics,
                     )
 
                     // Minimalist frosted Floating Island Pill overlaid at top center
@@ -617,7 +659,10 @@ fun CmuxApp(
                 onClearScrollback = settingsOnClearScrollback,
                 onRecheckGatewayVersion = viewModel::refreshHostStatus,
                 isRefreshingGatewayVersion = refreshingHostStatus,
-                onDismissRequest = settingsOnDismiss
+                onDismissRequest = settingsOnDismiss,
+                phoneWidth = activePhoneWidth,
+                viewportResizeSupported = viewportResizeSupported,
+                onPhoneWidthEnabledChange = onPhoneWidthEnabledChange,
             )
         }
     }

@@ -90,6 +90,7 @@ Your cmux workspaces and tabs appear immediately on Android.
 - **Pinch to Zoom**: Adjust text size smoothly via pinch gesture, or use **A− / A+** controls.
 - **Pan & Scroll**: Drag with one or two fingers to scroll through scrollback or navigate wide columns.
 - **Double Tap**: Instantly fits the terminal width to your screen.
+- **Phone-width layout**: The bottom bar's **Width** control shows the computer's grid and the grid the phone would request, then asks cmux to resize the shared PTY so host-side TUIs reflow for the phone. A restore button returns to the Mac layout; backgrounding or leaving a surface releases this device's report. The mode is shared, the host clamps it, and another connected client always wins the minimum — see [docs/terminal-width.md](docs/terminal-width.md).
 - **Contextual Action Bubble**: Long-press any terminal text to select and access one-tap actions: Copy selection, Copy screen, Paste at cursor, Send interrupt (Ctrl+C), or Clear screen.
 
 ### Accessory Keyboard Bar

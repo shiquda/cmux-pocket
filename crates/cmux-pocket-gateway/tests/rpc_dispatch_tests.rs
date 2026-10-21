@@ -73,9 +73,7 @@ async fn test_host_status_rpc() {
         Some(env!("CARGO_PKG_VERSION"))
     );
     assert_eq!(
-        result
-            .get("protocol_version")
-            .and_then(|v| v.as_str()),
+        result.get("protocol_version").and_then(|v| v.as_str()),
         Some("2.0.0")
     );
     assert_eq!(result["cmux_status"]["running"], true);
@@ -218,13 +216,17 @@ async fn test_terminal_aliases_and_operations() {
         serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
     assert_eq!(event_replay["event"], "terminal.render_grid");
 
-    // 4. terminal.viewport (alias for mobile.terminal.viewport)
+    // 4. terminal.viewport (alias for mobile.terminal.viewport) forwards a real
+    //    report to the backend instead of echoing the requested numbers.
     let req_vp = json!({
         "id": "req-vp",
         "method": "terminal.viewport",
         "params": {
-            "viewport_columns": 120,
-            "viewport_rows": 40,
+            "surface_id": "surf-main-1",
+            "client_id": "test-client",
+            "viewport_generation": 7,
+            "viewport_columns": 44,
+            "viewport_rows": 30,
         }
     });
     ws.send(Message::Text(req_vp.to_string())).await.unwrap();
@@ -232,9 +234,47 @@ async fn test_terminal_aliases_and_operations() {
         serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
     assert_eq!(res_vp["id"], "req-vp");
     assert_eq!(res_vp["result"]["accepted"], true);
-    assert_eq!(res_vp["result"]["columns"], 120);
-    assert_eq!(res_vp["result"]["rows"], 40);
-    assert_eq!(res_vp["result"]["geometry_owner"], false);
+    assert_eq!(res_vp["result"]["pending"], false);
+    assert_eq!(res_vp["result"]["columns"], 44);
+    assert_eq!(res_vp["result"]["rows"], 30);
+    assert_eq!(res_vp["result"]["effective_columns"], 44);
+    assert_eq!(res_vp["result"]["effective_rows"], 30);
+    assert_eq!(res_vp["result"]["geometry_owner"], true);
+
+    // 5. Clearing releases this client's report and reports the restored grid.
+    let req_clear = json!({
+        "id": "req-clear",
+        "method": "mobile.terminal.viewport",
+        "params": {
+            "surface_id": "surf-main-1",
+            "client_id": "test-client",
+            "viewport_generation": 8,
+            "clear": true,
+        }
+    });
+    ws.send(Message::Text(req_clear.to_string())).await.unwrap();
+    let res_clear: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(res_clear["id"], "req-clear");
+    assert_eq!(res_clear["result"]["accepted"], true);
+    assert_eq!(res_clear["result"]["cleared"], true);
+    assert_eq!(res_clear["result"]["columns"], 80);
+    assert_eq!(res_clear["result"]["rows"], 24);
+    assert_eq!(res_clear["result"]["geometry_owner"], false);
+
+    // 6. A viewport request without client identity is rejected.
+    let req_invalid = json!({
+        "id": "req-vp-invalid",
+        "method": "terminal.viewport",
+        "params": {"viewport_columns": 44, "viewport_rows": 30}
+    });
+    ws.send(Message::Text(req_invalid.to_string()))
+        .await
+        .unwrap();
+    let res_invalid: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(res_invalid["id"], "req-vp-invalid");
+    assert_eq!(res_invalid["error"]["code"], -32602);
 
     gw.stop().await;
 }

@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use cmux_pocket_cmux::CmuxBackend;
-use cmux_pocket_protocol::auth::ALL_CAPABILITIES;
-use cmux_pocket_protocol::rpc::{CODE_BACKEND_UNAVAILABLE, CODE_METHOD_NOT_FOUND};
+use cmux_pocket_protocol::auth::{ALL_CAPABILITIES, CAP_TERMINAL_VIEWPORT};
+use cmux_pocket_protocol::rpc::{
+    CODE_BACKEND_UNAVAILABLE, CODE_INVALID_PARAMS, CODE_METHOD_NOT_FOUND,
+};
 use cmux_pocket_protocol::{CAP_HOST_WAKE, PROTOCOL_SERVER_VERSION};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
@@ -12,6 +14,7 @@ use crate::health::HealthTracker;
 use crate::host::SharedHostController;
 use crate::session::ClientSession;
 use crate::surface_locks::SurfaceLockManager;
+use crate::viewport::ViewportLeaseManager;
 
 #[async_trait]
 pub trait GatewayCallbacks: Send + Sync {
@@ -27,6 +30,7 @@ pub struct DispatchContext<'a> {
     pub health: &'a HealthTracker,
     pub surface_locks: &'a SurfaceLockManager,
     pub host: &'a SharedHostController,
+    pub viewport_leases: &'a ViewportLeaseManager,
     pub callbacks: &'a (dyn GatewayCallbacks + 'a),
 }
 
@@ -43,10 +47,12 @@ pub async fn dispatch_rpc<'a>(
         "mobile.host.status" => {
             let running = ctx.backend.ping().await.is_ok();
             let host = ctx.host.status().await;
+            let viewport_supported = ctx.viewport_leases.supported().await;
             let capabilities: Vec<&str> = ALL_CAPABILITIES
                 .iter()
                 .copied()
                 .filter(|capability| host.can_wake || *capability != CAP_HOST_WAKE)
+                .filter(|capability| viewport_supported || *capability != CAP_TERMINAL_VIEWPORT)
                 .collect();
             let res = json!({
                 "id": id_val,
@@ -163,10 +169,7 @@ pub async fn dispatch_rpc<'a>(
         }
 
         "mobile.workspace.create" => {
-            let name = params
-                .get("name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
             let mutation_id = params.get("mutation_id").cloned();
 
             match ctx.backend.create_workspace(name).await {
@@ -313,7 +316,10 @@ pub async fn dispatch_rpc<'a>(
                         "status".to_string(),
                         Value::String(if success { "ok" } else { "error" }.to_string()),
                     );
-                    res_map.insert("workspace_key".to_string(), Value::String(ws_key.to_string()));
+                    res_map.insert(
+                        "workspace_key".to_string(),
+                        Value::String(ws_key.to_string()),
+                    );
                     if let Some(m_id) = &mutation_id {
                         res_map.insert("mutation_id".to_string(), m_id.clone());
                     }
@@ -330,7 +336,10 @@ pub async fn dispatch_rpc<'a>(
                         "action".to_string(),
                         Value::String("workspace_closed".to_string()),
                     );
-                    b_map.insert("workspace_key".to_string(), Value::String(ws_key.to_string()));
+                    b_map.insert(
+                        "workspace_key".to_string(),
+                        Value::String(ws_key.to_string()),
+                    );
                     if let Some(m_id) = mutation_id {
                         b_map.insert("mutation_id".to_string(), m_id);
                     }
@@ -747,25 +756,163 @@ pub async fn dispatch_rpc<'a>(
         }
 
         "mobile.terminal.viewport" | "terminal.viewport" => {
-            let cols = params
+            let surface_id = params
+                .get("surface_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| ctx.session.active_surface_id());
+            let client_id = params
+                .get("client_id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.trim().is_empty())
+                .map(str::to_string);
+            let generation = params.get("viewport_generation").and_then(Value::as_u64);
+            let clear = params
+                .get("clear")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+
+            let (surface_id, client_id, generation) = match (surface_id, client_id, generation) {
+                (Some(surface_id), Some(client_id), Some(generation)) => {
+                    (surface_id, client_id, generation)
+                }
+                _ => {
+                    let err_res = json!({
+                        "id": id_val,
+                        "error": {
+                            "code": CODE_INVALID_PARAMS,
+                            "message": "Viewport requests require surface_id, client_id and viewport_generation",
+                        }
+                    });
+                    ctx.session.send_json(err_res).await?;
+                    return Ok(());
+                }
+            };
+
+            if !ctx.viewport_leases.supported().await {
+                let err_res = json!({
+                    "id": id_val,
+                    "error": {
+                        "code": CODE_METHOD_NOT_FOUND,
+                        "message": "Host does not support terminal viewport resizing",
+                    }
+                });
+                ctx.session.send_json(err_res).await?;
+                return Ok(());
+            }
+
+            if clear {
+                match ctx
+                    .viewport_leases
+                    .clear(&ctx.session.session_id, &client_id, &surface_id, generation)
+                    .await
+                {
+                    Ok(geometry) => {
+                        ctx.health.mark_healthy();
+                        let mut result = Map::new();
+                        result.insert("accepted".into(), Value::Bool(true));
+                        result.insert("cleared".into(), Value::Bool(true));
+                        result.insert("geometry_owner".into(), Value::Bool(false));
+                        result.insert("generation".into(), json!(generation));
+                        if let Some((columns, rows)) = geometry {
+                            result.insert("columns".into(), json!(columns));
+                            result.insert("rows".into(), json!(rows));
+                        }
+                        result.insert("surface_id".into(), Value::String(surface_id));
+                        ctx.session
+                            .send_json(json!({"id": id_val, "result": Value::Object(result)}))
+                            .await?;
+                    }
+                    Err(e) => {
+                        warn!("viewport clear failed for {}: {}", surface_id, e);
+                        let err_res = json!({
+                            "id": id_val,
+                            "error": {
+                                "code": CODE_BACKEND_UNAVAILABLE,
+                                "message": format!("Viewport clear failed: {e}"),
+                            }
+                        });
+                        ctx.session.send_json(err_res).await?;
+                    }
+                }
+                return Ok(());
+            }
+
+            let columns = params
                 .get("viewport_columns")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(80);
+                .and_then(Value::as_u64)
+                .filter(|v| *v > 0 && *v <= u32::MAX as u64);
             let rows = params
                 .get("viewport_rows")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(24);
-
-            let res = json!({
-                "id": id_val,
-                "result": {
-                    "accepted": true,
-                    "columns": cols,
-                    "rows": rows,
-                    "geometry_owner": false,
+                .and_then(Value::as_u64)
+                .filter(|v| *v > 0 && *v <= u32::MAX as u64);
+            let (columns, rows) = match (columns, rows) {
+                (Some(columns), Some(rows)) => (columns as u32, rows as u32),
+                _ => {
+                    let err_res = json!({
+                        "id": id_val,
+                        "error": {
+                            "code": CODE_INVALID_PARAMS,
+                            "message": "Viewport report requires positive viewport_columns and viewport_rows",
+                        }
+                    });
+                    ctx.session.send_json(err_res).await?;
+                    return Ok(());
                 }
-            });
-            ctx.session.send_json(res).await?;
+            };
+
+            match ctx
+                .viewport_leases
+                .report(
+                    &ctx.session.session_id,
+                    &client_id,
+                    &surface_id,
+                    columns,
+                    rows,
+                    generation,
+                )
+                .await
+            {
+                Ok(outcome) => {
+                    ctx.health.mark_healthy();
+                    let mut result = Map::new();
+                    result.insert("accepted".into(), Value::Bool(outcome.accepted));
+                    result.insert("pending".into(), Value::Bool(outcome.pending));
+                    result.insert("stale".into(), Value::Bool(!outcome.accepted));
+                    result.insert("geometry_owner".into(), Value::Bool(true));
+                    result.insert("columns".into(), json!(outcome.requested_columns));
+                    result.insert("rows".into(), json!(outcome.requested_rows));
+                    result.insert("requested_columns".into(), json!(outcome.requested_columns));
+                    result.insert("requested_rows".into(), json!(outcome.requested_rows));
+                    result.insert("generation".into(), json!(outcome.generation));
+                    result.insert("surface_id".into(), Value::String(surface_id.clone()));
+                    if let Some(columns) = outcome.effective_columns {
+                        result.insert("effective_columns".into(), json!(columns));
+                    }
+                    if let Some(rows) = outcome.effective_rows {
+                        result.insert("effective_rows".into(), json!(rows));
+                    }
+                    ctx.session
+                        .send_json(json!({"id": id_val, "result": Value::Object(result)}))
+                        .await?;
+                    // A settled report changes the grid now; ask the poller to
+                    // push the new baseline without waiting for its next tick.
+                    if !outcome.pending {
+                        ctx.callbacks.request_priority_refresh(surface_id);
+                    }
+                }
+                Err(e) => {
+                    warn!("viewport report failed for {}: {}", surface_id, e);
+                    let err_res = json!({
+                        "id": id_val,
+                        "error": {
+                            "code": CODE_BACKEND_UNAVAILABLE,
+                            "message": format!("Viewport report failed: {e}"),
+                        }
+                    });
+                    ctx.session.send_json(err_res).await?;
+                }
+            }
         }
 
         _ => {

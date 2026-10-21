@@ -26,10 +26,13 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import android.graphics.Picture
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitScreen
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -337,7 +340,12 @@ fun TerminalCanvas(
     themeHex: String = "#1E1E1E",
     onSendKey: (String) -> Unit = {},
     onClearScreen: () -> Unit = {},
-    renderEnabled: Boolean = true
+    renderEnabled: Boolean = true,
+    phoneWidth: PhoneWidthState? = null,
+    viewportResizeSupported: Boolean = false,
+    onPhoneWidthEnabledChange: (Boolean) -> Unit = {},
+    onPhoneWidthReapply: () -> Unit = {},
+    onPhoneWidthMetrics: (TerminalWidthMetrics?, Boolean) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val readyLabel = stringResource(R.string.canvas_ready)
@@ -360,6 +368,7 @@ fun TerminalCanvas(
     var selectionState by remember { mutableStateOf<TerminalSelectionState?>(null) }
     var selectionBackgroundColor by remember { mutableStateOf<Int?>(null) }
     var contextualBubbleOffset by remember { mutableStateOf<Offset?>(null) }
+    var showWidthPanel by remember { mutableStateOf(false) }
 
     val surfaceId = screenState.surfaceId
     val isConfirmedPrimary = screenState.activeScreen == "primary"
@@ -556,6 +565,55 @@ fun TerminalCanvas(
         }
     }
     val currentGeometry by rememberUpdatedState(geometry)
+
+    // Font metrics for the phone-width target. This paint is separate from the
+    // renderer's, which is resized per frame.
+    val metricsPaint = remember(mapleTypeface) {
+        Paint().apply {
+            isAntiAlias = true
+            typeface = mapleTypeface
+        }
+    }
+    val widthMetrics = remember(canvasSizePx, requestedFontSizePx, mapleTypeface) {
+        if (canvasSizePx.width <= 0f || canvasSizePx.height <= 0f) {
+            null
+        } else {
+            metricsPaint.textSize = 100f
+            val referenceAdvance = metricsPaint.measureText("M").coerceAtLeast(1f)
+            val cellWidth = requestedFontSizePx * referenceAdvance / 100f
+            metricsPaint.textSize = requestedFontSizePx
+            val fontMetrics = metricsPaint.fontMetrics
+            TerminalWidthMetrics(
+                availableWidthPx = (canvasSizePx.width - 8f).coerceAtLeast(10f),
+                canvasHeightPx = canvasSizePx.height,
+                cellWidthPx = cellWidth,
+                rowHeightPx = (fontMetrics.bottom - fontMetrics.top) * 1.10f,
+            )
+        }
+    }
+    // Reading history or selecting text freezes the grid; resizing then would
+    // discard the anchors the user is interacting with.
+    val autoRefitPaused = isSelecting || effectiveOffset > 0
+    val currentOnPhoneWidthMetrics by rememberUpdatedState(onPhoneWidthMetrics)
+    LaunchedEffect(surfaceId, widthMetrics, autoRefitPaused, currentOnPhoneWidthMetrics) {
+        currentOnPhoneWidthMetrics(widthMetrics, autoRefitPaused)
+    }
+
+    // A grid geometry change invalidates frozen selection coordinates and pan
+    // anchors; keep the user at live output instead of pointing at old cells.
+    LaunchedEffect(surfaceId, screenState.columns, screenState.rows) {
+        localScrollOffsets[surfaceId] = 0
+        localScrollAccumulators[surfaceId] = 0f
+        if (selectionState != null) {
+            clearSelection()
+            contextualBubbleOffset = null
+        }
+        if (displayPreference.panX != 0f || displayPreference.panY != null) {
+            onDisplayPreferenceChange(
+                displayPreference.copy(panX = 0f, panY = null, panAnchorRow = null)
+            )
+        }
+    }
 
     Box(
         modifier = modifier
@@ -1008,9 +1066,46 @@ fun TerminalCanvas(
             preference = displayPreference,
             renderedFontSizeSp = geometry?.let { with(density) { it.fontSizePx.toSp().value } } ?: displayPreference.fontSizeSp,
             enabled = !isSelecting,
+            phoneWidth = phoneWidth,
             onChange = onDisplayPreferenceChange,
+            onOpenWidthPanel = { showWidthPanel = true },
+            onRestoreComputerLayout = { onPhoneWidthEnabledChange(false) },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        if (showWidthPanel) {
+            val widthBasisColumns = phoneWidth?.basisColumns ?: maxOf(screenState.columns, 1)
+            val widthBasisRows = phoneWidth?.basisRows ?: maxOf(screenState.rows, 1)
+            TerminalWidthPanel(
+                phoneWidth = phoneWidth,
+                supported = viewportResizeSupported,
+                currentColumns = widthBasisColumns,
+                currentRows = widthBasisRows,
+                estimate = computePhoneWidthTarget(widthMetrics, widthBasisRows),
+                historyPaused = autoRefitPaused,
+                onDismiss = { showWidthPanel = false },
+                onEnable = {
+                    showWidthPanel = false
+                    onPhoneWidthEnabledChange(true)
+                },
+                onDisable = {
+                    showWidthPanel = false
+                    onPhoneWidthEnabledChange(false)
+                },
+                onReapply = {
+                    // Manual refit abandons history/selection so the resize
+                    // cannot invalidate what the user is looking at.
+                    clearSelection()
+                    contextualBubbleOffset = null
+                    localScrollOffsets[surfaceId] = 0
+                    localScrollAccumulators[surfaceId] = 0f
+                    showWidthPanel = false
+                    onPhoneWidthReapply()
+                },
+                preference = displayPreference,
+                onPreferenceChange = onDisplayPreferenceChange,
+            )
+        }
     }
 }
 
@@ -1019,7 +1114,10 @@ private fun TerminalTextControls(
     preference: TerminalDisplayPreference,
     renderedFontSizeSp: Float,
     enabled: Boolean,
+    phoneWidth: PhoneWidthState?,
     onChange: (TerminalDisplayPreference) -> Unit,
+    onOpenWidthPanel: () -> Unit,
+    onRestoreComputerLayout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val canDecrease = enabled && !preference.fitWidth && preference.fontSizeSp > 2f
@@ -1027,6 +1125,11 @@ private fun TerminalTextControls(
     val decreaseLabel = stringResource(R.string.canvas_decrease_text_size)
     val increaseLabel = stringResource(R.string.canvas_increase_text_size)
     val theme = CmuxTheme.colors
+    val phoneWidthActive = phoneWidth?.enabled == true
+    val widthLabel = phoneWidth?.let { state ->
+        (state.effectiveColumns ?: state.targetColumns)
+            ?.let { stringResource(R.string.terminal_width_columns_value, it) }
+    } ?: stringResource(R.string.terminal_width_button)
     Surface(modifier = modifier, color = theme.containerBg) {
         Row(
             modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp),
@@ -1052,17 +1155,187 @@ private fun TerminalTextControls(
                         .semantics { contentDescription = increaseLabel }
                 ) { Text("A+", color = if (canIncrease) theme.onContainer else theme.onContainerMuted) }
             }
-            TextButton(
-                onClick = { onChange(preference.copy(fitWidth = !preference.fitWidth, panX = 0f, panY = null)) },
-                enabled = enabled,
-                modifier = Modifier.heightIn(min = 48.dp)
-            ) {
-                Icon(Icons.Default.FitScreen, contentDescription = null, tint = theme.primary, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(if (preference.fitWidth) stringResource(R.string.canvas_readable) else stringResource(R.string.canvas_fit_width), color = theme.onContainer, fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (phoneWidthActive) {
+                    IconButton(
+                        onClick = onRestoreComputerLayout,
+                        enabled = enabled,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.terminal_width_restore),
+                            tint = theme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                TextButton(
+                    onClick = onOpenWidthPanel,
+                    enabled = enabled,
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Icon(Icons.Default.FitScreen, contentDescription = null, tint = theme.primary, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(widthLabel, color = theme.onContainer, fontSize = 12.sp)
+                }
             }
         }
     }
+}
+
+@Composable
+private fun TerminalWidthPanel(
+    phoneWidth: PhoneWidthState?,
+    supported: Boolean,
+    currentColumns: Int,
+    currentRows: Int,
+    estimate: Pair<Int, Int>?,
+    historyPaused: Boolean,
+    onDismiss: () -> Unit,
+    onEnable: () -> Unit,
+    onDisable: () -> Unit,
+    onReapply: () -> Unit,
+    preference: TerminalDisplayPreference,
+    onPreferenceChange: (TerminalDisplayPreference) -> Unit,
+) {
+    val theme = CmuxTheme.colors
+    val enabled = phoneWidth?.enabled == true
+    val phase = phoneWidth?.phase ?: PhoneWidthPhase.OFF
+    val effectiveColumns = phoneWidth?.effectiveColumns
+    val effectiveRows = phoneWidth?.effectiveRows
+    val status = when (phase) {
+        PhoneWidthPhase.REQUESTING -> stringResource(R.string.terminal_width_adapting)
+        PhoneWidthPhase.RESTORING -> stringResource(R.string.terminal_width_restoring)
+        PhoneWidthPhase.ACTIVE -> if (effectiveColumns != null && effectiveRows != null) {
+            stringResource(R.string.terminal_width_active, effectiveColumns, effectiveRows)
+        } else {
+            stringResource(R.string.terminal_width_adapting)
+        }
+        PhoneWidthPhase.UNSUPPORTED -> stringResource(R.string.terminal_width_unsupported)
+        PhoneWidthPhase.FAILED -> when (phoneWidth?.notice) {
+            PhoneWidthNotice.NO_BASELINE -> stringResource(R.string.terminal_width_no_baseline)
+            else -> stringResource(R.string.terminal_width_failed)
+        }
+        PhoneWidthPhase.OFF -> phoneWidth?.notice?.let {
+            if (it == PhoneWidthNotice.CLEAR_UNCONFIRMED) {
+                stringResource(R.string.terminal_width_clear_unconfirmed)
+            } else null
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.terminal_width_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    stringResource(R.string.terminal_width_current, currentColumns, currentRows),
+                    color = theme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = !enabled) { onDisable() },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = !enabled, onClick = { if (enabled) onDisable() })
+                    Text(stringResource(R.string.terminal_width_follow_mac), color = theme.onSurface, fontSize = 14.sp)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = supported && !enabled) { onEnable() },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = enabled,
+                        onClick = { if (!enabled) onEnable() },
+                        enabled = supported,
+                    )
+                    Column {
+                        Text(
+                            stringResource(R.string.terminal_width_phone),
+                            color = if (supported) theme.onSurface else theme.onSurfaceVariant,
+                            fontSize = 14.sp
+                        )
+                        estimate?.let { (columns, rows) ->
+                            Text(
+                                stringResource(R.string.terminal_width_estimate, columns, rows),
+                                color = theme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+                Text(
+                    stringResource(R.string.terminal_width_shared_warning),
+                    color = theme.accentOrange,
+                    fontSize = 11.sp
+                )
+                status?.let {
+                    Text(it, color = if (phase == PhoneWidthPhase.FAILED) theme.accentRed else theme.primary, fontSize = 12.sp)
+                }
+                if (enabled && historyPaused) {
+                    Text(
+                        stringResource(R.string.terminal_width_history_paused),
+                        color = theme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+                if (enabled) {
+                    TextButton(onClick = onReapply) {
+                        Text(stringResource(R.string.terminal_width_reapply))
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        stringResource(R.string.terminal_width_local_display),
+                        color = theme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                    TextButton(
+                        onClick = {
+                            onPreferenceChange(
+                                preference.copy(
+                                    fitWidth = !preference.fitWidth,
+                                    panX = 0f,
+                                    panY = null,
+                                    panAnchorRow = null,
+                                )
+                            )
+                        }
+                    ) {
+                        Text(
+                            if (preference.fitWidth) {
+                                stringResource(R.string.canvas_readable)
+                            } else {
+                                stringResource(R.string.canvas_fit_width)
+                            }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.terminal_width_close)) }
+        },
+        dismissButton = if (enabled) {
+            {
+                TextButton(onClick = onDisable) { Text(stringResource(R.string.terminal_width_restore)) }
+            }
+        } else null,
+    )
 }
 
 @Composable

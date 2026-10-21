@@ -101,6 +101,21 @@ class TerminalViewModel : ViewModel() {
         surfaces.firstOrNull { it.id == surfId } ?: surfaces.firstOrNull()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    private val _phoneWidthStates = MutableStateFlow<Map<String, PhoneWidthState>>(emptyMap())
+    val phoneWidthStates: StateFlow<Map<String, PhoneWidthState>> = _phoneWidthStates.asStateFlow()
+
+    private val _gatewayCapabilities = MutableStateFlow<Set<String>>(emptySet())
+    val gatewayCapabilities: StateFlow<Set<String>> = _gatewayCapabilities.asStateFlow()
+
+    /** Last authoritative geometry observed while this client pinned nothing. */
+    private val macBasis = mutableMapOf<String, Pair<Int, Int>>()
+    /** Frames received before this deadline may still show the phone grid. */
+    private val macBasisInvalidUntil = mutableMapOf<String, Long>()
+    private val widthMetrics = mutableMapOf<String, TerminalWidthMetrics>()
+    private val widthRequestJobs = mutableMapOf<String, Job>()
+    private val widthConfirmedAtNanos = mutableMapOf<String, Long>()
+    private var lastViewportGeneration = 0L
+
     private var currentScreenCollectorJob: Job? = null
     private var currentBootstrapJob: Job? = null
     private var scrollDeliveryJob: Job? = null
@@ -157,6 +172,14 @@ class TerminalViewModel : ViewModel() {
                         }
                         requestSingleFlightReplay(frame.surfaceId)
                     }
+                }
+                if (result == FrameApplyResult.BASELINE_APPLIED) {
+                    onAuthoritativeFrame(
+                        surfaceId = frame.surfaceId,
+                        columns = frame.columns,
+                        rows = frame.rows,
+                        receivedAtNanos = envelope.receivedNanos,
+                    )
                 }
             }
         }
@@ -245,6 +268,7 @@ class TerminalViewModel : ViewModel() {
                         _statusMessage.value = _connectionReadiness.value.summary
                         awaitingReplaySurfaces.clear()
                         mutationTracker.clear()
+                        handleConnectionLost()
                         scheduleReconnect()
                     }
                     ConnectionStatus.DISCONNECTED -> {
@@ -260,6 +284,7 @@ class TerminalViewModel : ViewModel() {
                         _statusMessage.value = connectionValidationError ?: "Disconnected"
                         awaitingReplaySurfaces.clear()
                         mutationTracker.clear()
+                        handleConnectionLost()
                         scheduleReconnect()
                     }
                 }
@@ -440,6 +465,7 @@ class TerminalViewModel : ViewModel() {
         wsClient.disconnect()
         awaitingReplaySurfaces.clear()
         mutationTracker.clear()
+        handleConnectionLost()
     }
 
     private suspend fun refreshWorkspacesInternal(generation: Long = connectionGeneration): List<WorkspaceInfo>? {
@@ -485,6 +511,11 @@ class TerminalViewModel : ViewModel() {
                     onHostStatus = { status ->
                         handshakeStatus = status
                         _connectionReadiness.value = _connectionReadiness.value.copy(hostStatus = status)
+                    },
+                    onCapabilities = { capabilities ->
+                        if (generation == connectionGeneration) {
+                            _gatewayCapabilities.value = capabilities
+                        }
                     },
                 )
                 if (generation == connectionGeneration) {
@@ -571,6 +602,7 @@ class TerminalViewModel : ViewModel() {
 
         // When enabled, sync focus to gateway whenever selection changes (including null -> new and old -> null/new)
         if (syncReconciledFocus && prevSurfaceId != newSurfaceId) {
+            prevSurfaceId?.let { releasePhoneWidth(it) }
             viewModelScope.launch {
                 try {
                     wsClient.focusSurface(newSurfaceId)
@@ -622,6 +654,10 @@ class TerminalViewModel : ViewModel() {
     }
 
     private fun userSelectSurface(surfaceId: String?) {
+        val previousSurfaceId = _selectedSurfaceId.value
+        if (previousSurfaceId != null && previousSurfaceId != surfaceId) {
+            releasePhoneWidth(previousSurfaceId)
+        }
         if (surfaceId == null) {
             _selectedSurfaceId.value = null
             viewModelScope.launch {
@@ -751,6 +787,7 @@ class TerminalViewModel : ViewModel() {
                 _statusMessage.value = "Closing tab..."
                 wsClient.closeSurface(surfaceId, _selectedWorkspaceKey.value, mutationId)
                 mutationTracker.onRpcSuccess(mutationId, gen)
+                releasePhoneWidth(surfaceId)
                 sessionStore.removeSession(surfaceId)
                 refreshWorkspacesInternal(gen)
                 _statusMessage.value = "Tab closed"
@@ -803,6 +840,291 @@ class TerminalViewModel : ViewModel() {
                 }
             }
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Phone-width terminal layout
+    // ------------------------------------------------------------------
+
+    /**
+     * Enables or releases this client's viewport report for one surface.
+     *
+     * Enabling is explicit per surface and never restored silently: switching
+     * surfaces, backgrounding the app, losing the connection or turning the
+     * mode off releases the report so the host can return to the laptop grid.
+     */
+    fun setPhoneWidthEnabled(surfaceId: String, enabled: Boolean) {
+        if (!enabled) {
+            releasePhoneWidth(surfaceId)
+            return
+        }
+        if (surfaceId.isBlank()) return
+        val current = _phoneWidthStates.value[surfaceId]
+        if (current?.enabled == true) return
+        if (!viewportResizeSupported()) {
+            setPhoneWidthState(
+                surfaceId,
+                PhoneWidthState(phase = PhoneWidthPhase.UNSUPPORTED, notice = PhoneWidthNotice.UNSUPPORTED)
+            )
+            return
+        }
+        val baseline = baselineFor(surfaceId)
+        if (baseline == null) {
+            setPhoneWidthState(
+                surfaceId,
+                PhoneWidthState(phase = PhoneWidthPhase.FAILED, notice = PhoneWidthNotice.NO_BASELINE)
+            )
+            return
+        }
+        // Without real font/canvas metrics a request would be a guess (or the
+        // computer's own grid), so refuse instead of pretending to adapt.
+        val target = computePhoneWidthTarget(widthMetrics[surfaceId], baseline.second)
+        if (target == null) {
+            setPhoneWidthState(
+                surfaceId,
+                PhoneWidthState(phase = PhoneWidthPhase.FAILED, notice = PhoneWidthNotice.NO_BASELINE)
+            )
+            return
+        }
+        val state = PhoneWidthState(
+            phase = PhoneWidthPhase.REQUESTING,
+            basisColumns = baseline.first,
+            basisRows = baseline.second,
+            targetColumns = target.first,
+            targetRows = target.second,
+        )
+        setPhoneWidthState(surfaceId, state)
+        sendPhoneWidthReport(surfaceId, target.first, target.second, force = true)
+    }
+
+    /** Manual refit from the width panel, using the latest canvas metrics. */
+    fun reapplyPhoneWidth(surfaceId: String) {
+        val state = _phoneWidthStates.value[surfaceId]
+        if (state?.enabled != true) {
+            setPhoneWidthEnabled(surfaceId, true)
+            return
+        }
+        val target = computePhoneWidthTarget(widthMetrics[surfaceId], state.basisRows)
+            ?: return
+        setPhoneWidthState(
+            surfaceId,
+            state.copy(targetColumns = target.first, targetRows = target.second)
+        )
+        sendPhoneWidthReport(surfaceId, target.first, target.second, force = true)
+    }
+
+    /** Releases every surface's report (app backgrounded, connection ending). */
+    fun releaseAllPhoneWidths() {
+        val enabledSurfaces = _phoneWidthStates.value
+            .filterValues { it.enabled || it.phase == PhoneWidthPhase.RESTORING }
+            .keys
+            .toList()
+        enabledSurfaces.forEach { releasePhoneWidth(it) }
+    }
+
+    /** Font size or canvas size changed; refit after the gesture settles. */
+    fun updatePhoneWidthMetrics(
+        surfaceId: String,
+        metrics: TerminalWidthMetrics?,
+        autoRefitPaused: Boolean = false,
+    ) {
+        if (metrics == null) {
+            widthMetrics.remove(surfaceId)
+        } else {
+            widthMetrics[surfaceId] = metrics
+        }
+        val state = _phoneWidthStates.value[surfaceId] ?: return
+        if (!state.enabled || metrics == null || autoRefitPaused) return
+        val target = computePhoneWidthTarget(metrics, state.basisRows ?: state.basisColumns) ?: return
+        if (target.first == state.targetColumns && target.second == state.targetRows) return
+        setPhoneWidthState(
+            surfaceId,
+            state.copy(targetColumns = target.first, targetRows = target.second)
+        )
+        schedulePhoneWidthReport(surfaceId, target.first, target.second)
+    }
+
+    private fun viewportResizeSupported(): Boolean =
+        _gatewayCapabilities.value.contains("terminal.viewport.v1")
+
+    private fun baselineFor(surfaceId: String): Pair<Int, Int>? =
+        macBasis[surfaceId]
+            ?: _activeScreenState.value
+                .takeIf { it.surfaceId == surfaceId && it.columns > 0 && it.rows > 0 }
+                ?.let { it.columns to it.rows }
+
+    private fun onAuthoritativeFrame(
+        surfaceId: String,
+        columns: Int,
+        rows: Int,
+        receivedAtNanos: Long,
+    ) {
+        if (columns <= 0 || rows <= 0) return
+        val state = _phoneWidthStates.value[surfaceId]
+        if (state == null || (!state.enabled && state.phase != PhoneWidthPhase.RESTORING)) {
+            // Frames right after a release can still carry the narrowed grid;
+            // only later full baselines are trustworthy as the computer basis.
+            val invalidUntil = macBasisInvalidUntil[surfaceId] ?: 0L
+            if (receivedAtNanos >= invalidUntil) {
+                macBasis[surfaceId] = columns to rows
+                macBasisInvalidUntil.remove(surfaceId)
+            }
+            return
+        }
+        if (!state.enabled) return
+        val confirmedAfter = widthConfirmedAtNanos[surfaceId] ?: 0L
+        val updated = phoneWidthStateWithFrame(
+            state = state,
+            columns = columns,
+            rows = rows,
+            receivedAtNanos = receivedAtNanos,
+            confirmedAfterNanos = confirmedAfter,
+        )
+        if (updated != state) {
+            setPhoneWidthState(surfaceId, updated)
+        }
+    }
+
+    private fun schedulePhoneWidthReport(surfaceId: String, columns: Int, rows: Int) {
+        widthRequestJobs.remove(surfaceId)?.cancel()
+        widthRequestJobs[surfaceId] = viewModelScope.launch {
+            // A pinch emits one font change per sample; only the last target is
+            // worth a resize, so the debounce doubles as gesture coalescing.
+            delay(PHONE_WIDTH_DEBOUNCE_MS)
+            sendPhoneWidthReport(surfaceId, columns, rows)
+        }
+    }
+
+    private fun sendPhoneWidthReport(
+        surfaceId: String,
+        columns: Int,
+        rows: Int,
+        force: Boolean = false,
+    ) {
+        val state = _phoneWidthStates.value[surfaceId] ?: return
+        if (!state.enabled) return
+        val targetColumns = columns.coerceIn(PHONE_WIDTH_MIN_COLUMNS, PHONE_WIDTH_MAX_COLUMNS)
+        val targetRows = rows.coerceIn(PHONE_WIDTH_MIN_ROWS, PHONE_WIDTH_MAX_ROWS)
+        if (!force &&
+            state.phase == PhoneWidthPhase.ACTIVE &&
+            state.effectiveColumns == targetColumns &&
+            state.effectiveRows == targetRows
+        ) {
+            return
+        }
+        val generation = nextViewportGeneration()
+        widthConfirmedAtNanos.remove(surfaceId)
+        setPhoneWidthState(
+            surfaceId,
+            state.copy(
+                phase = PhoneWidthPhase.REQUESTING,
+                targetColumns = targetColumns,
+                targetRows = targetRows,
+                generation = generation,
+                notice = PhoneWidthNotice.NONE,
+            )
+        )
+        viewModelScope.launch {
+            try {
+                wsClient.requestViewportReport(surfaceId, targetColumns, targetRows, generation)
+                widthConfirmedAtNanos[surfaceId] = System.nanoTime()
+                delay(PHONE_WIDTH_CONFIRM_GRACE_MS)
+                val latest = _phoneWidthStates.value[surfaceId] ?: return@launch
+                if (latest.generation != generation || latest.phase != PhoneWidthPhase.REQUESTING) {
+                    return@launch
+                }
+                // No matching baseline arrived in the grace window. The host
+                // still owns the grid; report what it actually shows instead of
+                // claiming the requested size.
+                val screen = _activeScreenState.value
+                if (screen.surfaceId == surfaceId && screen.columns > 0) {
+                    setPhoneWidthState(
+                        surfaceId,
+                        latest.copy(
+                            phase = PhoneWidthPhase.ACTIVE,
+                            effectiveColumns = screen.columns,
+                            effectiveRows = screen.rows,
+                        )
+                    )
+                } else {
+                    setPhoneWidthState(
+                        surfaceId,
+                        latest.copy(phase = PhoneWidthPhase.FAILED, notice = PhoneWidthNotice.REQUEST_FAILED)
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(tag, "Viewport report failed for $surfaceId", e)
+                val latest = _phoneWidthStates.value[surfaceId]
+                if (latest != null && latest.generation == generation) {
+                    setPhoneWidthState(
+                        surfaceId,
+                        latest.copy(phase = PhoneWidthPhase.FAILED, notice = PhoneWidthNotice.REQUEST_FAILED)
+                    )
+                }
+            }
+        }
+    }
+
+    private fun releasePhoneWidth(surfaceId: String) {
+        widthRequestJobs.remove(surfaceId)?.cancel()
+        val state = _phoneWidthStates.value[surfaceId] ?: return
+        if (!state.enabled && state.phase != PhoneWidthPhase.RESTORING) {
+            setPhoneWidthState(surfaceId, PhoneWidthState())
+            return
+        }
+        val generation = nextViewportGeneration()
+        setPhoneWidthState(surfaceId, state.copy(phase = PhoneWidthPhase.RESTORING, generation = generation))
+        viewModelScope.launch {
+            val cleared = runCatching {
+                wsClient.clearViewportReport(surfaceId, generation)
+            }.isSuccess
+            macBasis.remove(surfaceId)
+            macBasisInvalidUntil[surfaceId] = System.nanoTime() + MAC_BASIS_INVALIDATE_NANOS
+            // Stop renewing either way: the Gateway drops the lease before it
+            // asks the host, so a failed clear still expires within the host's
+            // five-second report TTL.
+            setPhoneWidthState(
+                surfaceId,
+                PhoneWidthState(
+                    phase = PhoneWidthPhase.OFF,
+                    notice = if (cleared) PhoneWidthNotice.NONE else PhoneWidthNotice.CLEAR_UNCONFIRMED,
+                )
+            )
+        }
+    }
+
+    private fun handleConnectionLost() {
+        widthRequestJobs.values.forEach { it.cancel() }
+        widthRequestJobs.clear()
+        widthConfirmedAtNanos.clear()
+        macBasis.clear()
+        macBasisInvalidUntil.clear()
+        widthMetrics.clear()
+        _gatewayCapabilities.value = emptySet()
+        _phoneWidthStates.value = emptyMap()
+    }
+
+    private fun nextViewportGeneration(): Long {
+        lastViewportGeneration = maxOf(System.currentTimeMillis(), lastViewportGeneration + 1)
+        return lastViewportGeneration
+    }
+
+    private fun setPhoneWidthState(surfaceId: String, state: PhoneWidthState) {
+        val next = _phoneWidthStates.value.toMutableMap()
+        if (state.phase == PhoneWidthPhase.OFF && state.notice == PhoneWidthNotice.NONE) {
+            next.remove(surfaceId)
+        } else {
+            next[surfaceId] = state
+        }
+        _phoneWidthStates.value = next
+    }
+
+    private companion object {
+        const val PHONE_WIDTH_DEBOUNCE_MS = 300L
+        const val PHONE_WIDTH_CONFIRM_GRACE_MS = 1_200L
+        const val MAC_BASIS_INVALIDATE_NANOS = 700_000_000L
     }
 }
 

@@ -169,6 +169,60 @@ pub fn send_input_args(surface_id: &str, text: &str) -> Vec<String> {
     }
 }
 
+/// Constructs arguments for a non-sticky viewport report.
+///
+/// The host attaches a short-lived (about five seconds) viewport report to any
+/// `mobile.terminal.replay` that carries `client_id` plus dimensions. Reports
+/// sent this way are not sticky, so a Gateway that stops renewing them cannot
+/// pin the shared grid after a crash. The replay also returns the authoritative
+/// frame, which carries the geometry the host actually applied.
+pub fn rpc_viewport_report_args(
+    surface_id: &str,
+    columns: u32,
+    rows: u32,
+    client_id: &str,
+    generation: u64,
+) -> Vec<String> {
+    let payload = json!({
+        "surface_id": surface_id,
+        "anchor": "viewport",
+        "max_scrollback_rows": 0,
+        "client_id": client_id,
+        "viewport_columns": columns,
+        "viewport_rows": rows,
+        "viewport_generation": generation,
+    });
+    vec![
+        "rpc".to_string(),
+        "mobile.terminal.replay".to_string(),
+        payload.to_string(),
+    ]
+}
+
+/// Constructs arguments for the dedicated viewport clear call.
+///
+/// Only the clear half of `mobile.terminal.viewport` is used: the reporting half
+/// is sticky for the client's connection lifetime and cannot be reclaimed by the
+/// host's TTL when the Gateway itself dies.
+pub fn rpc_viewport_clear_args(surface_id: &str, client_id: &str, generation: u64) -> Vec<String> {
+    let payload = json!({
+        "surface_id": surface_id,
+        "client_id": client_id,
+        "clear": true,
+        "viewport_generation": generation,
+    });
+    vec![
+        "rpc".to_string(),
+        "mobile.terminal.viewport".to_string(),
+        payload.to_string(),
+    ]
+}
+
+/// Constructs arguments for `cmux capabilities --json`.
+pub fn capabilities_args() -> Vec<String> {
+    vec!["capabilities".to_string(), "--json".to_string()]
+}
+
 /// Constructs arguments for `cmux rpc terminal.replay <json_payload>`.
 pub fn rpc_replay_args(surface_id: &str, max_scrollback_rows: usize) -> Vec<String> {
     let payload = json!({

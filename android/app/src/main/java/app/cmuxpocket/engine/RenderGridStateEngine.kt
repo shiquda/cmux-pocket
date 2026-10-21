@@ -277,6 +277,20 @@ class RenderGridStateEngine {
 
 
             val hasScrollbackPayload = frame.scrollbackSpans.isNotEmpty() || (frame.scrollbackRows != null && frame.scrollbackRows > 0)
+
+            // A different grid width reflows every cached row; history and
+            // selection anchors from the old geometry are meaningless. Drop the
+            // cache and, when this frame did not already carry hydrated history,
+            // ask for a replay so the scrollback comes back at the new width.
+            if (hasBaseline && (frame.columns != columns || frame.rows != rows)) {
+                scrollbackBuffer.clear()
+                lastHistoryRows = null
+                lastRowSpaceRevision = null
+                if (!hasScrollbackPayload) {
+                    isHistoryDiscontinuity = true
+                }
+            }
+
             if (hasScrollbackPayload) {
                 // Explicit full replay hydration with scrollback spans
                 val sbRows = frame.scrollbackRows ?: (frame.scrollbackSpans.maxOfOrNull { it.row + 1 } ?: 0)
