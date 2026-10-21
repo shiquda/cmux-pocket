@@ -43,8 +43,11 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -346,6 +349,7 @@ fun TerminalCanvas(
     onPhoneWidthMetrics: (String, TerminalWidthMetrics?, Boolean) -> Unit = { _, _, _ -> },
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     var showUnsupportedDialog by remember { mutableStateOf(false) }
     val readyLabel = stringResource(R.string.canvas_ready)
     val connectingLabel = stringResource(R.string.canvas_connecting)
@@ -1118,11 +1122,34 @@ fun TerminalCanvas(
         if (showUnsupportedDialog) {
             AlertDialog(
                 onDismissRequest = { showUnsupportedDialog = false },
-                title = { Text(stringResource(R.string.terminal_width_unsupported_title)) },
-                text = { Text(stringResource(R.string.terminal_width_unsupported_dialog)) },
+                title = { Text(stringResource(R.string.conn_upgrade_title)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(R.string.terminal_width_unsupported_dialog))
+                        Text(
+                            MAC_GATEWAY_UPGRADE_COMMAND,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                        )
+                    }
+                },
                 confirmButton = {
+                    TextButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(MAC_GATEWAY_UPGRADE_COMMAND))
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.conn_upgrade_copied),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    ) {
+                        Text(stringResource(R.string.conn_btn_copy_upgrade_cmd))
+                    }
+                },
+                dismissButton = {
                     TextButton(onClick = { showUnsupportedDialog = false }) {
-                        Text(stringResource(R.string.terminal_width_unsupported_confirm))
+                        Text(stringResource(R.string.terminal_width_unsupported_close))
                     }
                 }
             )

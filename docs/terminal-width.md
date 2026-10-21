@@ -147,4 +147,4 @@ showing `当前 148 列 × 46 行 / 预计 44 列 × 46 行`:
 | Gateway process killed | 148 × 46 | connection error surfaced; grid restored via TTL |
 | Pixel 5, tap mode on `b2f8271` successor | 39 × 46 | toast with the estimate; terminal reflowed; phone icon shown |
 | Pixel 5, tap again within 1 s | 148 × 46 | restoring spinner then computer icon; wide grid restored |
-| Emulator, Gateway 0.2.0 (no `terminal.viewport.v1`) | unchanged | mode icon muted; tap opened the “upgrade the Gateway” dialog |
+| Emulator, Gateway 0.2.0 (no `terminal.viewport.v1`) | unchanged | mode icon muted; tap opened the upgrade dialog with a copyable command |

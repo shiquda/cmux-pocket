@@ -1630,7 +1630,7 @@ fun StorageSection(
 }
 
 
-private const val MAC_GATEWAY_UPGRADE_COMMAND =
+internal const val MAC_GATEWAY_UPGRADE_COMMAND =
     "brew update && brew upgrade cmux-pocket && cmux-pocket setup"
 private const val LATEST_RELEASE_URL = "https://github.com/shiquda/cmux-pocket/releases/latest"
 
