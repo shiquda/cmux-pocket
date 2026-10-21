@@ -88,9 +88,8 @@ fun SettingsScreen(
     onRecheckGatewayVersion: () -> Unit = {},
     isRefreshingGatewayVersion: Boolean = false,
     onDismissRequest: () -> Unit,
-    phoneWidth: PhoneWidthState? = null,
-    viewportResizeSupported: Boolean = false,
-    onPhoneWidthEnabledChange: (Boolean) -> Unit = {},
+    defaultPhoneWidthMode: Boolean = false,
+    onDefaultPhoneWidthModeChange: (Boolean) -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
     val uriHandler = LocalUriHandler.current
@@ -287,9 +286,8 @@ fun SettingsScreen(
                                 onFontSizeChange = onFontSizeChange,
                                 onThemeChange = onThemeChange,
                                 onThemeModeChange = onThemeModeChange,
-                                phoneWidth = phoneWidth,
-                                viewportResizeSupported = viewportResizeSupported,
-                                onPhoneWidthEnabledChange = onPhoneWidthEnabledChange,
+                                defaultPhoneWidthMode = defaultPhoneWidthMode,
+                                onDefaultPhoneWidthModeChange = onDefaultPhoneWidthModeChange,
                             )
                         }
 
@@ -1063,9 +1061,8 @@ fun DisplaySection(
     onFontSizeChange: (Float) -> Unit,
     onThemeChange: (String) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
-    phoneWidth: PhoneWidthState? = null,
-    viewportResizeSupported: Boolean = false,
-    onPhoneWidthEnabledChange: (Boolean) -> Unit = {},
+    defaultPhoneWidthMode: Boolean = false,
+    onDefaultPhoneWidthModeChange: (Boolean) -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
 
@@ -1121,44 +1118,28 @@ fun DisplaySection(
                 )
             )
 
-            // Terminal width mode. This mirrors the terminal toolbar's state;
-            // no second preference is stored here.
+            // Default layout for newly opened terminals. The live switch lives
+            // in the terminal bar; this page only stores the default.
             Text(
-                stringResource(R.string.terminal_width_title),
+                stringResource(R.string.terminal_width_default_title),
                 fontSize = 12.sp,
                 color = theme.onSurface,
                 fontWeight = FontWeight.SemiBold
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(
-                    selected = phoneWidth?.enabled != true,
-                    onClick = { onPhoneWidthEnabledChange(false) },
+                    selected = !defaultPhoneWidthMode,
+                    onClick = { onDefaultPhoneWidthModeChange(false) },
                     label = { Text(stringResource(R.string.terminal_width_follow_mac), fontSize = 11.sp) }
                 )
                 FilterChip(
-                    selected = phoneWidth?.enabled == true,
-                    onClick = { onPhoneWidthEnabledChange(true) },
-                    enabled = viewportResizeSupported && phoneWidth?.phase != PhoneWidthPhase.RESTORING,
+                    selected = defaultPhoneWidthMode,
+                    onClick = { onDefaultPhoneWidthModeChange(true) },
                     label = { Text(stringResource(R.string.terminal_width_phone), fontSize = 11.sp) }
                 )
             }
-            val widthStatus = when (phoneWidth?.phase) {
-                PhoneWidthPhase.REQUESTING -> stringResource(R.string.terminal_width_adapting)
-                PhoneWidthPhase.RESTORING -> stringResource(R.string.terminal_width_restoring)
-                PhoneWidthPhase.ACTIVE -> phoneWidth.effectiveColumns?.let { columns ->
-                    phoneWidth.effectiveRows?.let { rows ->
-                        stringResource(R.string.terminal_width_active, columns, rows)
-                    }
-                } ?: stringResource(R.string.terminal_width_adapting)
-                PhoneWidthPhase.UNSUPPORTED -> stringResource(R.string.terminal_width_unsupported)
-                PhoneWidthPhase.FAILED -> stringResource(R.string.terminal_width_failed)
-                PhoneWidthPhase.OFF, null -> null
-            }
-            if (widthStatus != null) {
-                Text(widthStatus, fontSize = 11.sp, color = theme.primary)
-            }
             Text(
-                stringResource(R.string.terminal_width_shared_warning),
+                stringResource(R.string.terminal_width_default_hint),
                 fontSize = 10.sp,
                 color = theme.onSurfaceVariant
             )

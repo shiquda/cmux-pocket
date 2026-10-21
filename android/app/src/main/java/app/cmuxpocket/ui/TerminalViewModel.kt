@@ -121,6 +121,9 @@ class TerminalViewModel : ViewModel() {
     private val widthRequestJobs = mutableMapOf<String, Job>()
     private val widthConfirmedAtNanos = mutableMapOf<String, Long>()
     private var lastViewportGeneration = 0L
+    /** Layout for newly opened terminals; set from Settings, never a live switch. */
+    private var defaultPhoneWidthMode = false
+    private val defaultAppliedSurfaces = mutableSetOf<String>()
 
     private var currentScreenCollectorJob: Job? = null
     private var currentBootstrapJob: Job? = null
@@ -676,6 +679,7 @@ class TerminalViewModel : ViewModel() {
             return
         }
         _selectedSurfaceId.value = surfaceId
+        maybeApplyDefaultPhoneWidth(surfaceId)
         viewModelScope.launch {
             try {
                 wsClient.focusSurface(surfaceId)
@@ -860,6 +864,7 @@ class TerminalViewModel : ViewModel() {
      * mode off releases the report so the host can return to the laptop grid.
      */
     fun setPhoneWidthEnabled(surfaceId: String, enabled: Boolean) {
+        if (surfaceId.isNotBlank()) defaultAppliedSurfaces.add(surfaceId)
         if (!enabled) {
             releasePhoneWidth(surfaceId)
             return
@@ -906,22 +911,6 @@ class TerminalViewModel : ViewModel() {
         sendPhoneWidthReport(surfaceId, target.first, target.second, force = true)
     }
 
-    /** Manual refit from the width panel, using the latest canvas metrics. */
-    fun reapplyPhoneWidth(surfaceId: String) {
-        val state = _phoneWidthStates.value[surfaceId]
-        if (state?.enabled != true) {
-            setPhoneWidthEnabled(surfaceId, true)
-            return
-        }
-        val target = computePhoneWidthTarget(widthMetrics[surfaceId], state.basisRows)
-            ?: return
-        setPhoneWidthState(
-            surfaceId,
-            state.copy(targetColumns = target.first, targetRows = target.second)
-        )
-        sendPhoneWidthReport(surfaceId, target.first, target.second, force = true)
-    }
-
     /** Releases every surface's report (app backgrounded, connection ending). */
     fun releaseAllPhoneWidths() {
         val states = _phoneWidthStates.value
@@ -940,6 +929,7 @@ class TerminalViewModel : ViewModel() {
         } else {
             widthMetrics[surfaceId] = metrics
         }
+        maybeApplyDefaultPhoneWidth(surfaceId)
         val state = _phoneWidthStates.value[surfaceId] ?: return
         if (!state.enabled || metrics == null || autoRefitPaused) return
         val target = computePhoneWidthTarget(metrics, state.basisRows ?: state.basisColumns) ?: return
@@ -949,6 +939,31 @@ class TerminalViewModel : ViewModel() {
             state.copy(targetColumns = target.first, targetRows = target.second)
         )
         schedulePhoneWidthReport(surfaceId, target.first, target.second)
+    }
+
+    /** Applies the Settings default once per surface and connection. */
+    fun setDefaultPhoneWidthMode(enabled: Boolean) {
+        defaultPhoneWidthMode = enabled
+        if (!enabled) defaultAppliedSurfaces.clear()
+    }
+
+    private fun maybeApplyDefaultPhoneWidth(surfaceId: String) {
+        if (surfaceId.isBlank()) return
+        val state = _phoneWidthStates.value[surfaceId]
+        if (defaultPhoneWidthMode && state != null) {
+            // Already explicitly chosen (or restoring): never override it.
+            defaultAppliedSurfaces.add(surfaceId)
+            return
+        }
+        val apply = shouldApplyDefaultPhoneWidth(
+            defaultEnabled = defaultPhoneWidthMode,
+            supported = viewportResizeSupported(),
+            alreadyApplied = surfaceId in defaultAppliedSurfaces,
+            hasState = state != null,
+            hasMetrics = widthMetrics[surfaceId] != null,
+            hasBaseline = baselineFor(surfaceId) != null,
+        )
+        if (apply) setPhoneWidthEnabled(surfaceId, true)
     }
 
     private fun viewportResizeSupported(): Boolean =
@@ -1167,6 +1182,7 @@ class TerminalViewModel : ViewModel() {
         // The canvas metrics are local and survive a reconnect; keeping them
         // lets the mode be re-enabled without waiting for a layout change.
         reportedSurfaces.clear()
+        defaultAppliedSurfaces.clear()
         macBasis.clear()
         macBasisInvalidUntil.clear()
         _gatewayCapabilities.value = emptySet()

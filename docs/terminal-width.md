@@ -7,10 +7,12 @@ what it changes on the Mac, and how it is released.
 
 ## What the mode does
 
-The bottom terminal bar's **Width** control opens a per-terminal panel. It
-shows the computer's current grid, the grid the phone would request, and the
-fact that the change is shared. Nothing is sent until **Lay out for this phone**
-is selected.
+Each terminal has two layout modes, switched by the icon immediately left of
+fit-width in the bottom bar: a **computer** icon means the terminal follows the
+desktop grid, a **phone** icon means it is laid out for this phone. Tapping the
+icon switches modes; a toast reports the estimated columns and that the change
+is shared with the Mac. **Settings → Display** only chooses the default mode for
+newly opened terminals — it never switches the terminal currently on screen.
 
 - Target columns = `floor(available canvas width / current cell width)`,
   clamped to the host's 20–300 range.
@@ -27,32 +29,34 @@ is selected.
 ## Sharing and the Mac baseline
 
 The PTY is shared. Enabling phone width reflows the same terminal on the Mac,
-and any other connected phone sees the shared minimum. The panel states this
-before enabling.
+and any other connected phone sees the shared minimum; the switch toast states
+this. Desktop mode keeps the previous interaction, including the local
+fit-width toggle.
 
 The "computer" grid is captured from the last full baseline frame received
 while the mode was off. It is frozen while the mode is on, so it cannot be
 replaced by the narrowed grid. If another client was already constraining the
 host, that captured grid is the shared minimum, not the pane's theoretical
-width — the UI shows what the host actually produced, and the panel never
-pretends to know an uncaptured laptop size.
+width — the UI shows what the host actually produced and never pretends to know
+an uncaptured laptop size.
 
 ## Lifecycle
 
 - **Zoom**: pinch and A−/A+ refit after a 300 ms settle, coalescing every
   intermediate sample into one report. The target is recomputed from the font
   metrics and the real canvas size.
-- **Restore**: the persistent restore button (and the panel's **Restore
-  computer layout**) remove this client's report. The Gateway keeps a lease
-  renewed every 1.5 s; restoring stops the lease and clears the host report.
-  A clear response from an older generation is ignored, so closing and
-  immediately re-enabling the panel cannot leave it stuck in "restoring".
+- **Restore**: tapping the phone icon switches back to desktop and removes this
+  client's report. The Gateway keeps a lease renewed every 1.5 s; restoring
+  stops the lease and clears the host report. A clear response from an older
+  generation is ignored, so a quick off→on switch cannot leave the mode stuck
+  in "restoring".
 - **History and selection**: while reading scrollback or selecting text,
-  automatic refits are paused so the resize cannot invalidate anchors. The
-  panel's **Refit** first returns to live output, then resizes.
+  automatic refits are paused so the resize cannot invalidate anchors; leaving
+  history resumes the refit for the current font size.
 - **Surface switch, background, connection end**: this client's report is
   released immediately. Releasing one client never clears another client's
-  report. The mode is not persisted across launches.
+  report. The live mode is not persisted; only the Settings default is, and it
+  is applied once to each newly opened terminal.
 - **Crash or network blackhole**: reports are non-sticky replays piggybacked on
   `mobile.terminal.replay`, so they expire about five seconds after the last
   renewal. Killing the Gateway (not just closing the WebSocket) therefore

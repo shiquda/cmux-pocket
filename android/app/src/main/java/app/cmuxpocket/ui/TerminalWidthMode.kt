@@ -162,3 +162,14 @@ fun phoneWidthNeedsClear(state: PhoneWidthState?, reportMayExist: Boolean): Bool
         state?.enabled == true ||
         state?.phase == PhoneWidthPhase.FAILED ||
         state?.phase == PhoneWidthPhase.RESTORING
+
+/** Whether a newly opened terminal should start in the Settings default mode. */
+fun shouldApplyDefaultPhoneWidth(
+    defaultEnabled: Boolean,
+    supported: Boolean,
+    alreadyApplied: Boolean,
+    hasState: Boolean,
+    hasMetrics: Boolean,
+    hasBaseline: Boolean,
+): Boolean =
+    defaultEnabled && supported && !alreadyApplied && !hasState && hasMetrics && hasBaseline

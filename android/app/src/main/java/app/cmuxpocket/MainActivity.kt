@@ -262,23 +262,15 @@ fun CmuxApp(
     val gatewayCapabilities by viewModel.gatewayCapabilities.collectAsState()
     val activePhoneWidth = selectedSurfaceId?.let { phoneWidthStates[it] }
     val viewportResizeSupported = gatewayCapabilities.contains("terminal.viewport.v1")
-    val widthSurfaceKey = selectedSurfaceId.orEmpty()
-    val onPhoneWidthMetrics: (TerminalWidthMetrics?, Boolean) -> Unit = remember(widthSurfaceKey) {
-        { metrics, paused ->
-            if (widthSurfaceKey.isNotEmpty()) {
-                viewModel.updatePhoneWidthMetrics(widthSurfaceKey, metrics, paused)
-            }
-        }
+    val onPhoneWidthMetrics: (String, TerminalWidthMetrics?, Boolean) -> Unit = { sid, metrics, paused ->
+        if (sid.isNotEmpty()) viewModel.updatePhoneWidthMetrics(sid, metrics, paused)
     }
-    val onPhoneWidthEnabledChange: (Boolean) -> Unit = remember(widthSurfaceKey) {
-        { enabled ->
-            if (widthSurfaceKey.isNotEmpty()) {
-                viewModel.setPhoneWidthEnabled(widthSurfaceKey, enabled)
-            }
-        }
+    val onPhoneWidthModeChange: (String, Boolean) -> Unit = { sid, enabled ->
+        if (sid.isNotEmpty()) viewModel.setPhoneWidthEnabled(sid, enabled)
     }
-    val onPhoneWidthReapply: () -> Unit = remember(widthSurfaceKey) {
-        { if (widthSurfaceKey.isNotEmpty()) viewModel.reapplyPhoneWidth(widthSurfaceKey) }
+    var defaultPhoneWidthMode by remember { mutableStateOf(settingsManager.defaultPhoneWidthMode) }
+    LaunchedEffect(defaultPhoneWidthMode) {
+        viewModel.setDefaultPhoneWidthMode(defaultPhoneWidthMode)
     }
 
     val displaySurfaceId = selectedSurfaceId.orEmpty()
@@ -420,8 +412,7 @@ fun CmuxApp(
                             renderEnabled = !showSettingsDialog,
                             phoneWidth = activePhoneWidth,
                             viewportResizeSupported = viewportResizeSupported,
-                            onPhoneWidthEnabledChange = onPhoneWidthEnabledChange,
-                            onPhoneWidthReapply = onPhoneWidthReapply,
+                            onPhoneWidthModeChange = onPhoneWidthModeChange,
                             onPhoneWidthMetrics = onPhoneWidthMetrics,
                         )
 
@@ -485,8 +476,7 @@ fun CmuxApp(
                         renderEnabled = !showSettingsDialog,
                         phoneWidth = activePhoneWidth,
                         viewportResizeSupported = viewportResizeSupported,
-                        onPhoneWidthEnabledChange = onPhoneWidthEnabledChange,
-                        onPhoneWidthReapply = onPhoneWidthReapply,
+                        onPhoneWidthModeChange = onPhoneWidthModeChange,
                         onPhoneWidthMetrics = onPhoneWidthMetrics,
                     )
 
@@ -660,9 +650,11 @@ fun CmuxApp(
                 onRecheckGatewayVersion = viewModel::refreshHostStatus,
                 isRefreshingGatewayVersion = refreshingHostStatus,
                 onDismissRequest = settingsOnDismiss,
-                phoneWidth = activePhoneWidth,
-                viewportResizeSupported = viewportResizeSupported,
-                onPhoneWidthEnabledChange = onPhoneWidthEnabledChange,
+                defaultPhoneWidthMode = defaultPhoneWidthMode,
+                onDefaultPhoneWidthModeChange = { enabled ->
+                    defaultPhoneWidthMode = enabled
+                    settingsManager.defaultPhoneWidthMode = enabled
+                },
             )
         }
     }

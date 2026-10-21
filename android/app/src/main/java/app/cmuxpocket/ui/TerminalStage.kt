@@ -48,9 +48,8 @@ fun TerminalStage(
     renderEnabled: Boolean = true,
     phoneWidth: PhoneWidthState? = null,
     viewportResizeSupported: Boolean = false,
-    onPhoneWidthEnabledChange: (Boolean) -> Unit = {},
-    onPhoneWidthReapply: () -> Unit = {},
-    onPhoneWidthMetrics: (TerminalWidthMetrics?, Boolean) -> Unit = { _, _ -> },
+    onPhoneWidthModeChange: (String, Boolean) -> Unit = { _, _ -> },
+    onPhoneWidthMetrics: (String, TerminalWidthMetrics?, Boolean) -> Unit = { _, _, _ -> },
 ) {
     val theme = CmuxTheme.colors
     val stageBg = try {
@@ -150,8 +149,7 @@ fun TerminalStage(
                 modifier = Modifier.fillMaxSize(),
                 phoneWidth = phoneWidth,
                 viewportResizeSupported = viewportResizeSupported,
-                onPhoneWidthEnabledChange = onPhoneWidthEnabledChange,
-                onPhoneWidthReapply = onPhoneWidthReapply,
+                onPhoneWidthModeChange = onPhoneWidthModeChange,
                 onPhoneWidthMetrics = onPhoneWidthMetrics,
             )
         }

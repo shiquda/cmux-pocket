@@ -11,6 +11,7 @@ import app.cmuxpocket.ui.computePhoneWidthTarget
 import app.cmuxpocket.ui.phoneWidthNeedsClear
 import app.cmuxpocket.ui.phoneWidthStateWithFrame
 import app.cmuxpocket.ui.settlePhoneWidthClear
+import app.cmuxpocket.ui.shouldApplyDefaultPhoneWidth
 import app.cmuxpocket.ui.phoneWidthTargetSatisfied
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -144,6 +145,60 @@ class TerminalWidthModeTest {
         )
         assertFalse(phoneWidthNeedsClear(PhoneWidthState(), reportMayExist = false))
         assertFalse(phoneWidthNeedsClear(null, reportMayExist = false))
+    }
+
+    @Test
+    fun theDefaultModeOnlyAppliesOnceAndOnlyWhenReady() {
+        assertTrue(
+            shouldApplyDefaultPhoneWidth(
+                defaultEnabled = true,
+                supported = true,
+                alreadyApplied = false,
+                hasState = false,
+                hasMetrics = true,
+                hasBaseline = true,
+            )
+        )
+        assertFalse(
+            shouldApplyDefaultPhoneWidth(
+                defaultEnabled = false,
+                supported = true,
+                alreadyApplied = false,
+                hasState = false,
+                hasMetrics = true,
+                hasBaseline = true,
+            )
+        )
+        assertFalse(
+            shouldApplyDefaultPhoneWidth(
+                defaultEnabled = true,
+                supported = true,
+                alreadyApplied = true,
+                hasState = false,
+                hasMetrics = true,
+                hasBaseline = true,
+            )
+        )
+        assertFalse(
+            shouldApplyDefaultPhoneWidth(
+                defaultEnabled = true,
+                supported = true,
+                alreadyApplied = false,
+                hasState = true,
+                hasMetrics = true,
+                hasBaseline = true,
+            )
+        )
+        assertFalse(
+            shouldApplyDefaultPhoneWidth(
+                defaultEnabled = true,
+                supported = true,
+                alreadyApplied = false,
+                hasState = false,
+                hasMetrics = false,
+                hasBaseline = true,
+            )
+        )
     }
 
     @Test
