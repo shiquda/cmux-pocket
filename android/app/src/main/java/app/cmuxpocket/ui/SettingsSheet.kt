@@ -2054,18 +2054,20 @@ fun FloatingWindowSection(
                     color = theme.onSurface,
                     fontWeight = FontWeight.SemiBold
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val selectedPreset = PipSizePreset.fromRatio(aspectRatio)
-                    PipSizePreset.entries.forEach { preset ->
-                        FilterChip(
-                            selected = preset == selectedPreset,
-                            onClick = { onAspectRatioChange(preset.ratio) },
-                            label = { Text(preset.label, fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f)
-                        )
+                val selectedPreset = PipSizePreset.fromRatio(aspectRatio)
+                PipSizePreset.entries.chunked(3).forEach { rowPresets ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        rowPresets.forEach { preset ->
+                            FilterChip(
+                                selected = preset == selectedPreset,
+                                onClick = { onAspectRatioChange(preset.ratio) },
+                                label = { Text(preset.label, fontSize = 11.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
 

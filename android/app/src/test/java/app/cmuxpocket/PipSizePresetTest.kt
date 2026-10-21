@@ -21,30 +21,34 @@ class PipSizePresetTest {
 
     @Test
     fun nextCyclesThroughAllPresets() {
-        assertEquals(PipSizePreset.STANDARD, PipSizePreset.COMPACT.next())
-        assertEquals(PipSizePreset.WIDE, PipSizePreset.STANDARD.next())
-        assertEquals(PipSizePreset.COMPACT, PipSizePreset.WIDE.next())
+        assertEquals(PipSizePreset.CLASSIC, PipSizePreset.SQUARE.next())
+        assertEquals(PipSizePreset.PHOTO, PipSizePreset.CLASSIC.next())
+        assertEquals(PipSizePreset.STANDARD, PipSizePreset.PHOTO.next())
+        assertEquals(PipSizePreset.CINEMA, PipSizePreset.STANDARD.next())
+        assertEquals(PipSizePreset.WIDE, PipSizePreset.CINEMA.next())
+        assertEquals(PipSizePreset.SQUARE, PipSizePreset.WIDE.next())
     }
 
     @Test
-    fun storageFallsBackToCompactForUnknownValues() {
-        assertEquals(PipSizePreset.COMPACT, PipSizePreset.fromStorage(null))
-        assertEquals(PipSizePreset.COMPACT, PipSizePreset.fromStorage("future-preset"))
+    fun storageFallsBackToSquareForUnknownValues() {
+        assertEquals(PipSizePreset.SQUARE, PipSizePreset.fromStorage(null))
+        assertEquals(PipSizePreset.SQUARE, PipSizePreset.fromStorage("future-preset"))
         assertEquals(PipSizePreset.WIDE, PipSizePreset.fromStorage("WIDE"))
     }
 
     @Test
     fun customRatiosMapToTheMatchingPreset() {
-        assertEquals(PipSizePreset.COMPACT, PipSizePreset.fromRatio(1f))
+        assertEquals(PipSizePreset.SQUARE, PipSizePreset.fromRatio(1f))
         assertEquals(PipSizePreset.STANDARD, PipSizePreset.fromRatio(16f / 9f))
         assertEquals(null, PipSizePreset.fromRatio(1.62f))
     }
 
     @Test
     fun cyclingFromACustomRatioPicksTheNextPreset() {
-        assertEquals(PipSizePreset.STANDARD, PipSizePreset.nextAfter(1.4f))
-        assertEquals(PipSizePreset.WIDE, PipSizePreset.nextAfter(16f / 9f))
-        assertEquals(PipSizePreset.COMPACT, PipSizePreset.nextAfter(2.2f))
+        assertEquals(PipSizePreset.PHOTO, PipSizePreset.nextAfter(1.4f))
+        assertEquals(PipSizePreset.CINEMA, PipSizePreset.nextAfter(16f / 9f))
+        assertEquals(PipSizePreset.WIDE, PipSizePreset.nextAfter(2.2f))
+        assertEquals(PipSizePreset.SQUARE, PipSizePreset.nextAfter(2.39f))
     }
 }
 

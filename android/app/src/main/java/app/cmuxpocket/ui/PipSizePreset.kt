@@ -8,12 +8,15 @@ enum class PipSizePreset(
     val aspectWidth: Int,
     val aspectHeight: Int
 ) {
-    COMPACT("Compact", 1, 1),
-    STANDARD("Standard", 16, 9),
-    WIDE("Wide", 22, 10);
+    SQUARE("1:1", 1, 1),
+    CLASSIC("4:3", 4, 3),
+    PHOTO("3:2", 3, 2),
+    STANDARD("16:9", 16, 9),
+    CINEMA("2:1", 2, 1),
+    WIDE("2.39:1", 239, 100);
 
     val ratio: Float get() = aspectWidth.toFloat() / aspectHeight
-    val ratioLabel: String get() = "$aspectWidth:$aspectHeight"
+    val ratioLabel: String get() = label
 
     fun next(): PipSizePreset = entries[(ordinal + 1) % entries.size]
 
@@ -24,14 +27,14 @@ enum class PipSizePreset(
         const val DEFAULT_ASPECT_RATIO = 1f
 
         fun fromStorage(value: String?): PipSizePreset =
-            entries.firstOrNull { it.name == value } ?: COMPACT
+            entries.firstOrNull { it.name == value } ?: SQUARE
 
         fun fromRatio(ratio: Float): PipSizePreset? =
             entries.firstOrNull { kotlin.math.abs(it.ratio - ratio) < 0.01f }
 
         /** Next preset when cycling from an arbitrary custom ratio. */
         fun nextAfter(ratio: Float): PipSizePreset =
-            entries.firstOrNull { it.ratio > ratio + 0.01f } ?: COMPACT
+            entries.firstOrNull { it.ratio > ratio + 0.01f } ?: SQUARE
     }
 }
 
