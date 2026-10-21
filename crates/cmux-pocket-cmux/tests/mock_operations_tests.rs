@@ -41,6 +41,40 @@ async fn test_mock_workspace_create_and_select() {
 }
 
 #[tokio::test]
+async fn test_mock_workspace_rename_and_close() {
+    let backend = MockCmuxBackend::new();
+
+    // Default creation (no name)
+    let default_ws = backend.create_workspace("").await.unwrap();
+    assert_eq!(default_ws.name, "workspace 4");
+
+    // Rename workspace
+    let renamed = backend.rename_workspace(&default_ws.id, "renamed-ws").await.unwrap();
+    assert_eq!(renamed.name, "renamed-ws");
+
+    // Close workspace
+    let closed = backend.close_workspace(&default_ws.id).await.unwrap();
+    assert!(closed);
+
+    let list_after = backend.list_workspaces().await.unwrap();
+    assert_eq!(list_after.len(), 3);
+    assert!(list_after.iter().all(|w| w.id != default_ws.id));
+}
+
+#[tokio::test]
+async fn test_mock_surface_rename() {
+    let backend = MockCmuxBackend::new();
+
+    let renamed = backend.rename_surface("surf-main-1", "custom-shell", Some("ws-main")).await.unwrap();
+    assert_eq!(renamed.title.as_deref(), Some("custom-shell"));
+
+    let list = backend.list_workspaces().await.unwrap();
+    let ws_main = list.iter().find(|w| w.id == "ws-main").unwrap();
+    let surf1 = ws_main.surfaces.iter().find(|s| s.id == "surf-main-1").unwrap();
+    assert_eq!(surf1.title.as_deref(), Some("custom-shell"));
+}
+
+#[tokio::test]
 async fn test_mock_surface_lifecycle() {
     let backend = MockCmuxBackend::new();
 

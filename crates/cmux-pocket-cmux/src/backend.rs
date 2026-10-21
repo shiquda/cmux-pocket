@@ -24,6 +24,16 @@ pub trait CmuxBackend: Send + Sync {
     /// Selects an active workspace on the host.
     async fn select_workspace(&self, workspace_key: &str) -> Result<(), CmuxError>;
 
+    /// Renames a workspace by key/ID.
+    async fn rename_workspace(&self, _workspace_key: &str, _title: &str) -> Result<WorkspaceInfo, CmuxError> {
+        Err(CmuxError::unavailable("rename_workspace not supported"))
+    }
+
+    /// Closes/deletes a workspace by key/ID.
+    async fn close_workspace(&self, _workspace_key: &str) -> Result<bool, CmuxError> {
+        Err(CmuxError::unavailable("close_workspace not supported"))
+    }
+
     /// Creates a new surface/tab inside a workspace.
     async fn create_surface(
         &self,
@@ -38,6 +48,16 @@ pub trait CmuxBackend: Send + Sync {
         surface_id: &str,
         workspace_key: Option<&str>,
     ) -> Result<bool, CmuxError>;
+    /// Renames a surface/tab by ID.
+    async fn rename_surface(
+        &self,
+        _surface_id: &str,
+        _title: &str,
+        _workspace_key: Option<&str>,
+    ) -> Result<SurfaceInfo, CmuxError> {
+        Err(CmuxError::unavailable("rename_surface not supported"))
+    }
+
 
     /// Sends literal text or control keys to a surface.
     async fn send_input(&self, surface_id: &str, text: &str) -> Result<(), CmuxError>;

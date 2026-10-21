@@ -19,12 +19,45 @@ pub fn tree_args() -> Vec<String> {
     ]
 }
 
-/// Constructs arguments for `cmux new-workspace --name <name>`.
+/// Constructs arguments for `cmux new-workspace [--name <name>]`.
 pub fn new_workspace_args(name: &str) -> Vec<String> {
+    if name.is_empty() {
+        vec!["new-workspace".to_string()]
+    } else {
+        vec![
+            "new-workspace".to_string(),
+            "--name".to_string(),
+            name.to_string(),
+        ]
+    }
+}
+
+/// Constructs arguments for `cmux rename-workspace --workspace <workspace_key> <title>`.
+pub fn rename_workspace_args(workspace_key: &str, title: &str) -> Vec<String> {
     vec![
-        "new-workspace".to_string(),
-        "--name".to_string(),
-        name.to_string(),
+        "rename-workspace".to_string(),
+        "--workspace".to_string(),
+        workspace_key.to_string(),
+        title.to_string(),
+    ]
+}
+
+/// Constructs arguments for `cmux close-workspace --workspace <workspace_key>`.
+pub fn close_workspace_args(workspace_key: &str) -> Vec<String> {
+    vec![
+        "close-workspace".to_string(),
+        "--workspace".to_string(),
+        workspace_key.to_string(),
+    ]
+}
+
+/// Constructs arguments for `cmux rename-tab --surface <surface_id> <title>`.
+pub fn rename_surface_args(surface_id: &str, title: &str) -> Vec<String> {
+    vec![
+        "rename-tab".to_string(),
+        "--surface".to_string(),
+        surface_id.to_string(),
+        title.to_string(),
     ]
 }
 

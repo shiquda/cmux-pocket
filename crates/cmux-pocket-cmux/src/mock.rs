@@ -400,10 +400,15 @@ impl CmuxBackend for MockCmuxBackend {
     async fn create_workspace(&self, name: &str) -> Result<WorkspaceInfo, CmuxError> {
         let ws_id = self.next_id("ws");
         let mut workspaces = self.workspaces.lock();
+        let final_name = if name.is_empty() {
+            format!("workspace {}", workspaces.len() + 1)
+        } else {
+            name.to_string()
+        };
         let new_ws = WorkspaceInfo {
             id: ws_id.clone(),
             key: Some(ws_id.clone()),
-            name: name.to_string(),
+            name: final_name,
             order: workspaces.len() as i32,
             active_on_host: false,
             cwd: None,
@@ -412,6 +417,33 @@ impl CmuxBackend for MockCmuxBackend {
         };
         workspaces.push(new_ws.clone());
         Ok(new_ws)
+    }
+
+    async fn rename_workspace(&self, workspace_key: &str, title: &str) -> Result<WorkspaceInfo, CmuxError> {
+        let mut workspaces = self.workspaces.lock();
+        let ws = workspaces
+            .iter_mut()
+            .find(|w| w.id == workspace_key || w.key.as_deref() == Some(workspace_key))
+            .ok_or_else(|| CmuxError::parse_error(format!("workspace not found: {workspace_key}")))?;
+        ws.name = title.to_string();
+        Ok(ws.clone())
+    }
+
+    async fn close_workspace(&self, workspace_key: &str) -> Result<bool, CmuxError> {
+        let mut workspaces = self.workspaces.lock();
+        let pos = workspaces
+            .iter()
+            .position(|w| w.id == workspace_key || w.key.as_deref() == Some(workspace_key));
+        if let Some(idx) = pos {
+            let removed = workspaces.remove(idx);
+            let mut sessions = self.sessions.lock();
+            for s in removed.surfaces {
+                sessions.remove(&s.id);
+            }
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     async fn select_workspace(&self, workspace_key: &str) -> Result<(), CmuxError> {
@@ -498,6 +530,34 @@ impl CmuxBackend for MockCmuxBackend {
             sessions.remove(surface_id);
         }
         Ok(found)
+    }
+
+    async fn rename_surface(
+        &self,
+        surface_id: &str,
+        title: &str,
+        workspace_key: Option<&str>,
+    ) -> Result<SurfaceInfo, CmuxError> {
+        let mut workspaces = self.workspaces.lock();
+        let mut found_surface = None;
+        for ws in workspaces.iter_mut() {
+            if workspace_key.is_none() || ws.id == workspace_key.unwrap() || ws.key.as_deref() == workspace_key {
+                if let Some(surf) = ws.surfaces.iter_mut().find(|s| s.id == surface_id) {
+                    surf.title = Some(title.to_string());
+                    found_surface = Some(surf.clone());
+                    break;
+                }
+            }
+        }
+        if let Some(surf) = found_surface {
+            let mut sessions = self.sessions.lock();
+            if let Some(session) = sessions.get_mut(surface_id) {
+                session.title = title.to_string();
+            }
+            Ok(surf)
+        } else {
+            Err(CmuxError::parse_error(format!("surface not found: {surface_id}")))
+        }
     }
 
     async fn send_input(&self, surface_id: &str, text: &str) -> Result<(), CmuxError> {

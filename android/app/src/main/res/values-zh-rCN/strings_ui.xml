@@ -38,6 +38,20 @@
     <string name="dlg_new_surface_add">添加标签页</string>
     <string name="dlg_new_surface_cancel">取消</string>
 
+    <!-- Rename Workspace and Surface Dialogs -->
+    <string name="dlg_rename_workspace_title">重命名工作区</string>
+    <string name="dlg_rename_workspace_label">工作区名称</string>
+    <string name="dlg_rename_workspace_placeholder">例如 backend-api, my-feature</string>
+    <string name="dlg_rename_workspace_confirm">重命名</string>
+    <string name="dlg_rename_surface_title">重命名终端标签页</string>
+    <string name="dlg_rename_surface_label">标签页标题</string>
+    <string name="dlg_rename_surface_placeholder">例如 zsh, logs, tests</string>
+    <string name="dlg_rename_surface_confirm">重命名</string>
+    <string name="dlg_rename_cancel">取消</string>
+    <string name="menu_rename">重命名</string>
+    <string name="menu_delete">删除</string>
+    <string name="menu_close">关闭</string>
+
     <!-- Computer Keyboard Panel -->
     <string name="panel_tab_qwerty">QWERTY</string>
     <string name="panel_tab_special">特殊键</string>

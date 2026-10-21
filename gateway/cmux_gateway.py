@@ -759,7 +759,7 @@ class MockCmuxBackend:
     def list_workspaces(self) -> List[Dict[str, Any]]:
         return self.workspaces
 
-    def create_workspace(self, name: str, initial_surface: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def create_workspace(self, name: Optional[str] = None, initial_surface: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         ws_id = f"ws-{uuid.uuid4().hex[:6]}"
         surfaces = []
         if initial_surface:
@@ -775,16 +775,44 @@ class MockCmuxBackend:
             surfaces.append(surf)
             self.terminal_sessions[surf_id] = MockTerminalSession(surface_id=surf_id, title=title)
 
+        final_name = name if (name and name.strip()) else f"workspace {len(self.workspaces) + 1}"
         new_ws = {
             "id": ws_id,
             "key": ws_id,
-            "name": name,
+            "name": final_name,
             "order": len(self.workspaces),
             "active_on_host": False,
             "surfaces": surfaces
         }
         self.workspaces.append(new_ws)
         return new_ws
+
+    def rename_workspace(self, workspace_key: str, new_name: str) -> Optional[Dict[str, Any]]:
+        for ws in self.workspaces:
+            if ws.get("key") == workspace_key or ws.get("id") == workspace_key:
+                ws["name"] = new_name
+                return ws
+        return None
+
+    def close_workspace(self, workspace_key: str) -> bool:
+        for idx, ws in enumerate(self.workspaces):
+            if ws.get("key") == workspace_key or ws.get("id") == workspace_key:
+                removed = self.workspaces.pop(idx)
+                for s in removed.get("surfaces", []):
+                    self.terminal_sessions.pop(s["id"], None)
+                return True
+        return False
+
+    def rename_surface(self, surface_id: str, new_title: str, workspace_key: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        for ws in self.workspaces:
+            if workspace_key is None or ws.get("key") == workspace_key or ws.get("id") == workspace_key:
+                for s in ws.get("surfaces", []):
+                    if s["id"] == surface_id:
+                        s["title"] = new_title
+                        if surface_id in self.terminal_sessions:
+                            self.terminal_sessions[surface_id].title = new_title
+                        return s
+        return None
 
     def select_workspace(self, workspace_key: str):
         for ws in self.workspaces:
@@ -915,16 +943,41 @@ class LiveCmuxBackend:
             logger.error(f"LiveCmuxBackend list_workspaces error: {e}")
         return []
 
-    def create_workspace(self, name: str, initial_surface: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def create_workspace(self, name: Optional[str] = None, initial_surface: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         try:
-            self._run_cmux(["new-workspace", "--name", name])
+            if name and name.strip():
+                self._run_cmux(["new-workspace", "--name", name.strip()])
+            else:
+                self._run_cmux(["new-workspace"])
             workspaces = self.list_workspaces()
-            target = next((w for w in workspaces if w["name"] == name), workspaces[-1] if workspaces else None)
-            return target or {"id": str(uuid.uuid4()), "name": name, "surfaces": []}
+            if name and name.strip():
+                target = next((w for w in workspaces if w["name"] == name.strip()), workspaces[-1] if workspaces else None)
+            else:
+                target = workspaces[-1] if workspaces else None
+            return target or {"id": str(uuid.uuid4()), "name": name or "workspace", "surfaces": []}
         except Exception as e:
             logger.error(f"LiveCmuxBackend create_workspace error: {e}")
-            return {"id": str(uuid.uuid4()), "name": name, "surfaces": []}
+            return {"id": str(uuid.uuid4()), "name": name or "workspace", "surfaces": []}
 
+    def rename_workspace(self, workspace_key: str, new_name: str) -> Optional[Dict[str, Any]]:
+        try:
+            self._run_cmux(["rename-workspace", "--workspace", workspace_key, new_name])
+            workspaces = self.list_workspaces()
+            for ws in workspaces:
+                if ws.get("key") == workspace_key or ws.get("id") == workspace_key or ws.get("name") == new_name:
+                    return ws
+            return {"id": workspace_key, "key": workspace_key, "name": new_name, "surfaces": []}
+        except Exception as e:
+            logger.error(f"LiveCmuxBackend rename_workspace error: {e}")
+            return None
+
+    def close_workspace(self, workspace_key: str) -> bool:
+        try:
+            self._run_cmux(["close-workspace", "--workspace", workspace_key])
+            return True
+        except Exception as e:
+            logger.error(f"LiveCmuxBackend close_workspace error: {e}")
+            return False
     def select_workspace(self, workspace_key: str):
         try:
             self._run_cmux(["select-workspace", "--workspace", workspace_key])
@@ -973,6 +1026,19 @@ class LiveCmuxBackend:
         except Exception as e:
             logger.error(f"LiveCmuxBackend close_surface error: {e}")
             return False
+
+    def rename_surface(self, surface_id: str, new_title: str, workspace_key: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        try:
+            self._run_cmux(["rename-tab", "--surface", surface_id, new_title])
+            workspaces = self.list_workspaces()
+            for ws in workspaces:
+                for s in ws.get("surfaces", []):
+                    if s["id"] == surface_id:
+                        return s
+            return {"id": surface_id, "title": new_title, "type": "terminal"}
+        except Exception as e:
+            logger.error(f"LiveCmuxBackend rename_surface error: {e}")
+            return None
 
     def send_input(self, surface_id: str, text: str) -> None:
         t0 = time.monotonic()
@@ -1421,7 +1487,7 @@ class CmuxGatewayClientSession:
             })
         elif method == "mobile.workspace.create":
             mutation_id = params.get("mutation_id")
-            name = params.get("name", "New Workspace")
+            name = params.get("name")
             init_surf = params.get("initial_surface")
             new_ws = self.gateway.backend.create_workspace(name, init_surf)
             res_data: Dict[str, Any] = {
@@ -1437,6 +1503,49 @@ class CmuxGatewayClientSession:
             broadcast_data: Dict[str, Any] = {
                 "action": "workspace_created",
                 "workspace": new_ws,
+            }
+            if mutation_id is not None:
+                broadcast_data["mutation_id"] = mutation_id
+            await self.gateway.broadcast_event("workspace.tree", broadcast_data)
+        elif method == "mobile.workspace.rename":
+            mutation_id = params.get("mutation_id")
+            ws_key = params.get("workspace_key") or params.get("workspace_id")
+            new_name = params.get("title") or params.get("name") or "workspace"
+            renamed_ws = self.gateway.backend.rename_workspace(ws_key, new_name)
+            res_data = {
+                "status": "ok" if renamed_ws else "error",
+                "workspace": renamed_ws,
+            }
+            if mutation_id is not None:
+                res_data["mutation_id"] = mutation_id
+            await self.send_json({
+                "id": req_id,
+                "result": res_data,
+            })
+            broadcast_data = {
+                "action": "workspace_renamed",
+                "workspace": renamed_ws,
+            }
+            if mutation_id is not None:
+                broadcast_data["mutation_id"] = mutation_id
+            await self.gateway.broadcast_event("workspace.tree", broadcast_data)
+        elif method == "mobile.workspace.close":
+            mutation_id = params.get("mutation_id")
+            ws_key = params.get("workspace_key") or params.get("workspace_id")
+            success = self.gateway.backend.close_workspace(ws_key)
+            res_data = {
+                "status": "ok" if success else "error",
+                "workspace_key": ws_key,
+            }
+            if mutation_id is not None:
+                res_data["mutation_id"] = mutation_id
+            await self.send_json({
+                "id": req_id,
+                "result": res_data,
+            })
+            broadcast_data = {
+                "action": "workspace_closed",
+                "workspace_key": ws_key,
             }
             if mutation_id is not None:
                 broadcast_data["mutation_id"] = mutation_id
@@ -1495,6 +1604,29 @@ class CmuxGatewayClientSession:
             broadcast_data = {
                 "action": "surface_closed",
                 "surface_id": surf_id,
+            }
+            if mutation_id is not None:
+                broadcast_data["mutation_id"] = mutation_id
+            await self.gateway.broadcast_event("workspace.tree", broadcast_data)
+        elif method == "mobile.surface.rename":
+            mutation_id = params.get("mutation_id")
+            surf_id = params.get("surface_id")
+            new_title = params.get("title") or params.get("name") or "terminal"
+            ws_key = params.get("workspace_key")
+            renamed_surf = self.gateway.backend.rename_surface(surf_id, new_title, ws_key)
+            res_data = {
+                "status": "ok" if renamed_surf else "error",
+                "surface": renamed_surf,
+            }
+            if mutation_id is not None:
+                res_data["mutation_id"] = mutation_id
+            await self.send_json({
+                "id": req_id,
+                "result": res_data,
+            })
+            broadcast_data = {
+                "action": "surface_renamed",
+                "surface": renamed_surf,
             }
             if mutation_id is not None:
                 broadcast_data["mutation_id"] = mutation_id

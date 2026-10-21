@@ -518,7 +518,7 @@ class TerminalViewModel : ViewModel() {
         }
     }
 
-    fun createWorkspace(name: String, initialTerminal: Boolean = true) {
+    fun createWorkspace(name: String? = null, initialTerminal: Boolean = true) {
         val gen = connectionGeneration
         val mutationId = java.util.UUID.randomUUID().toString()
         mutationTracker.registerTicket(mutationId, gen, "workspace_created")
@@ -536,6 +536,44 @@ class TerminalViewModel : ViewModel() {
                 mutationTracker.onRpcFailure(mutationId, gen)
                 Log.e(tag, "Failed to create workspace", e)
                 _statusMessage.value = "Failed to create workspace: ${e.message}"
+            }
+        }
+    }
+
+    fun renameWorkspace(workspaceKey: String, newName: String) {
+        val gen = connectionGeneration
+        val mutationId = java.util.UUID.randomUUID().toString()
+        mutationTracker.registerTicket(mutationId, gen, "workspace_renamed")
+        viewModelScope.launch {
+            try {
+                _statusMessage.value = "Renaming workspace..."
+                wsClient.renameWorkspace(workspaceKey, newName, mutationId)
+                mutationTracker.onRpcSuccess(mutationId, gen)
+                refreshWorkspacesInternal(gen)
+                _statusMessage.value = "Workspace renamed"
+            } catch (e: Exception) {
+                mutationTracker.onRpcFailure(mutationId, gen)
+                Log.e(tag, "Failed to rename workspace", e)
+                _statusMessage.value = "Failed to rename workspace: ${e.message}"
+            }
+        }
+    }
+
+    fun closeWorkspace(workspaceKey: String) {
+        val gen = connectionGeneration
+        val mutationId = java.util.UUID.randomUUID().toString()
+        mutationTracker.registerTicket(mutationId, gen, "workspace_closed")
+        viewModelScope.launch {
+            try {
+                _statusMessage.value = "Closing workspace..."
+                wsClient.closeWorkspace(workspaceKey, mutationId)
+                mutationTracker.onRpcSuccess(mutationId, gen)
+                refreshWorkspacesInternal(gen)
+                _statusMessage.value = "Workspace closed"
+            } catch (e: Exception) {
+                mutationTracker.onRpcFailure(mutationId, gen)
+                Log.e(tag, "Failed to close workspace", e)
+                _statusMessage.value = "Failed to close workspace: ${e.message}"
             }
         }
     }
@@ -594,6 +632,26 @@ class TerminalViewModel : ViewModel() {
                 mutationTracker.onRpcFailure(mutationId, gen)
                 Log.e(tag, "Failed to close surface", e)
                 _statusMessage.value = "Failed to close tab: ${e.message}"
+            }
+        }
+    }
+
+    fun renameSurface(surfaceId: String, newTitle: String) {
+        val gen = connectionGeneration
+        val mutationId = java.util.UUID.randomUUID().toString()
+        mutationTracker.registerTicket(mutationId, gen, "surface_renamed")
+        viewModelScope.launch {
+            try {
+                _statusMessage.value = "Renaming tab..."
+                wsClient.renameSurface(surfaceId, newTitle, _selectedWorkspaceKey.value, mutationId)
+                mutationTracker.onRpcSuccess(mutationId, gen)
+                sessionStore.getSession(surfaceId)?.title = newTitle
+                refreshWorkspacesInternal(gen)
+                _statusMessage.value = "Tab renamed"
+            } catch (e: Exception) {
+                mutationTracker.onRpcFailure(mutationId, gen)
+                Log.e(tag, "Failed to rename surface", e)
+                _statusMessage.value = "Failed to rename tab: ${e.message}"
             }
         }
     }

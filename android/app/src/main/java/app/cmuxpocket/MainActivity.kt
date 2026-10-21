@@ -1,6 +1,7 @@
 package app.cmuxpocket
 
 import app.cmuxpocket.protocol.SurfaceInfo
+import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.transport.ConnectionStatus
 import app.cmuxpocket.ui.*
 import android.content.res.Configuration
@@ -267,18 +268,31 @@ fun CmuxApp(
 
     var isSidebarExpanded by remember { mutableStateOf(false) }
     var showSessionSurfaceDrawer by remember { mutableStateOf(false) }
-    var showNewWorkspaceDialog by remember { mutableStateOf(false) }
-    var showNewSurfaceDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
     var showKeyboardPanel by remember { mutableStateOf(false) }
     var pendingCloseSurface by remember { mutableStateOf<SurfaceInfo?>(null) }
+    var pendingCloseWorkspace by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var renamingWorkspace by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var renamingSurface by remember { mutableStateOf<SurfaceInfo?>(null) }
 
     fun requestCloseSurface(surfaceId: String) {
         val surface = activeSurfaces.firstOrNull { it.id == surfaceId } ?: return
-        if (surface.requiresCloseConfirmation()) {
+        val isActive = surface.id == selectedSurfaceId
+        val isRunning = surface.agentState == "working" || surface.agentState == "needs_input"
+        if (isActive || isRunning) {
             pendingCloseSurface = surface
         } else {
             viewModel.closeSurface(surfaceId)
+        }
+    }
+
+    fun requestCloseWorkspace(workspaceKey: String) {
+        val ws = workspaces.firstOrNull { it.stableKey == workspaceKey } ?: return
+        val isActive = ws.stableKey == activeWorkspace?.stableKey
+        if (isActive) {
+            pendingCloseWorkspace = ws
+        } else {
+            viewModel.closeWorkspace(workspaceKey)
         }
     }
     var terminalInputView by remember { mutableStateOf<TerminalInputView?>(null) }
@@ -338,11 +352,13 @@ fun CmuxApp(
                     onSelectWorkspace = { key -> viewModel.selectWorkspace(key) },
                     onSelectSurface = { id -> viewModel.selectSurface(id) },
                     onCloseSurface = { id -> requestCloseSurface(id) },
-                    onNewWorkspace = { showNewWorkspaceDialog = true },
-                    onNewSurface = { showNewSurfaceDialog = true },
+                    onNewWorkspace = { viewModel.createWorkspace() },
+                    onNewSurface = { viewModel.createSurface(activeWorkspace?.stableKey) },
+                    onRenameWorkspace = { ws -> renamingWorkspace = ws },
+                    onCloseWorkspace = { key -> requestCloseWorkspace(key) },
+                    onRenameSurface = { surf -> renamingSurface = surf },
                     onSettingsClick = { showSettingsDialog = true }
                 )
-
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     ConnectionReadinessNotice(
                         readiness = connectionReadiness,
@@ -361,7 +377,7 @@ fun CmuxApp(
                                 terminalInputView?.requestKeyboard()
                             },
                             onTerminalScroll = viewModel::scrollTerminal,
-                            onNewSurfaceClick = { showNewSurfaceDialog = true },
+                            onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
                             onSendKey = { key -> viewModel.sendInput(key) },
                             onClearScreen = { viewModel.clearScrollback() },
                             renderEnabled = !showSettingsDialog
@@ -418,7 +434,7 @@ fun CmuxApp(
                             terminalInputView?.requestKeyboard()
                         },
                         onTerminalScroll = viewModel::scrollTerminal,
-                        onNewSurfaceClick = { showNewSurfaceDialog = true },
+                        onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
                         onSendKey = { key -> viewModel.sendInput(key) },
                         onClearScreen = { viewModel.clearScrollback() },
                         renderEnabled = !showSettingsDialog
@@ -467,34 +483,18 @@ fun CmuxApp(
                 hostLabel = hostInput,
                 onSelectSurface = { surfaceId -> viewModel.selectSurface(surfaceId) },
                 onCloseSurface = { surfaceId -> requestCloseSurface(surfaceId) },
-                onNewSurfaceClick = { showNewSurfaceDialog = true },
+                onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
                 onSelectWorkspace = { key -> viewModel.selectWorkspace(key) },
-                onNewWorkspaceClick = { showNewWorkspaceDialog = true },
+                onNewWorkspaceClick = { viewModel.createWorkspace() },
+                onRenameSurface = { surf -> renamingSurface = surf },
+                onRenameWorkspace = { ws -> renamingWorkspace = ws },
+                onCloseWorkspace = { key -> requestCloseWorkspace(key) },
                 onSettingsClick = { showSettingsDialog = true },
                 onDismissRequest = { showSessionSurfaceDrawer = false }
             )
         }
 
-        if (showNewWorkspaceDialog) {
-            NewWorkspaceDialog(
-                onDismissRequest = { showNewWorkspaceDialog = false },
-                onConfirm = { name, initialTerminal ->
-                    showNewWorkspaceDialog = false
-                    viewModel.createWorkspace(name, initialTerminal)
-                }
-            )
-        }
 
-        if (showNewSurfaceDialog) {
-            NewSurfaceDialog(
-                workspaceName = activeWorkspace?.name ?: stringResource(R.string.main_workspace_fallback),
-                onDismissRequest = { showNewSurfaceDialog = false },
-                onConfirm = { title ->
-                    showNewSurfaceDialog = false
-                    viewModel.createSurface(activeWorkspace?.stableKey, title)
-                }
-            )
-        }
 
         pendingCloseSurface?.let { surface ->
             val running = surface.agentState == "working" || surface.agentState == "needs_input"
@@ -506,7 +506,7 @@ fun CmuxApp(
                         if (running) {
                             stringResource(R.string.main_close_tab_running, surface.displayTitle)
                         } else {
-                            stringResource(R.string.main_close_tab_still_running, surface.displayTitle)
+                            stringResource(R.string.main_close_active_tab_desc, surface.displayTitle)
                         }
                     )
                 },
@@ -525,6 +525,60 @@ fun CmuxApp(
                     TextButton(onClick = { pendingCloseSurface = null }) {
                         Text(stringResource(R.string.main_cancel))
                     }
+                }
+            )
+        }
+
+        pendingCloseWorkspace?.let { ws ->
+            AlertDialog(
+                onDismissRequest = { pendingCloseWorkspace = null },
+                title = { Text(stringResource(R.string.main_close_active_workspace_title)) },
+                text = {
+                    Text(
+                        stringResource(
+                            R.string.main_close_active_workspace_desc,
+                            ws.name,
+                            ws.surfaces.size
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val key = ws.stableKey
+                            pendingCloseWorkspace = null
+                            viewModel.closeWorkspace(key)
+                        }
+                    ) {
+                        Text(stringResource(R.string.main_delete))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingCloseWorkspace = null }) {
+                        Text(stringResource(R.string.main_cancel))
+                    }
+                }
+            )
+        }
+
+        renamingWorkspace?.let { ws ->
+            RenameWorkspaceDialog(
+                initialName = ws.name,
+                onDismissRequest = { renamingWorkspace = null },
+                onConfirm = { newName ->
+                    renamingWorkspace = null
+                    viewModel.renameWorkspace(ws.stableKey, newName)
+                }
+            )
+        }
+
+        renamingSurface?.let { surf ->
+            RenameSurfaceDialog(
+                initialTitle = surf.displayTitle,
+                onDismissRequest = { renamingSurface = null },
+                onConfirm = { newTitle ->
+                    renamingSurface = null
+                    viewModel.renameSurface(surf.id, newTitle)
                 }
             )
         }

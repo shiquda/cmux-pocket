@@ -116,3 +116,24 @@ data class SurfaceCloseResponse(
     @SerialName("surface_id") val surfaceId: String? = null,
     @SerialName("mutation_id") val mutationId: String? = null
 )
+
+@Serializable
+data class WorkspaceRenameResponse(
+    @SerialName("workspace") val workspace: WorkspaceInfo? = null,
+    @SerialName("status") val status: String? = "ok",
+    @SerialName("mutation_id") val mutationId: String? = null
+)
+
+@Serializable
+data class WorkspaceCloseResponse(
+    @SerialName("status") val status: String? = "ok",
+    @SerialName("workspace_key") val workspaceKey: String? = null,
+    @SerialName("mutation_id") val mutationId: String? = null
+)
+
+@Serializable
+data class SurfaceRenameResponse(
+    @SerialName("surface") val surface: SurfaceInfo? = null,
+    @SerialName("status") val status: String? = "ok",
+    @SerialName("mutation_id") val mutationId: String? = null
+)

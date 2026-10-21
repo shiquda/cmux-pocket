@@ -97,7 +97,7 @@ pub async fn dispatch_rpc<'a>(
             let name = params
                 .get("name")
                 .and_then(|v| v.as_str())
-                .unwrap_or("New Workspace");
+                .unwrap_or("");
             let mutation_id = params.get("mutation_id").cloned();
 
             match ctx.backend.create_workspace(name).await {
@@ -168,6 +168,121 @@ pub async fn dispatch_rpc<'a>(
                 "result": Value::Object(res_map),
             });
             ctx.session.send_json(res).await?;
+        }
+        "mobile.workspace.rename" => {
+            let mutation_id = params.get("mutation_id").cloned();
+            let ws_key = params
+                .get("workspace_key")
+                .or_else(|| params.get("workspace_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let title = params
+                .get("title")
+                .or_else(|| params.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            match ctx.backend.rename_workspace(ws_key, title).await {
+                Ok(renamed_ws) => {
+                    ctx.health.mark_healthy();
+                    let mut res_map = Map::new();
+                    res_map.insert("status".to_string(), Value::String("ok".to_string()));
+                    res_map.insert("workspace".to_string(), serde_json::to_value(&renamed_ws)?);
+                    if let Some(m_id) = &mutation_id {
+                        res_map.insert("mutation_id".to_string(), m_id.clone());
+                    }
+
+                    let res = json!({
+                        "id": id_val,
+                        "result": Value::Object(res_map),
+                    });
+                    ctx.session.send_json(res).await?;
+
+                    // Broadcast workspace.tree event
+                    let mut b_map = Map::new();
+                    b_map.insert(
+                        "action".to_string(),
+                        Value::String("workspace_renamed".to_string()),
+                    );
+                    b_map.insert("workspace".to_string(), serde_json::to_value(&renamed_ws)?);
+                    if let Some(m_id) = mutation_id {
+                        b_map.insert("mutation_id".to_string(), m_id);
+                    }
+
+                    ctx.callbacks
+                        .broadcast("workspace.tree", Value::Object(b_map))
+                        .await;
+                }
+                Err(e) => {
+                    warn!("rename_workspace failed: {}", e);
+                    ctx.health.mark_unhealthy(e.to_string());
+                    let err_res = json!({
+                        "id": id_val,
+                        "error": {
+                            "code": CODE_BACKEND_UNAVAILABLE,
+                            "message": format!("Workspace rename failed: {}", e),
+                        }
+                    });
+                    ctx.session.send_json(err_res).await?;
+                }
+            }
+        }
+
+        "mobile.workspace.close" => {
+            let mutation_id = params.get("mutation_id").cloned();
+            let ws_key = params
+                .get("workspace_key")
+                .or_else(|| params.get("workspace_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            match ctx.backend.close_workspace(ws_key).await {
+                Ok(success) => {
+                    ctx.health.mark_healthy();
+                    let mut res_map = Map::new();
+                    res_map.insert(
+                        "status".to_string(),
+                        Value::String(if success { "ok" } else { "error" }.to_string()),
+                    );
+                    res_map.insert("workspace_key".to_string(), Value::String(ws_key.to_string()));
+                    if let Some(m_id) = &mutation_id {
+                        res_map.insert("mutation_id".to_string(), m_id.clone());
+                    }
+
+                    let res = json!({
+                        "id": id_val,
+                        "result": Value::Object(res_map),
+                    });
+                    ctx.session.send_json(res).await?;
+
+                    // Broadcast workspace.tree event
+                    let mut b_map = Map::new();
+                    b_map.insert(
+                        "action".to_string(),
+                        Value::String("workspace_closed".to_string()),
+                    );
+                    b_map.insert("workspace_key".to_string(), Value::String(ws_key.to_string()));
+                    if let Some(m_id) = mutation_id {
+                        b_map.insert("mutation_id".to_string(), m_id);
+                    }
+
+                    ctx.callbacks
+                        .broadcast("workspace.tree", Value::Object(b_map))
+                        .await;
+                }
+                Err(e) => {
+                    warn!("close_workspace failed: {}", e);
+                    ctx.health.mark_unhealthy(e.to_string());
+                    let err_res = json!({
+                        "id": id_val,
+                        "error": {
+                            "code": CODE_BACKEND_UNAVAILABLE,
+                            "message": format!("Workspace close failed: {}", e),
+                        }
+                    });
+                    ctx.session.send_json(err_res).await?;
+                }
+            }
         }
 
         "mobile.surface.create" => {
@@ -287,6 +402,64 @@ pub async fn dispatch_rpc<'a>(
                         "error": {
                             "code": CODE_BACKEND_UNAVAILABLE,
                             "message": format!("Surface close failed: {}", e),
+                        }
+                    });
+                    ctx.session.send_json(err_res).await?;
+                }
+            }
+        }
+        "mobile.surface.rename" => {
+            let mutation_id = params.get("mutation_id").cloned();
+            let surf_id = params
+                .get("surface_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let title = params
+                .get("title")
+                .or_else(|| params.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let ws_key = params.get("workspace_key").and_then(|v| v.as_str());
+
+            match ctx.backend.rename_surface(surf_id, title, ws_key).await {
+                Ok(renamed_surf) => {
+                    ctx.health.mark_healthy();
+                    let mut res_map = Map::new();
+                    res_map.insert("status".to_string(), Value::String("ok".to_string()));
+                    res_map.insert("surface".to_string(), serde_json::to_value(&renamed_surf)?);
+                    if let Some(m_id) = &mutation_id {
+                        res_map.insert("mutation_id".to_string(), m_id.clone());
+                    }
+
+                    let res = json!({
+                        "id": id_val,
+                        "result": Value::Object(res_map),
+                    });
+                    ctx.session.send_json(res).await?;
+
+                    // Broadcast workspace.tree event
+                    let mut b_map = Map::new();
+                    b_map.insert(
+                        "action".to_string(),
+                        Value::String("surface_renamed".to_string()),
+                    );
+                    b_map.insert("surface".to_string(), serde_json::to_value(&renamed_surf)?);
+                    if let Some(m_id) = mutation_id {
+                        b_map.insert("mutation_id".to_string(), m_id);
+                    }
+
+                    ctx.callbacks
+                        .broadcast("workspace.tree", Value::Object(b_map))
+                        .await;
+                }
+                Err(e) => {
+                    warn!("rename_surface failed: {}", e);
+                    ctx.health.mark_unhealthy(e.to_string());
+                    let err_res = json!({
+                        "id": id_val,
+                        "error": {
+                            "code": CODE_BACKEND_UNAVAILABLE,
+                            "message": format!("Surface rename failed: {}", e),
                         }
                     });
                     ctx.session.send_json(err_res).await?;

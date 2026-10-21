@@ -18,6 +18,9 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +46,9 @@ fun LandscapeSidebar(
     onCloseSurface: (String) -> Unit,
     onNewWorkspace: () -> Unit,
     onNewSurface: () -> Unit,
+    onRenameWorkspace: ((WorkspaceInfo) -> Unit)? = null,
+    onCloseWorkspace: ((String) -> Unit)? = null,
+    onRenameSurface: ((SurfaceInfo) -> Unit)? = null,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -202,6 +208,50 @@ fun LandscapeSidebar(
                                             color = theme.onSurfaceVariant
                                         )
                                     }
+                                    var menuExpanded by remember { mutableStateOf(false) }
+                                    Box {
+                                        IconButton(
+                                            onClick = { menuExpanded = true },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = stringResource(R.string.menu_rename),
+                                                tint = theme.onSurfaceVariant,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = menuExpanded,
+                                            onDismissRequest = { menuExpanded = false },
+                                            modifier = Modifier.background(theme.containerBg)
+                                        ) {
+                                            if (onRenameWorkspace != null) {
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.menu_rename), color = theme.onContainer) },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.Edit, contentDescription = null, tint = theme.onContainer, modifier = Modifier.size(16.dp))
+                                                    },
+                                                    onClick = {
+                                                        menuExpanded = false
+                                                        onRenameWorkspace(ws)
+                                                    }
+                                                )
+                                            }
+                                            if (onCloseWorkspace != null) {
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.menu_delete), color = theme.accentRed) },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.Delete, contentDescription = null, tint = theme.accentRed, modifier = Modifier.size(16.dp))
+                                                    },
+                                                    onClick = {
+                                                        menuExpanded = false
+                                                        onCloseWorkspace(ws.stableKey)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -267,16 +317,45 @@ fun LandscapeSidebar(
                                         )
                                     }
 
-                                    if (activeSurfaces.size > 1) {
+                                    var menuExpanded by remember { mutableStateOf(false) }
+                                    Box {
                                         IconButton(
-                                            onClick = { onCloseSurface(surf.id) },
+                                            onClick = { menuExpanded = true },
                                             modifier = Modifier.size(24.dp)
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = stringResource(R.string.sidebar_close_tab),
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = stringResource(R.string.menu_rename),
                                                 tint = theme.onSurfaceVariant,
-                                                modifier = Modifier.size(14.dp)
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = menuExpanded,
+                                            onDismissRequest = { menuExpanded = false },
+                                            modifier = Modifier.background(theme.containerBg)
+                                        ) {
+                                            if (onRenameSurface != null) {
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.menu_rename), color = theme.onContainer) },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.Edit, contentDescription = null, tint = theme.onContainer, modifier = Modifier.size(16.dp))
+                                                    },
+                                                    onClick = {
+                                                        menuExpanded = false
+                                                        onRenameSurface(surf)
+                                                    }
+                                                )
+                                            }
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.menu_close), color = theme.accentRed) },
+                                                leadingIcon = {
+                                                    Icon(Icons.Default.Close, contentDescription = null, tint = theme.accentRed, modifier = Modifier.size(16.dp))
+                                                },
+                                                onClick = {
+                                                    menuExpanded = false
+                                                    onCloseSurface(surf.id)
+                                                }
                                             )
                                         }
                                     }

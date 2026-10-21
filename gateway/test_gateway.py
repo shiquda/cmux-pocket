@@ -267,6 +267,62 @@ class TestCmuxGatewayIntegration(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(close_event.get("data", {}).get("action"), "surface_closed")
             self.assertEqual(close_event.get("data", {}).get("mutation_id"), "mut-close-9999")
 
+            # 4. Workspace rename with mutation_id
+            await ws.send(json.dumps({
+                "id": "req-rename-ws",
+                "method": "mobile.workspace.rename",
+                "params": {
+                    "workspace_key": ws_key,
+                    "title": "mut-ws-renamed",
+                    "mutation_id": "mut-ws-rename-777",
+                }
+            }))
+            rename_ws_res = json.loads(await ws.recv())
+            self.assertEqual(rename_ws_res.get("id"), "req-rename-ws")
+            self.assertEqual(rename_ws_res.get("result", {}).get("workspace", {}).get("name"), "mut-ws-renamed")
+
+            rename_ws_event = json.loads(await ws.recv())
+            self.assertEqual(rename_ws_event.get("event"), "workspace.tree")
+            self.assertEqual(rename_ws_event.get("data", {}).get("action"), "workspace_renamed")
+            self.assertEqual(rename_ws_event.get("data", {}).get("mutation_id"), "mut-ws-rename-777")
+
+            # 5. Surface rename with mutation_id
+            await ws.send(json.dumps({
+                "id": "req-rename-surf",
+                "method": "mobile.surface.rename",
+                "params": {
+                    "surface_id": "surf-main-1",
+                    "title": "mut-surf-renamed",
+                    "mutation_id": "mut-surf-rename-888",
+                }
+            }))
+            rename_surf_res = json.loads(await ws.recv())
+            self.assertEqual(rename_surf_res.get("id"), "req-rename-surf")
+            self.assertEqual(rename_surf_res.get("result", {}).get("surface", {}).get("title"), "mut-surf-renamed")
+
+            rename_surf_event = json.loads(await ws.recv())
+            self.assertEqual(rename_surf_event.get("event"), "workspace.tree")
+            self.assertEqual(rename_surf_event.get("data", {}).get("action"), "surface_renamed")
+            self.assertEqual(rename_surf_event.get("data", {}).get("mutation_id"), "mut-surf-rename-888")
+
+            # 6. Workspace close with mutation_id
+            await ws.send(json.dumps({
+                "id": "req-close-ws",
+                "method": "mobile.workspace.close",
+                "params": {
+                    "workspace_key": ws_key,
+                    "mutation_id": "mut-ws-close-999",
+                }
+            }))
+            close_ws_res = json.loads(await ws.recv())
+            self.assertEqual(close_ws_res.get("id"), "req-close-ws")
+            self.assertEqual(close_ws_res.get("result", {}).get("status"), "ok")
+
+            close_ws_event = json.loads(await ws.recv())
+            self.assertEqual(close_ws_event.get("event"), "workspace.tree")
+            self.assertEqual(close_ws_event.get("data", {}).get("action"), "workspace_closed")
+            self.assertEqual(close_ws_event.get("data", {}).get("mutation_id"), "mut-ws-close-999")
+
     async def test_ack_before_slow_snapshot(self):
         async with websockets.connect(self.ws_url) as ws:
             await ws.send(json.dumps({"type": "auth", "token": self.token}))

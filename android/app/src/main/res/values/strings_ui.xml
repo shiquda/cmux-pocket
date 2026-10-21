@@ -38,6 +38,20 @@
     <string name="dlg_new_surface_add">Add Tab</string>
     <string name="dlg_new_surface_cancel">Cancel</string>
 
+    <!-- Rename Workspace and Surface Dialogs -->
+    <string name="dlg_rename_workspace_title">Rename Workspace</string>
+    <string name="dlg_rename_workspace_label">Workspace Name</string>
+    <string name="dlg_rename_workspace_placeholder">e.g. backend-api, my-feature</string>
+    <string name="dlg_rename_workspace_confirm">Rename</string>
+    <string name="dlg_rename_surface_title">Rename Terminal Tab</string>
+    <string name="dlg_rename_surface_label">Tab Title</string>
+    <string name="dlg_rename_surface_placeholder">e.g. zsh, logs, tests</string>
+    <string name="dlg_rename_surface_confirm">Rename</string>
+    <string name="dlg_rename_cancel">Cancel</string>
+    <string name="menu_rename">Rename</string>
+    <string name="menu_delete">Delete</string>
+    <string name="menu_close">Close</string>
+
     <!-- Computer Keyboard Panel -->
     <string name="panel_tab_qwerty">QWERTY</string>
     <string name="panel_tab_special">Special</string>
