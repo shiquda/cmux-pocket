@@ -4,22 +4,17 @@ import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.transport.ConnectionStatus
 import app.cmuxpocket.ui.*
-import android.app.PendingIntent
 import android.app.PictureInPictureParams
-import android.app.RemoteAction
 import android.content.res.Configuration
 import android.content.Context
 import android.os.Bundle
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.drawable.Icon
 import android.os.Build
 import android.util.Log
 import android.util.Rational
 import android.view.inputmethod.InputMethodManager
-import java.lang.ref.WeakReference
-import kotlin.math.roundToInt
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -67,7 +62,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        pipActivity = WeakReference(this)
         ContextCompat.startForegroundService(
             this,
             Intent(this, ConnectionKeepAliveService::class.java)
@@ -134,13 +128,6 @@ class MainActivity : ComponentActivity() {
         inPictureInPicture = isInPictureInPictureMode
     }
 
-    override fun onDestroy() {
-        if (pipActivity?.get() === this) {
-            pipActivity = null
-        }
-        super.onDestroy()
-    }
-
     private fun syncFloatingWindowSettings() {
         floatingWindowEnabled = settingsManager.floatingWindowEnabled
         floatingWindowAutoEnter = settingsManager.floatingWindowAutoEnter
@@ -170,8 +157,7 @@ class MainActivity : ComponentActivity() {
     private fun buildPictureInPictureParams(): PictureInPictureParams {
         val ratio = settingsManager.pipAspectRatio
         val builder = PictureInPictureParams.Builder()
-            .setAspectRatio(Rational((ratio * 1000).roundToInt(), 1000))
-            .setActions(listOf(buildPipSizeAction(ratio)))
+            .setAspectRatio(Rational((ratio * 1000).toInt(), 1000))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setAutoEnterEnabled(
                 floatingWindowEnabled &&
@@ -183,42 +169,12 @@ class MainActivity : ComponentActivity() {
         return builder.build()
     }
 
-    private fun buildPipSizeAction(currentRatio: Float): RemoteAction {
-        val next = PipSizePreset.nextAfter(currentRatio)
-        val intent = Intent(this, PipActionReceiver::class.java)
-            .setAction(PipActionReceiver.ACTION_CYCLE_SIZE)
-        val pendingIntent = PendingIntent.getBroadcast(
-            this,
-            0,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return RemoteAction(
-            Icon.createWithResource(this, R.drawable.ic_pip_size),
-            getString(R.string.floating_window_size_action),
-            getString(R.string.floating_window_size_action_desc, next.label),
-            pendingIntent
-        )
-    }
-
     private fun updatePictureInPictureParams() {
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
         runCatching { setPictureInPictureParams(buildPictureInPictureParams()) }
             .onFailure { Log.w("MainActivity", "Unable to update picture-in-picture params", it) }
     }
 
-    internal fun onPipSizeChanged() {
-        updatePictureInPictureParams()
-    }
-
-    companion object {
-        private var pipActivity: WeakReference<MainActivity>? = null
-
-        fun notifyPipSizeChanged() {
-            val activity = pipActivity?.get() ?: return
-            activity.runOnUiThread { activity.onPipSizeChanged() }
-        }
-    }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

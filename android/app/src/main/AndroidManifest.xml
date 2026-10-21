@@ -51,9 +51,6 @@
             android:name=".ConnectionKeepAliveService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
-        <receiver
-            android:name=".PipActionReceiver"
-            android:exported="false" />
     </application>
 
 </manifest>

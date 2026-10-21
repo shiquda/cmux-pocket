@@ -2,42 +2,6 @@ package app.cmuxpocket.ui
 
 import app.cmuxpocket.engine.TerminalCell
 
-/** Aspect-ratio presets offered for the floating terminal window. */
-enum class PipSizePreset(
-    val label: String,
-    val aspectWidth: Int,
-    val aspectHeight: Int
-) {
-    SQUARE("1:1", 1, 1),
-    CLASSIC("4:3", 4, 3),
-    PHOTO("3:2", 3, 2),
-    STANDARD("16:9", 16, 9),
-    CINEMA("2:1", 2, 1),
-    WIDE("2.39:1", 239, 100);
-
-    val ratio: Float get() = aspectWidth.toFloat() / aspectHeight
-    val ratioLabel: String get() = label
-
-    fun next(): PipSizePreset = entries[(ordinal + 1) % entries.size]
-
-    companion object {
-        /** Android rejects picture-in-picture ratios outside 1/2.39 … 2.39. */
-        const val MIN_ASPECT_RATIO = 0.6f
-        const val MAX_ASPECT_RATIO = 2.39f
-        const val DEFAULT_ASPECT_RATIO = 1f
-
-        fun fromStorage(value: String?): PipSizePreset =
-            entries.firstOrNull { it.name == value } ?: SQUARE
-
-        fun fromRatio(ratio: Float): PipSizePreset? =
-            entries.firstOrNull { kotlin.math.abs(it.ratio - ratio) < 0.01f }
-
-        /** Next preset when cycling from an arbitrary custom ratio. */
-        fun nextAfter(ratio: Float): PipSizePreset =
-            entries.firstOrNull { it.ratio > ratio + 0.01f } ?: SQUARE
-    }
-}
-
 /**
  * Wraps render-grid rows into visual lines that fit a fixed number of columns.
  * Wide (double-width) cells are never split across two lines, and a break prefers

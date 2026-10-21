@@ -222,9 +222,10 @@ fun PipWindowPreview(
 ) {
     val theme = CmuxTheme.colors
     val previewState = remember { pipPreviewState() }
-    val preset = PipSizePreset.fromRatio(aspectRatio)
-    val ratioLabel = preset?.ratioLabel
-        ?: stringResource(R.string.settings_floating_window_custom)
+    val ratioLabel = stringResource(
+        R.string.settings_floating_window_aspect_value,
+        aspectRatio
+    )
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(

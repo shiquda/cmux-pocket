@@ -2048,29 +2048,6 @@ fun FloatingWindowSection(
 
                 HorizontalDivider(color = theme.divider)
 
-                Text(
-                    stringResource(R.string.settings_floating_window_shape),
-                    fontSize = 12.sp,
-                    color = theme.onSurface,
-                    fontWeight = FontWeight.SemiBold
-                )
-                val selectedPreset = PipSizePreset.fromRatio(aspectRatio)
-                PipSizePreset.entries.chunked(3).forEach { rowPresets ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        rowPresets.forEach { preset ->
-                            FilterChip(
-                                selected = preset == selectedPreset,
-                                onClick = { onAspectRatioChange(preset.ratio) },
-                                label = { Text(preset.label, fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                }
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

@@ -1,56 +1,10 @@
 package app.cmuxpocket.ui
 
 import app.cmuxpocket.engine.TerminalCell
-import app.cmuxpocket.ui.PipSizePreset
 import app.cmuxpocket.ui.tailPipLines
 import app.cmuxpocket.ui.wrapPipGrid
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
-
-class PipSizePresetTest {
-
-    @Test
-    fun presetsStayInsideAndroidPipAspectBounds() {
-        for (preset in PipSizePreset.entries) {
-            val ratio = preset.aspectWidth.toFloat() / preset.aspectHeight
-            assertTrue("${preset.name} ratio $ratio is too narrow", ratio >= 1f / 2.39f)
-            assertTrue("${preset.name} ratio $ratio is too wide", ratio <= 2.39f)
-        }
-    }
-
-    @Test
-    fun nextCyclesThroughAllPresets() {
-        assertEquals(PipSizePreset.CLASSIC, PipSizePreset.SQUARE.next())
-        assertEquals(PipSizePreset.PHOTO, PipSizePreset.CLASSIC.next())
-        assertEquals(PipSizePreset.STANDARD, PipSizePreset.PHOTO.next())
-        assertEquals(PipSizePreset.CINEMA, PipSizePreset.STANDARD.next())
-        assertEquals(PipSizePreset.WIDE, PipSizePreset.CINEMA.next())
-        assertEquals(PipSizePreset.SQUARE, PipSizePreset.WIDE.next())
-    }
-
-    @Test
-    fun storageFallsBackToSquareForUnknownValues() {
-        assertEquals(PipSizePreset.SQUARE, PipSizePreset.fromStorage(null))
-        assertEquals(PipSizePreset.SQUARE, PipSizePreset.fromStorage("future-preset"))
-        assertEquals(PipSizePreset.WIDE, PipSizePreset.fromStorage("WIDE"))
-    }
-
-    @Test
-    fun customRatiosMapToTheMatchingPreset() {
-        assertEquals(PipSizePreset.SQUARE, PipSizePreset.fromRatio(1f))
-        assertEquals(PipSizePreset.STANDARD, PipSizePreset.fromRatio(16f / 9f))
-        assertEquals(null, PipSizePreset.fromRatio(1.62f))
-    }
-
-    @Test
-    fun cyclingFromACustomRatioPicksTheNextPreset() {
-        assertEquals(PipSizePreset.PHOTO, PipSizePreset.nextAfter(1.4f))
-        assertEquals(PipSizePreset.CINEMA, PipSizePreset.nextAfter(16f / 9f))
-        assertEquals(PipSizePreset.WIDE, PipSizePreset.nextAfter(2.2f))
-        assertEquals(PipSizePreset.SQUARE, PipSizePreset.nextAfter(2.39f))
-    }
-}
 
 class PipTailFormatterTest {
 
