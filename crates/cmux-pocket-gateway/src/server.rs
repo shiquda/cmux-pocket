@@ -383,12 +383,10 @@ impl CmuxGateway {
         // Cleanup session. Release the viewport report before waiting on the
         // writer: a half-dead socket must not keep the Mac grid constrained,
         // and the release itself is bounded so cleanup cannot hang here.
+        // Entries are removed from the lease maps before the first await, so
+        // this call cannot strand state even if one host clear is slow.
         session.close();
-        let _ = timeout(
-            Duration::from_secs(3),
-            self.viewport_leases.release_session(&session_id),
-        )
-        .await;
+        self.viewport_leases.release_session(&session_id).await;
         let _ = timeout(Duration::from_secs(2), writer_handle).await;
 
         let mut guard = self.clients.lock();

@@ -71,8 +71,6 @@ struct LeaseTarget {
 }
 
 struct Lease {
-    key: String,
-    session_id: String,
     client_id: String,
     surface_id: String,
     target: Mutex<LeaseTarget>,
@@ -159,20 +157,22 @@ impl ViewportLeaseManager {
                 return Ok(stale_report_outcome(columns, rows, generation));
             }
             // An identical heartbeat only proves liveness; the renewal task
-            // owns host calls, so it must not add a synchronous apply.
+            // owns host calls, so it must not add a synchronous apply. It also
+            // carries no new authoritative frame: the applied target is the
+            // requested grid, which the host may have clamped or reduced by
+            // another client, so it must not be reported as effective.
             if generation == target.generation
                 && columns == target.columns
                 && rows == target.rows
                 && *lease.applied.lock() == Some(*target)
             {
-                let applied = *lease.applied.lock();
                 return Ok(ViewportReportOutcome {
                     accepted: true,
                     pending: false,
                     requested_columns: columns,
                     requested_rows: rows,
-                    effective_columns: applied.map(|t| t.columns),
-                    effective_rows: applied.map(|t| t.rows),
+                    effective_columns: None,
+                    effective_rows: None,
                     generation,
                 });
             }
@@ -278,65 +278,71 @@ impl ViewportLeaseManager {
         })
     }
 
-    /// Drops every lease owned by a closed WebSocket session.
+    /// Drops every lease and generation fence owned by a closed WebSocket
+    /// session. The maps are emptied before any await so a slow host call can
+    /// never leave stale entries behind after the connection is gone.
     pub async fn release_session(&self, session_id: &str) {
-        let keys: Vec<String> = {
-            let leases = self.inner.leases.lock();
-            leases
-                .values()
-                .filter(|lease| lease.session_id == session_id)
-                .map(|lease| lease.key.clone())
-                .collect()
+        let prefix = format!("{session_id}\u{1f}");
+        let leases: Vec<Arc<Lease>> = {
+            let mut leases = self.inner.leases.lock();
+            let keys: Vec<String> = leases
+                .keys()
+                .filter(|key| key.starts_with(&prefix))
+                .cloned()
+                .collect();
+            keys.iter().filter_map(|key| leases.remove(key)).collect()
         };
-        for key in &keys {
-            let lease = { self.inner.leases.lock().remove(key) };
-            if let Some(lease) = lease {
-                stop_task(&lease).await;
-                let generation = lease.target.lock().generation;
-                let result = self
-                    .with_surface_lock(&lease.surface_id, async {
-                        self.inner
-                            .backend
-                            .clear_viewport_report(&lease.surface_id, &lease.client_id, generation)
-                            .await
-                    })
-                    .await;
-                if let Err(e) = result {
-                    warn!(
-                        surface = %lease.surface_id,
-                        "failed to clear viewport report on session close: {e}"
-                    );
-                }
+        self.inner
+            .generation_floors
+            .lock()
+            .retain(|key, _| !key.starts_with(&prefix));
+        for lease in leases {
+            stop_task(&lease).await;
+            let generation = lease.target.lock().generation;
+            let result = timeout(
+                Duration::from_secs(2),
+                self.with_surface_lock(&lease.surface_id, async {
+                    self.inner
+                        .backend
+                        .clear_viewport_report(&lease.surface_id, &lease.client_id, generation)
+                        .await
+                }),
+            )
+            .await;
+            match result {
+                Ok(Err(e)) => warn!(
+                    surface = %lease.surface_id,
+                    "failed to clear viewport report on session close: {e}"
+                ),
+                Err(_) => warn!(
+                    surface = %lease.surface_id,
+                    "timed out clearing viewport report on session close"
+                ),
+                Ok(Ok(())) => {}
             }
-        }
-        let mut floors = self.inner.generation_floors.lock();
-        for key in keys {
-            floors.remove(&key);
         }
     }
 
     /// Best-effort release of all leases during Gateway shutdown.
     pub async fn shutdown(&self) {
-        let keys: Vec<String> = {
-            let leases = self.inner.leases.lock();
-            leases.keys().cloned().collect()
+        let leases: Vec<Arc<Lease>> = {
+            let mut leases = self.inner.leases.lock();
+            leases.drain().map(|(_, lease)| lease).collect()
         };
-        for key in keys {
-            let lease = { self.inner.leases.lock().remove(&key) };
-            if let Some(lease) = lease {
-                stop_task(&lease).await;
-                let generation = lease.target.lock().generation;
-                let _ = timeout(
-                    Duration::from_secs(2),
-                    self.with_surface_lock(&lease.surface_id, async {
-                        self.inner
-                            .backend
-                            .clear_viewport_report(&lease.surface_id, &lease.client_id, generation)
-                            .await
-                    }),
-                )
-                .await;
-            }
+        self.inner.generation_floors.lock().clear();
+        for lease in leases {
+            stop_task(&lease).await;
+            let generation = lease.target.lock().generation;
+            let _ = timeout(
+                Duration::from_secs(2),
+                self.with_surface_lock(&lease.surface_id, async {
+                    self.inner
+                        .backend
+                        .clear_viewport_report(&lease.surface_id, &lease.client_id, generation)
+                        .await
+                }),
+            )
+            .await;
         }
     }
 
@@ -364,8 +370,6 @@ impl ViewportLeaseManager {
         }
 
         let lease = Arc::new(Lease {
-            key: key.clone(),
-            session_id: session_id.to_string(),
             client_id: client_id.to_string(),
             surface_id: surface_id.to_string(),
             target: Mutex::new(LeaseTarget {
@@ -555,5 +559,38 @@ async fn run_lease_loop(inner: Arc<Inner>, lease: Arc<Lease>) {
                 *lease.applied.lock() = None;
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cmux_pocket_cmux::MockCmuxBackend;
+
+    #[tokio::test]
+    async fn release_session_drops_its_generation_floors_before_clearing() {
+        let backend = Arc::new(MockCmuxBackend::new());
+        let leases = ViewportLeaseManager::new(backend.clone(), SurfaceLockManager::new());
+
+        leases
+            .report("session-a", "phone-a", "surf-main-1", 44, 30, 10)
+            .await
+            .unwrap();
+        leases
+            .clear("session-a", "phone-a", "surf-main-1", 11)
+            .await
+            .unwrap();
+        leases
+            .report("session-b", "phone-b", "surf-main-1", 50, 30, 10)
+            .await
+            .unwrap();
+        assert_eq!(leases.inner.generation_floors.lock().len(), 1);
+
+        leases.release_session("session-a").await;
+
+        // The cleared lease left a fence; closing the connection must drop it
+        // instead of keeping a per-connection tombstone for the process.
+        assert!(leases.inner.generation_floors.lock().is_empty());
+        assert_eq!(leases.inner.leases.lock().len(), 1);
     }
 }

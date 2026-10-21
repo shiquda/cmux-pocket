@@ -67,10 +67,16 @@ pretends to know an uncaptured laptop size.
 Every report carries a monotonically increasing generation. The Gateway fences
 reports and clears by generation per `(session, client, surface)`, so an
 in-flight report captured before a newer one cannot land afterwards. The highest
-released generation is retained for the session, so a delayed replay from
-before a clear cannot recreate the lease. A clear older than the active lease
-or than that high-water mark returns `"cleared": false` and `"stale": true`
-instead of removing a newer report.
+released generation is retained for the life of the WebSocket session, so a
+delayed replay from before a clear cannot recreate the lease; ending the
+connection drops those fences along with the session's leases. A clear older
+than the active lease or than that high-water mark returns `"cleared": false`
+and `"stale": true` instead of removing a newer report.
+
+An identical heartbeat (same generation and target) only proves the phone is
+alive. It reports no `effective_columns`/`effective_rows`: the applied target is
+the requested grid, which the host may have clamped or another client may have
+reduced. Effective geometry appears only in responses backed by a host frame.
 
 ## Protocol surface
 

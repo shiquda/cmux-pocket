@@ -169,6 +169,38 @@ async fn a_stale_clear_reports_not_cleared_and_keeps_the_newer_lease() {
     assert_eq!((snapshot.columns, snapshot.rows), (44, 30));
 }
 
+#[tokio::test]
+async fn a_heartbeat_does_not_turn_the_request_into_effective_geometry() {
+    let (backend, leases) = manager();
+
+    // A is already constraining the shared surface; B asks for more.
+    leases
+        .report("session-a", "phone-a", "surf-main-1", 39, 25, 10)
+        .await
+        .unwrap();
+    let first = leases
+        .report("session-b", "phone-b", "surf-main-1", 80, 40, 10)
+        .await
+        .unwrap();
+    assert_eq!(first.effective_columns, Some(39));
+    assert_eq!(first.effective_rows, Some(25));
+    let snapshot = backend.get_snapshot("surf-main-1", 0).await.unwrap();
+    assert_eq!((snapshot.columns, snapshot.rows), (39, 25));
+
+    // The identical heartbeat only proves liveness; it has no new frame, so
+    // it must not present B's 80x40 request as the effective grid.
+    let heartbeat = leases
+        .report("session-b", "phone-b", "surf-main-1", 80, 40, 10)
+        .await
+        .unwrap();
+    assert!(heartbeat.accepted);
+    assert!(!heartbeat.pending);
+    assert_eq!(heartbeat.effective_columns, None);
+    assert_eq!(heartbeat.effective_rows, None);
+    let snapshot = backend.get_snapshot("surf-main-1", 0).await.unwrap();
+    assert_eq!((snapshot.columns, snapshot.rows), (39, 25));
+}
+
 #[tokio::test(start_paused = true)]
 async fn renewals_stop_when_the_client_stops_heartbeating() {
     let (backend, leases) = manager();
