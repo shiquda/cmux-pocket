@@ -36,6 +36,7 @@ extracts the section for the pushed tag while publishing, and
 
 ### Fixed
 
+- Light and dark mode legibility pass: the status and navigation bars now follow the palette instead of staying black in light mode, terminal-palette swatch labels pick ink from the swatch's own luminance, empty terminal states render on the app background instead of on the dark terminal well, and accent chips, diagnostics logs, update and compatibility badges, gateway warnings, and the settings footer use AA-contrast ink in both modes.
 - Pending RPC requests now time out when the Gateway becomes unreachable, rejected credentials and DNS/TLS failures are reported distinctly, and queued messages from a previous socket are ignored.
 - A long-press on the terminal shows exactly one contextual bubble (Copy, Paste, Interrupt, Clear) with drag handles, replacing the duplicate Copy pill.
 - Settings content is no longer squeezed by the section rail, and palette swatch labels ellipsise instead of being cut mid-word.

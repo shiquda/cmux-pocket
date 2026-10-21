@@ -112,7 +112,7 @@ fun ImportPreviewDialog(
                                 Icon(
                                     imageVector = Icons.Default.Warning,
                                     contentDescription = null,
-                                    tint = theme.accentOrange,
+                                    tint = theme.accentOrangeInk,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -120,7 +120,7 @@ fun ImportPreviewDialog(
                                     text = stringResource(R.string.dlg_import_existing_found),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = theme.accentOrange
+                                    color = theme.accentOrangeInk
                                 )
                             }
                             Text(

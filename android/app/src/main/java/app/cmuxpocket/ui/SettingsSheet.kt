@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
@@ -607,7 +608,7 @@ private fun SettingsListFooter(
             text = stringResource(R.string.settings_footer_version, currentVersion),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = theme.onSurfaceVariant.copy(alpha = 0.85f)
+            color = theme.onSurfaceVariant
         )
         TextButton(
             onClick = onOpenSourceClick,
@@ -623,7 +624,7 @@ private fun SettingsListFooter(
         Text(
             text = stringResource(R.string.settings_footer_copyright),
             fontSize = 10.sp,
-            color = theme.onSurfaceVariant.copy(alpha = 0.5f)
+            color = theme.onSurfaceVariant
         )
     }
 }
@@ -1159,22 +1160,30 @@ fun DisplaySection(
             ) {
                 AVAILABLE_THEMES.forEach { opt ->
                     val isSelected = opt.hexColor == selectedThemeHex
-                    val borderColor = if (isSelected) theme.primary else Color.Transparent
+                    val swatchColor = Color(android.graphics.Color.parseColor(opt.hexColor))
+                    val borderColor = if (isSelected) theme.primary else theme.controlBorder
+                    // The swatch fill is chosen at runtime (user's terminal palette), so the label
+                    // ink must follow that fill's luminance rather than the app theme.
+                    val labelColor = if (swatchColor.luminance() > 0.45f) {
+                        theme.inkOnLightFill
+                    } else {
+                        theme.inkOnDarkFill
+                    }
 
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(android.graphics.Color.parseColor(opt.hexColor)))
-                            .border(2.dp, borderColor, RoundedCornerShape(6.dp))
+                            .background(swatchColor)
+                            .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(6.dp))
                             .clickable { onThemeChange(opt.hexColor) },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = stringResource(opt.nameRes),
                             fontSize = 11.sp,
-                            color = theme.onPrimary,
+                            color = labelColor,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1324,7 +1333,7 @@ fun ReleaseSection(
                                 text = stringResource(R.string.settings_update_available_badge),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = theme.accentOrange
+                                color = theme.accentOrangeInk
                             )
                         }
                     } else {
@@ -1600,7 +1609,7 @@ fun StorageSection(
                     SettingsIconTile(
                         icon = Icons.Default.CleaningServices,
                         container = theme.accentRed.copy(alpha = 0.16f),
-                        tint = theme.accentRed
+                        tint = theme.accentRedInk
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
@@ -1682,8 +1691,8 @@ fun GatewayVersionCard(
                 },
                 valueColor = when {
                     host == null -> theme.onSurfaceVariant
-                    host.supportsWake -> theme.accentGreen
-                    else -> theme.accentOrange
+                    host.supportsWake -> theme.accentGreenInk
+                    else -> theme.accentOrangeInk
                 },
             )
 
@@ -1691,7 +1700,7 @@ fun GatewayVersionCard(
                 GatewayCompatibility.GATEWAY_OUTDATED -> Text(
                     stringResource(R.string.conn_version_gateway_outdated_body),
                     fontSize = 11.sp,
-                    color = theme.accentOrange,
+                    color = theme.accentOrangeInk,
                 )
                 GatewayCompatibility.INCOMPATIBLE -> Text(
                     stringResource(
@@ -1700,12 +1709,12 @@ fun GatewayVersionCard(
                         GatewayVersions.EXPECTED_PROTOCOL_MAJOR,
                     ),
                     fontSize = 11.sp,
-                    color = theme.accentRed,
+                    color = theme.accentRedInk,
                 )
                 GatewayCompatibility.CLIENT_OUTDATED -> Text(
                     stringResource(R.string.conn_version_client_outdated_body),
                     fontSize = 11.sp,
-                    color = theme.accentBlue,
+                    color = theme.accentBlueInk,
                 )
                 else -> Unit
             }
@@ -1821,16 +1830,21 @@ private fun GatewayVersionRow(
 @Composable
 private fun CompatibilityBadge(compatibility: GatewayCompatibility) {
     val theme = CmuxTheme.colors
-    val (label, color) = when (compatibility) {
-        GatewayCompatibility.MATCHED -> stringResource(R.string.conn_version_match) to theme.accentGreen
-        GatewayCompatibility.GATEWAY_OUTDATED -> stringResource(R.string.conn_version_outdated_badge) to theme.accentOrange
-        GatewayCompatibility.CLIENT_OUTDATED -> stringResource(R.string.conn_version_update_badge) to theme.accentBlue
-        GatewayCompatibility.INCOMPATIBLE -> stringResource(R.string.conn_version_incompatible_badge) to theme.accentRed
-        GatewayCompatibility.UNKNOWN -> stringResource(R.string.conn_version_unknown) to theme.onSurfaceVariant
+    val (label, color, ink) = when (compatibility) {
+        GatewayCompatibility.MATCHED ->
+            Triple(stringResource(R.string.conn_version_match), theme.accentGreen, theme.accentGreenInk)
+        GatewayCompatibility.GATEWAY_OUTDATED ->
+            Triple(stringResource(R.string.conn_version_outdated_badge), theme.accentOrange, theme.accentOrangeInk)
+        GatewayCompatibility.CLIENT_OUTDATED ->
+            Triple(stringResource(R.string.conn_version_update_badge), theme.accentBlue, theme.accentBlueInk)
+        GatewayCompatibility.INCOMPATIBLE ->
+            Triple(stringResource(R.string.conn_version_incompatible_badge), theme.accentRed, theme.accentRedInk)
+        GatewayCompatibility.UNKNOWN ->
+            Triple(stringResource(R.string.conn_version_unknown), theme.onSurfaceVariant, theme.onSurfaceVariant)
     }
     Surface(
         color = color.copy(alpha = 0.16f),
-        contentColor = color,
+        contentColor = ink,
         shape = RoundedCornerShape(6.dp),
     ) {
         Text(

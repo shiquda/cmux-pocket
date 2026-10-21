@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,6 +64,7 @@ fun SessionSurfaceDrawer(
         onDismissRequest = onDismissRequest,
         containerColor = theme.containerBg,
         contentColor = theme.onContainer,
+        scrimColor = theme.scrim,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -80,68 +82,57 @@ fun SessionSurfaceDrawer(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            // Header: Title & Close / Settings
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
+            // Header: title row (actions) + full-width host summary, so a long Tailscale host
+            // name never squeezes the buttons.
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     Text(
                         text = stringResource(R.string.drawer_title),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = theme.onContainer
-                    )
-                    Text(
-                        text = stringResource(R.string.drawer_host_summary, hostLabel, workspaces.size),
-                        fontSize = 12.sp,
-                        color = theme.onContainerMuted,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Settings icon button
-                    IconButton(
-                        onClick = {
-                            onDismissRequest()
-                            onSettingsClick()
-                        },
+                        color = theme.onContainer,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(theme.controlBg)
+                            .weight(1f)
+                            .padding(end = 8.dp)
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
+                        // Settings icon button
+                        CircleIconButton(
+                            icon = Icons.Default.Settings,
                             contentDescription = stringResource(R.string.kb_settings),
-                            tint = theme.onContainer,
-                            modifier = Modifier.size(16.dp)
+                            onClick = {
+                                onDismissRequest()
+                                onSettingsClick()
+                            }
                         )
-                    }
 
-                    // Close icon button
-                    IconButton(
-                        onClick = onDismissRequest,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(theme.controlBg)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
+                        // Close icon button
+                        CircleIconButton(
+                            icon = Icons.Default.Close,
                             contentDescription = stringResource(R.string.main_close),
-                            tint = theme.onContainer,
-                            modifier = Modifier.size(16.dp)
+                            onClick = onDismissRequest
                         )
                     }
                 }
+
+                Text(
+                    text = stringResource(R.string.drawer_host_summary, hostLabel, workspaces.size),
+                    fontSize = 12.sp,
+                    color = theme.onContainerMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 14.dp)
+                )
             }
 
             LazyColumn(
@@ -327,7 +318,7 @@ private fun SurfaceCard(
                             text = stringResource(R.string.drawer_state_working),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = theme.accentOrange
+                            color = theme.accentOrangeInk
                         )
                     }
                 } else if (surface.dead) {
@@ -341,7 +332,7 @@ private fun SurfaceCard(
                             text = stringResource(R.string.drawer_state_dead),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = theme.accentRed
+                            color = theme.accentRedInk
                         )
                     }
                 } else {
@@ -484,7 +475,7 @@ private fun WorkspaceCard(
             Icon(
                 imageVector = Icons.Default.Folder,
                 contentDescription = null,
-                tint = if (isCurrent) theme.accentGreen else theme.onContainerMuted,
+                tint = if (isCurrent) theme.accentGreenInk else theme.onContainerMuted,
                 modifier = Modifier.size(20.dp)
             )
 
@@ -518,7 +509,7 @@ private fun WorkspaceCard(
                 Text(
                     text = "● " + stringResource(R.string.drawer_connected),
                     fontSize = 12.sp,
-                    color = theme.accentGreen,
+                    color = theme.accentGreenInk,
                     fontWeight = FontWeight.Medium
                 )
             } else {

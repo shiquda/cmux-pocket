@@ -118,7 +118,7 @@ fun LandscapeSidebar(
                             ConnectionStatus.CONNECTED -> theme.accentGreen
                             ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> theme.accentOrange
                             ConnectionStatus.ERROR -> theme.accentRed
-                            ConnectionStatus.DISCONNECTED -> theme.onSurfaceVariant
+                            ConnectionStatus.DISCONNECTED -> theme.accentRed
                         }
                         Box(
                             modifier = Modifier
@@ -304,7 +304,7 @@ fun LandscapeSidebar(
                                     // Agent Attention / Activity Dot
                                     if (surf.attention || surf.agentState != null) {
                                         val dotColor = when (surf.agentState) {
-                                            "working" -> theme.primary
+                                            "working" -> theme.accentOrange
                                             "needs_input" -> theme.accentOrange
                                             "done" -> theme.accentGreen
                                             else -> theme.accentRed
@@ -390,7 +390,7 @@ fun LandscapeSidebar(
 
                                     if (surf.attention || surf.agentState != null) {
                                         val dotColor = when (surf.agentState) {
-                                            "working" -> theme.primary
+                                            "working" -> theme.accentOrange
                                             "needs_input" -> theme.accentOrange
                                             "done" -> theme.accentGreen
                                             else -> theme.accentRed
