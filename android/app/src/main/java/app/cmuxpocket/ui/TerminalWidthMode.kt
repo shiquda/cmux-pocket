@@ -101,6 +101,34 @@ fun computePhoneWidthTarget(
 }
 
 /**
+ * Builds [TerminalWidthMetrics] from a canvas' outer size and its padding.
+ *
+ * The floating window and the full-screen canvas both derive their usable content box
+ * this way, so a PiP resize and a full-screen resize produce comparable targets.
+ */
+fun terminalWidthMetricsForCanvas(
+    canvasWidthPx: Float,
+    canvasHeightPx: Float,
+    horizontalPaddingPx: Float,
+    verticalPaddingPx: Float,
+    cellWidthPx: Float,
+    rowHeightPx: Float,
+): TerminalWidthMetrics? {
+    if (!canvasWidthPx.isFinite() || !canvasHeightPx.isFinite()) return null
+    if (!cellWidthPx.isFinite() || cellWidthPx <= 0f) return null
+    if (!rowHeightPx.isFinite() || rowHeightPx <= 0f) return null
+    val width = canvasWidthPx - horizontalPaddingPx * 2f
+    val height = canvasHeightPx - verticalPaddingPx * 2f
+    if (width <= 0f || height <= 0f) return null
+    return TerminalWidthMetrics(
+        availableWidthPx = width,
+        canvasHeightPx = height,
+        cellWidthPx = cellWidthPx,
+        rowHeightPx = rowHeightPx,
+    )
+}
+
+/**
  * Merges an authoritative full frame into the mode state.
  *
  * `receivedAtNanos` and `confirmedAfterNanos` fence the frame against reports

@@ -58,6 +58,15 @@ class SettingsManager(context: Context) {
             .coerceIn(MIN_PIP_FONT_SIZE, MAX_PIP_FONT_SIZE)
         set(value) = prefs.edit().putFloat(KEY_PIP_FONT_SIZE, value.coerceIn(MIN_PIP_FONT_SIZE, MAX_PIP_FONT_SIZE)).apply()
 
+    /**
+     * Reflows the real terminal grid to the floating window's width and font instead of
+     * wrapping the desktop grid inside the PiP window. Off by default so the floating
+     * window keeps showing the computer's own layout until the user opts in.
+     */
+    var pipAdaptTerminal: Boolean
+        get() = prefs.getBoolean(KEY_PIP_ADAPT_TERMINAL, false)
+        set(value) = prefs.edit().putBoolean(KEY_PIP_ADAPT_TERMINAL, value).apply()
+
     var themeMode: ThemeMode
         get() {
             val name = prefs.getString(KEY_THEME_MODE, ThemeMode.DARK.name) ?: ThemeMode.DARK.name
@@ -218,8 +227,8 @@ class SettingsManager(context: Context) {
     }
 
     companion object {
-        const val MIN_PIP_FONT_SIZE = 6f
-        const val MAX_PIP_FONT_SIZE = 48f
+        const val MIN_PIP_FONT_SIZE = 2f
+        const val MAX_PIP_FONT_SIZE = 24f
         const val DEFAULT_PIP_FONT_SIZE = 13f
         const val MIN_PIP_ASPECT_RATIO = 0.6f
         const val MAX_PIP_ASPECT_RATIO = 2.39f
@@ -244,6 +253,7 @@ class SettingsManager(context: Context) {
         private const val KEY_FLOATING_WINDOW_AUTO_ENTER = "floating_window_auto_enter"
         private const val KEY_PIP_ASPECT_RATIO = "pip_aspect_ratio"
         private const val KEY_PIP_FONT_SIZE = "pip_font_size_sp"
+        private const val KEY_PIP_ADAPT_TERMINAL = "pip_adapt_terminal"
     }
 
         private fun createEncryptedPreferences(context: Context): SharedPreferences {

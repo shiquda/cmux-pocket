@@ -106,6 +106,9 @@
     <string name="settings_floating_window_auto">离开应用时自动打开</string>
     <string name="settings_floating_window_auto_desc_on">类似 YouTube：应用退到后台时自动打开小窗。</string>
     <string name="settings_floating_window_auto_desc_off">使用底部工具栏的悬浮窗按钮手动打开。</string>
+    <string name="settings_floating_window_adapt">自适应终端渲染</string>
+    <string name="settings_floating_window_adapt_desc_on">根据悬浮窗宽度与字号重排终端渲染列数，窗口缩放时实时重算。</string>
+    <string name="settings_floating_window_adapt_desc_off">保持电脑端原始输出宽度，在悬浮窗内折行显示最新内容。</string>
     <string name="settings_floating_window_aspect">宽高比（宽 : 高）</string>
     <string name="settings_floating_window_aspect_value">%1$.2f : 1</string>
     <string name="settings_floating_window_font">悬浮窗字号</string>

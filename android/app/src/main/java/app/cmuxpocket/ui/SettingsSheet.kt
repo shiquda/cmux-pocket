@@ -113,6 +113,7 @@ fun SettingsScreen(
     var floatingWindowAutoEnter by remember { mutableStateOf(settingsManager.floatingWindowAutoEnter) }
     var pipAspectRatio by remember { mutableStateOf(settingsManager.pipAspectRatio) }
     var pipFontSizeSp by remember { mutableStateOf(settingsManager.pipFontSizeSp) }
+    var pipAdaptTerminal by remember { mutableStateOf(settingsManager.pipAdaptTerminal) }
     // Ordinal rather than the enum itself so the page survives the activity recreation that a
     // language switch triggers; [ROOT_MENU] means the root list is showing.
     var openSectionOrdinal by rememberSaveable { mutableStateOf(ROOT_MENU) }
@@ -345,6 +346,7 @@ fun SettingsScreen(
                                 autoEnter = floatingWindowAutoEnter,
                                 aspectRatio = pipAspectRatio,
                                 fontSizeSp = pipFontSizeSp,
+                                adaptTerminal = pipAdaptTerminal,
                                 onEnabledChange = {
                                     floatingWindowEnabled = it
                                     settingsManager.floatingWindowEnabled = it
@@ -363,6 +365,10 @@ fun SettingsScreen(
                                 onFontSizeChange = {
                                     pipFontSizeSp = it
                                     settingsManager.pipFontSizeSp = it
+                                },
+                                onAdaptTerminalChange = {
+                                    pipAdaptTerminal = it
+                                    settingsManager.pipAdaptTerminal = it
                                 }
                             )
                         }
@@ -2011,10 +2017,12 @@ fun FloatingWindowSection(
     autoEnter: Boolean,
     aspectRatio: Float,
     fontSizeSp: Float,
+    adaptTerminal: Boolean = false,
     onEnabledChange: (Boolean) -> Unit,
     onAutoEnterChange: (Boolean) -> Unit,
     onAspectRatioChange: (Float) -> Unit,
-    onFontSizeChange: (Float) -> Unit
+    onFontSizeChange: (Float) -> Unit,
+    onAdaptTerminalChange: (Boolean) -> Unit = {}
 ) {
     val theme = CmuxTheme.colors
 
@@ -2076,6 +2084,33 @@ fun FloatingWindowSection(
                         )
                     }
                     Switch(checked = autoEnter, onCheckedChange = onAutoEnterChange)
+                }
+
+                HorizontalDivider(color = theme.divider)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAdaptTerminalChange(!adaptTerminal) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.settings_floating_window_adapt),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = theme.onSurface
+                        )
+                        Text(
+                            stringResource(
+                                if (adaptTerminal) R.string.settings_floating_window_adapt_desc_on
+                                else R.string.settings_floating_window_adapt_desc_off
+                            ),
+                            fontSize = 10.sp,
+                            color = theme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = adaptTerminal, onCheckedChange = onAdaptTerminalChange)
                 }
 
                 HorizontalDivider(color = theme.divider)

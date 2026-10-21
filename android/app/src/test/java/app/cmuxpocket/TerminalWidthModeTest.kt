@@ -12,6 +12,7 @@ import app.cmuxpocket.ui.phoneWidthNeedsClear
 import app.cmuxpocket.ui.phoneWidthStateWithFrame
 import app.cmuxpocket.ui.settlePhoneWidthClear
 import app.cmuxpocket.ui.shouldApplyDefaultPhoneWidth
+import app.cmuxpocket.ui.terminalWidthMetricsForCanvas
 import app.cmuxpocket.ui.phoneWidthTargetSatisfied
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -64,6 +65,40 @@ class TerminalWidthModeTest {
         assertNull(computePhoneWidthTarget(null, basisRows = 24))
         assertNull(computePhoneWidthTarget(metrics.copy(cellWidthPx = 0f), basisRows = 24))
         assertNull(computePhoneWidthTarget(metrics.copy(availableWidthPx = Float.NaN), basisRows = 24))
+    }
+
+    @Test
+    fun canvasMetricsUseThePaddedContentBox() {
+        val derived = terminalWidthMetricsForCanvas(
+            canvasWidthPx = 300f,
+            canvasHeightPx = 200f,
+            horizontalPaddingPx = 6f,
+            verticalPaddingPx = 4f,
+            cellWidthPx = 8f,
+            rowHeightPx = 18f,
+        )!!
+        assertEquals(288f, derived.availableWidthPx)
+        assertEquals(192f, derived.canvasHeightPx)
+        assertEquals(8f, derived.cellWidthPx)
+        assertEquals(18f, derived.rowHeightPx)
+        // 288 / 8 = 36 columns fit the floating window at that font.
+        assertEquals(36, computePhoneWidthTarget(derived, basisRows = 0)!!.first)
+    }
+
+    @Test
+    fun canvasMetricsRejectUnmeasuredOrDegenerateCanvases() {
+        assertNull(
+            terminalWidthMetricsForCanvas(0f, 200f, 6f, 4f, 8f, 18f)
+        )
+        assertNull(
+            terminalWidthMetricsForCanvas(12f, 8f, 6f, 4f, 8f, 18f)
+        )
+        assertNull(
+            terminalWidthMetricsForCanvas(Float.NaN, 200f, 6f, 4f, 8f, 18f)
+        )
+        assertNull(
+            terminalWidthMetricsForCanvas(300f, 200f, 6f, 4f, 0f, 18f)
+        )
     }
 
     @Test

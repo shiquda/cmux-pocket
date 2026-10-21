@@ -109,6 +109,9 @@
     <string name="settings_floating_window_auto">Auto-open when leaving the app</string>
     <string name="settings_floating_window_auto_desc_on">Like YouTube: the window opens when the app goes to the background.</string>
     <string name="settings_floating_window_auto_desc_off">Use the floating-window button in the accessory bar instead.</string>
+    <string name="settings_floating_window_adapt">Adapt terminal layout</string>
+    <string name="settings_floating_window_adapt_desc_on">Reflows terminal columns to fit the floating window width and font size, recomputing on window resize.</string>
+    <string name="settings_floating_window_adapt_desc_off">Keeps the desktop terminal width, soft-wrapping the latest output in the floating window.</string>
     <string name="settings_floating_window_aspect">Aspect ratio (width : height)</string>
     <string name="settings_floating_window_aspect_value">%1$.2f : 1</string>
     <string name="settings_floating_window_font">Floating window font size</string>

@@ -258,7 +258,8 @@ fun CmuxAppRoot(
             FloatingTerminalView(
                 viewModel = viewModel,
                 themeHex = selectedThemeHex,
-                fontSizeSp = settingsManager.pipFontSizeSp
+                fontSizeSp = settingsManager.pipFontSizeSp,
+                adaptTerminal = settingsManager.pipAdaptTerminal
             )
             return@CmuxAppTheme
         }
