@@ -25,6 +25,8 @@ pub const APP_DIR_NAME: &str = "cmux-pocket";
 /// Structured container for resolved macOS paths.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PocketPaths {
+    /// User home directory the paths were derived from.
+    pub home_dir: PathBuf,
     /// Directory for configuration and token files (`~/Library/Application Support/cmux-pocket`).
     pub config_dir: PathBuf,
     /// Path to `config.toml`.
@@ -59,6 +61,7 @@ impl PocketPaths {
         let plist_file = launch_agents_dir.join(DEFAULT_PLIST_FILENAME);
 
         Self {
+            home_dir: home_dir.to_path_buf(),
             config_dir,
             config_file,
             token_file,

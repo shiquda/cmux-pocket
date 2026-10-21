@@ -81,6 +81,7 @@ fn test_parse_qr() {
             endpoint: None,
             url_only: false,
             name: None,
+            no_interactive: false,
             no_invert: false,
             invert: false,
         })
@@ -94,6 +95,7 @@ fn test_parse_qr() {
             endpoint: None,
             url_only: false,
             name: None,
+            no_interactive: false,
             no_invert: false,
             invert: false,
         })
@@ -116,6 +118,7 @@ fn test_parse_qr() {
             endpoint: Some("wss://my.tailnet.ts.net".to_string()),
             url_only: true,
             name: Some("My Workstation".to_string()),
+            no_interactive: false,
             no_invert: false,
             invert: false,
         })
@@ -151,6 +154,7 @@ fn test_parse_qr() {
             endpoint: None,
             url_only: false,
             name: None,
+            no_interactive: false,
             no_invert: true,
             invert: false,
         })

@@ -19,7 +19,7 @@ cmux Pocket is an independent Android companion for [cmux](https://cmux.com/) on
 - **Pure Immersive Viewport & Floating Island**: Fullscreen terminal canvas with a dynamic breadcrumb island pill (`[status] workspace > #session [count]`) for instant session context, switching, and status indication.
 - **Authoritative Terminal Streaming**: Renders `cmux.render-grid.v1` differential grid frames directly over WebSocket (`wss://`). The Mac owns the PTY and VT parsing—Android runs zero local shells, ensuring 100% terminal state fidelity.
 - **Decoupled Dual-End Navigation**: Switch workspaces or tabs on the phone without changing your Mac's active focus; main-screen scrollback stays local to Android while alternate-screen/TUI scrollback remains cmux-managed.
-- **One-Tap Pairing via CLI QR Code**: Generate pairing QR codes in your Mac terminal (`cmux-pocket qr`) and scan with the in-app camera for instant, validated profile import with overwrite protection.
+- **One-Tap Pairing via CLI QR Code**: Generate pairing QR codes in your Mac terminal (`cmux-pocket qr`) — with an interactive picker for saved, Tailscale, Cloudflare Tunnel, and USB endpoints — and scan with the in-app camera for instant, validated profile import with overwrite protection.
 - **Remote Wake & Version Transparency**: If the Gateway is online but cmux.app is not running, the terminal offers **Wake cmux on Mac** and switches to the live terminal once the socket is ready. Settings → Connection shows the Gateway, app, and protocol versions with a compatibility badge and a copyable Mac upgrade command.
 - **Modernized Settings Hub**: Clean secondary-menu navigation with live diagnostics ring buffer (500-frame replay), profile backup/restore via clipboard, and in-app GitHub Releases update checker.
 - **P3 Neon Grid Color System**: Unified violet/neon-cyan/lime color palette optimized for OLED screens, with a first-class tuned light mode and contrast WCAG AA compliance.
@@ -68,7 +68,17 @@ Generate a terminal QR code with automatic Tailscale discovery:
 cmux-pocket qr
 ```
 
-*(Or specify a custom endpoint: `cmux-pocket qr --endpoint wss://gateway.example.com`)*
+In a terminal this opens an interactive picker: switch between saved endpoints, a verified
+Tailscale Serve route, Cloudflare Tunnel hostnames, and USB with ↑/↓, then press Enter to
+render the QR code. `--endpoint` skips the picker, and `--no-interactive`, `--json`, and
+`--url-only` keep single-shot behavior.
+
+Save additional endpoints once:
+
+```bash
+cmux-pocket endpoint add wss://gateway.lan.example --name LAN
+cmux-pocket endpoint list
+```
 
 1. [Download the latest signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) and install it on Android.
 2. Open **Settings → Connection** and tap **Scan QR**.

@@ -1,9 +1,12 @@
 //! Implementation of `cmux-pocket qr` command.
 
 use crate::cli::QrArgs;
-use crate::endpoint::resolve_mobile_endpoint;
+use crate::endpoint::{
+    collect_candidates, resolve_without_picker, EndpointCandidate, EndpointSource,
+};
 use crate::error::CliError;
 use crate::output::{print_success, token_fingerprint};
+use crate::picker::{self, PickOutcome};
 use crate::uri::{build_import_uri, LOOPBACK_NOTICE, SECURITY_WARNING};
 use cmux_pocket_macos::{ensure_token, load_config, GatewayConfig, PocketPaths};
 use qrcode::render::unicode;
@@ -14,12 +17,17 @@ use serde::Serialize;
 pub struct QrData {
     pub endpoint: String,
     pub endpoint_source: String,
+    pub endpoint_verified: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint_note: Option<String>,
     pub uri: String,
     pub qr_code: String,
     pub token_fingerprint: String,
     pub is_loopback: bool,
     pub tls: bool,
     pub name: String,
+    /// Every endpoint the picker offered, in selection order.
+    pub candidates: Vec<EndpointCandidate>,
 }
 
 /// Renders a string as a Unicode ANSI QR code block.
@@ -59,9 +67,35 @@ pub async fn handle_qr(
     let (token, _created) = ensure_token(&token_path)?;
     let fp = token_fingerprint(&token);
 
-    let (endpoint, source) = resolve_mobile_endpoint(args.endpoint.as_deref(), &config).await?;
+    let candidates =
+        collect_candidates(args.endpoint.as_deref(), &config, Some(&paths.home_dir)).await?;
 
-    let uri = build_import_uri(&endpoint, &token, args.name.as_deref());
+    let interactive = !json_mode
+        && !args.url_only
+        && !args.no_interactive
+        && args.endpoint.is_none()
+        && picker::is_interactive_terminal();
+
+    let chosen = if interactive {
+        match picker::pick(&candidates, &fp)? {
+            PickOutcome::Selected(index) => &candidates[index],
+            PickOutcome::Cancelled => {
+                println!("Cancelled.");
+                return Ok(());
+            }
+        }
+    } else {
+        resolve_without_picker(&candidates)?
+    };
+
+    let profile_name = args.name.clone().unwrap_or_else(|| {
+        if chosen.parsed.is_loopback {
+            "USB / Local".to_string()
+        } else {
+            chosen.name.clone()
+        }
+    });
+    let uri = build_import_uri(&chosen.parsed, &token, Some(&profile_name));
 
     if args.url_only && !json_mode {
         println!("{}", uri);
@@ -71,23 +105,18 @@ pub async fn handle_qr(
     let invert = !args.no_invert;
     let qr_block = generate_ansi_qr(&uri, invert)?;
 
-    let name = args.name.clone().unwrap_or_else(|| {
-        if endpoint.is_loopback {
-            "USB / Local".to_string()
-        } else {
-            endpoint.host.clone()
-        }
-    });
-
     let data = QrData {
-        endpoint: endpoint.raw.clone(),
-        endpoint_source: source.to_string(),
+        endpoint: chosen.parsed.raw.clone(),
+        endpoint_source: chosen.source_label.clone(),
+        endpoint_verified: chosen.verified,
+        endpoint_note: chosen.note.clone(),
         uri: uri.clone(),
         qr_code: qr_block.clone(),
         token_fingerprint: fp.clone(),
-        is_loopback: endpoint.is_loopback,
-        tls: endpoint.is_tls,
-        name,
+        is_loopback: chosen.parsed.is_loopback,
+        tls: chosen.parsed.is_tls,
+        name: profile_name.clone(),
+        candidates: candidates.clone(),
     };
 
     let mut prose = String::new();
@@ -96,22 +125,41 @@ pub async fn handle_qr(
         prose.push_str("\n\n");
     }
 
+    let verification = if chosen.verified {
+        "verified on this Mac"
+    } else if chosen.source == EndpointSource::AdbReverse {
+        "USB debugging only"
+    } else {
+        "not verified here"
+    };
     prose.push_str(&format!(
         "cmux-pocket Connection QR Code\n\
          ==============================\n\
-         Endpoint:          {} (via {})\n\
+         Endpoint:          {} (via {}, {})\n\
+         Profile Name:      {}\n\
          Token Fingerprint: {}\n\
          Import Link:       {}\n\n\
          Scan this QR code in the Android cmux-pocket app (Settings -> Scan QR),\n\
          or open the import link on an Android device with cmux-pocket installed.\n\n\
-         Tip: Running in a light-themed terminal? Pass '--no-invert' to match your background.\n\n\
-         {}\n",
-        endpoint.raw, source, fp, uri, SECURITY_WARNING
+         Tip: Running in a light-themed terminal? Pass '--no-invert' to match your background.\n",
+        chosen.parsed.raw, chosen.source_label, verification, profile_name, fp, uri
     ));
 
-    if endpoint.is_loopback {
+    if let Some(note) = &chosen.note {
+        prose.push_str(&format!("Note: {}\n", note));
+    }
+
+    if !interactive && picker::is_interactive_terminal() {
+        prose.push_str(
+            "\nTip: Other saved endpoints are one keypress away — run `cmux-pocket qr` in a terminal to pick one.\n",
+        );
+    }
+
+    if chosen.parsed.is_loopback {
         prose.push_str(&format!("\n{}\n", LOOPBACK_NOTICE));
     }
+
+    prose.push_str(&format!("\n{}\n", SECURITY_WARNING));
 
     print_success(&data, &prose, json_mode);
     Ok(())

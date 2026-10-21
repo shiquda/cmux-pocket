@@ -306,9 +306,36 @@ cmux-pocket setup --tailscale --qr
 
 The CLI renders an ANSI QR code block directly in the terminal, accompanied by the `cmux-pocket://` import URI.
 
-### Endpoint configuration and precedence
+### Interactive endpoint picker and discovery
 
-The CLI resolves the phone connection endpoint using strict precedence:
+Running `cmux-pocket qr` in a terminal opens a picker by default. It lists every endpoint
+the Mac can offer and lets you move with ↑/↓ (or `j`/`k`) and press Enter to render that
+QR code. `q` or Esc cancels. `--endpoint` skips the picker, and `--no-interactive` keeps the
+old single-shot behavior for scripts. Non-TTY invocations, `--json`, and `--url-only` are
+always non-interactive.
+
+Candidates are discovered locally:
+
+| Candidate | How it is found | Auto-selected |
+| --- | --- | --- |
+| `--endpoint` | Explicit flag | Yes (skips the picker) |
+| Legacy default | `config.endpoint` | Yes |
+| Named endpoints | `cmux-pocket endpoint add <URL> --name <NAME>` | Yes, in saved order |
+| Tailscale | `tailscale status` **and** a Serve route whose `/` target is this Gateway | Yes |
+| Cloudflare Tunnel | `~/.cloudflared/*.yml` ingress hostname whose origin is `127.0.0.1:<gateway-port>`, with a matching local `cloudflared` process | Only when the tunnel process is running |
+| USB (ADB reverse) | `adb devices` plus an existing `adb reverse tcp:<port> tcp:<port>` | Never; dev only |
+
+The picker marks each entry `verified` when the Mac-side route was confirmed, and shows
+`unverified` for saved endpoints and stopped tunnels. A phone may still be unable to reach
+an otherwise verified route (different network), so the app's connection check remains the
+final test.
+
+Tailscale discovery only reports a `.ts.net` URL when `tailscale serve status` shows the root
+route forwarding to the Gateway; an unconfigured or conflicting route is not offered.
+
+### Saved endpoints and precedence
+
+The non-interactive path resolves one endpoint using strict precedence:
 
 1. **Explicit CLI argument (`--endpoint <URL>`)**:
    Takes top priority. Use this for a single-use connection or testing without modifying your configuration:
@@ -316,19 +343,28 @@ The CLI resolves the phone connection endpoint using strict precedence:
    cmux-pocket qr --endpoint wss://custom.proxy.example.com:8443 --name "Workstation"
    ```
 
-2. **User locally saved endpoint (`config.endpoint`)**:
-   Persists your preferred remote URL (e.g. your private domain, reverse proxy, or secure ingress) across sessions:
+2. **Saved endpoints**, in this order: the legacy `config.endpoint`, then entries added through
+   `cmux-pocket endpoint`:
    ```bash
-   cmux-pocket config set endpoint wss://custom.proxy.example.com:8443
-   cmux-pocket config get endpoint
+   cmux-pocket endpoint add wss://gateway.lan.example --name LAN
+   cmux-pocket endpoint add wss://cmux-gateway.example.com --name Tunnel
+   cmux-pocket endpoint list
    cmux-pocket qr
    ```
+   The legacy form remains supported:
+   ```bash
+   cmux-pocket config set endpoint wss://custom.proxy.example.com:8443
+   ```
 
-3. **Tailscale automatic discovery (`.ts.net`)**:
-   If no custom endpoint is configured and Tailscale is running with a valid tailnet domain, cmux-pocket automatically uses `wss://<node>.ts.net` with port `443`.
+3. **Verified Tailscale Serve route** (see above).
+
+4. A Cloudflare Tunnel hostname is selected automatically only while its tunnel process is running.
+
+ADB reverse is offered only in the interactive picker. LAN endpoints are not guessed: add the
+TLS hostname behind your Caddy/Nginx proxy with `endpoint add --name LAN`.
 
 **Loopback safety:**
-cmux-pocket never automatically assumes a local loopback address (`127.0.0.1`) can be reached by a remote phone over Wi-Fi or cellular. If no remote endpoint is found, the CLI will output actionable setup instructions rather than generating a misleading QR code. If you intentionally want to test loopback over ADB reverse, you can pass `--endpoint ws://127.0.0.1:8088` explicitly.
+cmux-pocket never automatically assumes a local loopback address (`127.0.0.1`) can be reached by a remote phone over Wi-Fi or cellular. If no remote endpoint is found, the CLI will output actionable setup instructions rather than generating a misleading QR code. To use loopback over ADB reverse, pick the USB candidate or pass `--endpoint ws://127.0.0.1:8088` explicitly.
 
 ### Android scanning and deep link import
 

@@ -41,11 +41,36 @@ pub struct GatewayConfig {
     pub cmux_path: Option<PathBuf>,
 
     /// Optional custom remote endpoint for phone connections (e.g. wss://example.com, https://tunnel.domain:8443).
+    ///
+    /// Kept as the legacy single-endpoint setting. New setups should use `endpoints`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
+
+    /// Named phone endpoints offered by `cmux-pocket qr` (LAN proxy, tunnel, Tailscale, USB).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub endpoints: Vec<NamedEndpoint>,
+
     /// Additional unrecognized fields preserved across roundtrips.
     #[serde(flatten)]
     pub extra: toml::Table,
+}
+
+/// A user-named phone endpoint candidate shown by the interactive QR picker.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NamedEndpoint {
+    /// Display name, unique per configuration (e.g. "LAN", "Tailscale").
+    pub name: String,
+    /// Phone-reachable endpoint URL (e.g. `wss://gateway.example.com`).
+    pub url: String,
+}
+
+impl NamedEndpoint {
+    pub fn new(name: impl Into<String>, url: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            url: url.into(),
+        }
+    }
 }
 
 fn default_host() -> String {
@@ -66,6 +91,7 @@ impl Default for GatewayConfig {
             cmux_path: None,
             extra: toml::Table::new(),
             endpoint: None,
+            endpoints: Vec::new(),
         }
     }
 }
@@ -100,7 +126,59 @@ impl GatewayConfig {
             validate_remote_endpoint(endpoint)?;
         }
 
+        self.validate_named_endpoints()?;
+
         Ok(())
+    }
+
+    /// Validates named endpoint entries: non-empty unique names and phone-safe URLs.
+    fn validate_named_endpoints(&self) -> Result<(), MacOsError> {
+        let mut names = std::collections::HashSet::new();
+        let mut urls = std::collections::HashSet::new();
+        for entry in &self.endpoints {
+            let name = entry.name.trim();
+            if name.is_empty() {
+                return Err(MacOsError::InvalidConfiguration(
+                    "Endpoint name must not be empty".to_string(),
+                ));
+            }
+            if name.chars().count() > 64 {
+                return Err(MacOsError::InvalidConfiguration(format!(
+                    "Endpoint name '{name}' is longer than 64 characters"
+                )));
+            }
+            if !names.insert(name.to_lowercase()) {
+                return Err(MacOsError::InvalidConfiguration(format!(
+                    "Duplicate endpoint name '{name}'"
+                )));
+            }
+            let parsed = validate_remote_endpoint(&entry.url)?;
+            if !urls.insert(parsed.raw.clone()) {
+                return Err(MacOsError::InvalidConfiguration(format!(
+                    "Duplicate endpoint URL '{}'",
+                    parsed.raw
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Returns the legacy default plus named endpoints as `(name, parsed endpoint)` pairs.
+    ///
+    /// The legacy `endpoint` value is exposed as a nameless default; callers pick the label.
+    pub fn endpoint_entries(&self) -> Vec<(Option<String>, ParsedEndpoint)> {
+        let mut entries = Vec::new();
+        if let Some(raw) = &self.endpoint {
+            if let Ok(parsed) = parse_and_validate_endpoint(raw) {
+                entries.push((None, parsed));
+            }
+        }
+        for entry in &self.endpoints {
+            if let Ok(parsed) = parse_and_validate_endpoint(&entry.url) {
+                entries.push((Some(entry.name.clone()), parsed));
+            }
+        }
+        entries
     }
 
     /// Resolves effective token path using defaults if not explicitly configured.
@@ -464,5 +542,72 @@ custom_timeout_ms = 5000
             Some("wss://custom.domain.com:8443")
         );
         loaded.validate().unwrap();
+    }
+
+    #[test]
+    fn named_endpoints_roundtrip_and_validate() {
+        let tmp = tempdir().unwrap();
+        let config_path = tmp.path().join("config.toml");
+        let config = GatewayConfig {
+            endpoints: vec![
+                NamedEndpoint::new("LAN", "wss://gateway.lan.example"),
+                NamedEndpoint::new("Work", "wss://work.example.com:8443"),
+            ],
+            ..GatewayConfig::default()
+        };
+        config.validate().unwrap();
+        save_config(&config_path, &config).unwrap();
+
+        let loaded = load_config(&config_path).unwrap();
+        assert_eq!(loaded.endpoints.len(), 2);
+        assert_eq!(loaded.endpoints[0].name, "LAN");
+        assert_eq!(loaded.endpoints[1].url, "wss://work.example.com:8443");
+    }
+
+    #[test]
+    fn named_endpoints_reject_duplicates_and_cleartext() {
+        let duplicate_name = GatewayConfig {
+            endpoints: vec![
+                NamedEndpoint::new("LAN", "wss://a.example"),
+                NamedEndpoint::new("lan", "wss://b.example"),
+            ],
+            ..GatewayConfig::default()
+        };
+        assert!(duplicate_name.validate().is_err());
+
+        let duplicate_url = GatewayConfig {
+            endpoints: vec![
+                NamedEndpoint::new("A", "wss://a.example"),
+                NamedEndpoint::new("B", "wss://a.example:443"),
+            ],
+            ..GatewayConfig::default()
+        };
+        assert!(duplicate_url.validate().is_err());
+
+        let cleartext = GatewayConfig {
+            endpoints: vec![NamedEndpoint::new("Public", "ws://public.example:8088")],
+            ..GatewayConfig::default()
+        };
+        assert!(cleartext.validate().is_err());
+
+        let blank = GatewayConfig {
+            endpoints: vec![NamedEndpoint::new("  ", "wss://a.example")],
+            ..GatewayConfig::default()
+        };
+        assert!(blank.validate().is_err());
+    }
+
+    #[test]
+    fn endpoint_entries_exposes_legacy_default_first() {
+        let config = GatewayConfig {
+            endpoint: Some("wss://default.example".to_string()),
+            endpoints: vec![NamedEndpoint::new("LAN", "wss://lan.example")],
+            ..GatewayConfig::default()
+        };
+        let entries = config.endpoint_entries();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].0, None);
+        assert_eq!(entries[0].1.host, "default.example");
+        assert_eq!(entries[1].0.as_deref(), Some("LAN"));
     }
 }

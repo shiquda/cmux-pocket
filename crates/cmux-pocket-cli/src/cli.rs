@@ -45,6 +45,9 @@ pub enum Commands {
     /// Manage Gateway authentication token
     Token(TokenArgs),
 
+    /// Manage saved phone endpoints for QR pairing
+    Endpoint(EndpointArgs),
+
     /// Manage launchd background service
     Service(ServiceArgs),
 
@@ -110,6 +113,10 @@ pub struct QrArgs {
     #[arg(long, value_name = "NAME")]
     pub name: Option<String>,
 
+    /// Never open the interactive endpoint picker; use the default endpoint
+    #[arg(long)]
+    pub no_interactive: bool,
+
     /// Do not invert QR code colors (useful if running in a light-themed terminal)
     #[arg(long)]
     pub no_invert: bool,
@@ -155,6 +162,32 @@ pub enum ConfigSubcommand {
         key: String,
         /// New value
         value: String,
+    },
+}
+
+/// Subcommands for `cmux-pocket endpoint`.
+#[derive(Args, Debug, Clone, PartialEq, Eq)]
+pub struct EndpointArgs {
+    #[command(subcommand)]
+    pub command: EndpointSubcommand,
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+pub enum EndpointSubcommand {
+    /// List saved phone endpoints and the legacy default
+    List,
+    /// Save a named phone endpoint (e.g. a LAN TLS proxy or tunnel hostname)
+    Add {
+        /// Phone-reachable endpoint URL (wss:// or https://; ws:// only for loopback)
+        url: String,
+        /// Display name shown by the QR picker (e.g. LAN, Tailscale)
+        #[arg(long, value_name = "NAME")]
+        name: String,
+    },
+    /// Remove a saved phone endpoint by name
+    Remove {
+        /// Endpoint name to remove
+        name: String,
     },
 }
 
