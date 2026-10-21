@@ -10,6 +10,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import app.cmuxpocket.R
 
 @Composable
 fun ConnectionAssistant(
@@ -25,7 +27,7 @@ fun ConnectionAssistant(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Connection check", color = theme.onSurface, style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.conn_check_title), color = theme.onSurface, style = MaterialTheme.typography.titleSmall)
         Text(readiness.summary, color = theme.onSurface, fontSize = 13.sp)
         if (readiness.started) {
             ConnectionStep.entries.filter { it != ConnectionStep.READY }.forEach { step ->
@@ -35,7 +37,7 @@ fun ConnectionAssistant(
                     step == readiness.step -> "…"
                     else -> "○"
                 }
-                Text("$marker  ${step.label}", color = theme.onSurfaceVariant, fontSize = 12.sp)
+                Text(stringResource(R.string.conn_step_item, marker, step.label), color = theme.onSurfaceVariant, fontSize = 12.sp)
             }
             if (readiness.problem != null || readiness.ready) {
                 Text(readiness.help, color = theme.onSurfaceVariant, fontSize = 12.sp)
@@ -44,30 +46,30 @@ fun ConnectionAssistant(
         Button(
             onClick = onCheckConnection,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-        ) { Text("Check connection") }
+        ) { Text(stringResource(R.string.conn_btn_check)) }
         Text(
-            "Checks the host, port, and token above. This reconnects Pocket and loads your workspaces.",
+            stringResource(R.string.conn_check_desc),
             color = theme.onSurfaceVariant,
             fontSize = 11.sp,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { showHostSetup = !showHostSetup }) { Text("Host setup") }
+            TextButton(onClick = { showHostSetup = !showHostSetup }) { Text(stringResource(R.string.conn_btn_host_setup)) }
             if (tailscaleIntent != null) {
-                TextButton(onClick = { context.startActivity(tailscaleIntent) }) { Text("Open Tailscale") }
+                TextButton(onClick = { context.startActivity(tailscaleIntent) }) { Text(stringResource(R.string.conn_btn_open_tailscale)) }
             }
         }
         if (showHostSetup) {
             Text(
-                "Install Tailscale on the Mac and phone, sign in to the same tailnet, and connect both. On the Mac, open cmux, then run:",
+                stringResource(R.string.conn_host_setup_instructions),
                 color = theme.onSurfaceVariant,
                 fontSize = 12.sp,
             )
             SelectionContainer { Text("cmux-pocket setup --tailscale", color = theme.onSurface) }
             TextButton(onClick = { clipboard.setText(AnnotatedString("cmux-pocket setup --tailscale")) }) {
-                Text("Copy setup command")
+                Text(stringResource(R.string.conn_btn_copy_setup_cmd))
             }
             Text(
-                "The Mac command starts or reuses the Gateway, verifies workspace access, and sets up private HTTPS forwarding. Enter the printed phone endpoint with port 443 and the existing Gateway token, then check the connection here. Saved profiles use encrypted storage.",
+                stringResource(R.string.conn_host_setup_details),
                 color = theme.onSurfaceVariant,
                 fontSize = 12.sp,
             )
@@ -77,16 +79,20 @@ fun ConnectionAssistant(
 
 /** Visible in both layouts even if authentication succeeds but bootstrap fails. */
 @Composable
-fun ConnectionReadinessNotice(readiness: ConnectionReadiness, onOpenSettings: () -> Unit) {
+fun ConnectionReadinessNotice(
+    readiness: ConnectionReadiness,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     if (readiness.problem == null) return
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
             Text(readiness.summary, fontSize = 13.sp)
-            TextButton(onClick = onOpenSettings) { Text("Check connection in Settings") }
+            TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.conn_notice_check_in_settings)) }
         }
     }
 }

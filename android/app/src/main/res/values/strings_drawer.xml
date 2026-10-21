@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English base for the session/surface drawer. Mirrors values-zh-rCN/strings_drawer.xml. -->
+<resources>
+    <string name="drawer_title">Sessions &amp; Surfaces</string>
+    <string name="drawer_host_summary">Host: %1$s · %2$d workspaces</string>
+    <string name="drawer_active_surfaces">ACTIVE SURFACES</string>
+    <string name="drawer_workspace_switcher">WORKSPACE SWITCHER</string>
+    <string name="drawer_new">+ New</string>
+    <string name="drawer_new_surface">New Surface</string>
+    <string name="drawer_workspace_current">%1$s (current)</string>
+    <string name="drawer_workspace_meta">%1$d surfaces · %2$s</string>
+    <string name="drawer_default_path">Default path</string>
+    <string name="drawer_connected">Connected</string>
+    <string name="drawer_switch">Switch</string>
+    <string name="drawer_state_working">Working</string>
+    <string name="drawer_state_dead">Dead</string>
+    <string name="drawer_state_idle">Idle</string>
+</resources>

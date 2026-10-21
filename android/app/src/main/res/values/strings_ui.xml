@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Import Gateway Dialog -->
+    <string name="dlg_import_title">Import Gateway Profile</string>
+    <string name="dlg_import_cancel">Cancel</string>
+    <string name="dlg_import_existing_found">Existing Profile Found</string>
+    <string name="dlg_import_existing_desc">A saved profile \'%1$s\' already uses this endpoint (%2$s:%3$d).</string>
+    <string name="dlg_import_update_profile">Update \'%1$s\'</string>
+    <string name="dlg_import_save_as_new">Save as New</string>
+    <string name="dlg_import_profile_name">Profile Name</string>
+    <string name="dlg_import_connection_details">CONNECTION DETAILS</string>
+    <string name="dlg_import_host_address">Host / Address</string>
+    <string name="dlg_import_port">Port</string>
+    <string name="dlg_import_protocol_security">Protocol &amp; Security</string>
+    <string name="dlg_import_protocol_wss">WSS (TLS Encrypted)</string>
+    <string name="dlg_import_protocol_ws">WS (Loopback Cleartext)</string>
+    <string name="dlg_import_usb_local">USB / Local</string>
+    <string name="dlg_import_gateway_auth_token">Gateway Auth Token</string>
+    <string name="dlg_import_token_hide">Hide</string>
+    <string name="dlg_import_token_show">Show</string>
+    <string name="dlg_import_security_reminder">Importing will save this host configuration to your Pocket profiles.</string>
+    <string name="dlg_import_confirm">Import &amp; Connect</string>
+    <string name="dlg_import_error_title">Invalid Import Configuration</string>
+    <string name="dlg_import_error_ok">OK</string>
+
+    <!-- New Workspace and New Terminal Surface Dialogs -->
+    <string name="dlg_new_workspace_title">New Workspace</string>
+    <string name="dlg_new_workspace_name_label">Workspace Name</string>
+    <string name="dlg_new_workspace_name_placeholder">e.g. backend-api, my-feature</string>
+    <string name="dlg_new_workspace_create_initial_tab">Create initial terminal tab</string>
+    <string name="dlg_new_workspace_default_name">New Workspace</string>
+    <string name="dlg_new_workspace_create">Create</string>
+    <string name="dlg_new_workspace_cancel">Cancel</string>
+    <string name="dlg_new_surface_title">New Terminal Tab</string>
+    <string name="dlg_new_surface_desc">Add a new terminal session in \'%1$s\'</string>
+    <string name="dlg_new_surface_title_label">Tab Title (Optional)</string>
+    <string name="dlg_new_surface_title_placeholder">e.g. zsh, logs, tests</string>
+    <string name="dlg_new_surface_add">Add Tab</string>
+    <string name="dlg_new_surface_cancel">Cancel</string>
+
+    <!-- Computer Keyboard Panel -->
+    <string name="panel_tab_qwerty">QWERTY</string>
+    <string name="panel_tab_special">Special</string>
+    <string name="panel_close_keyboard">Close Keyboard</string>
+    <string name="panel_combo">Combo</string>
+    <string name="panel_combination_mode">Combination Mode</string>
+
+    <!-- QR Code Scanner -->
+    <string name="scan_title">Scan Connection QR</string>
+    <string name="scan_torch_toggle_cd">Toggle Flashlight</string>
+    <string name="scan_close_cd">Cancel Scanning</string>
+    <string name="scan_hint_point_camera">Point camera at cmux-pocket QR code</string>
+    <string name="scan_hint_focus">Tap screen to focus if blurry · Supports dark terminal screens</string>
+    <string name="scan_cancel">Cancel</string>
+    <string name="scan_permission_denied_title">Camera Permission Required</string>
+    <string name="scan_permission_denied_desc">Camera access is needed to scan connection QR codes. Please enable it in Settings, or enter connection details manually.</string>
+    <string name="scan_app_settings">App Settings</string>
+    <string name="scan_permission_request_title">Scan Gateway QR Code</string>
+    <string name="scan_permission_request_desc">Grant camera permission to automatically scan and import connection configuration from your computer terminal.</string>
+    <string name="scan_permission_allow">Allow</string>
+
+    <!-- Connection Assistant -->
+    <string name="conn_check_title">Connection check</string>
+    <string name="conn_step_item">"%1$s  %2$s"</string>
+    <string name="conn_btn_check">Check connection</string>
+    <string name="conn_check_desc">Checks the host, port, and token above. This reconnects Pocket and loads your workspaces.</string>
+    <string name="conn_btn_host_setup">Host setup</string>
+    <string name="conn_btn_open_tailscale">Open Tailscale</string>
+    <string name="conn_host_setup_instructions">Install Tailscale on the Mac and phone, sign in to the same tailnet, and connect both. On the Mac, open cmux, then run:</string>
+    <string name="conn_btn_copy_setup_cmd">Copy setup command</string>
+    <string name="conn_host_setup_details">The Mac command starts or reuses the Gateway, verifies workspace access, and sets up private HTTPS forwarding. Enter the printed phone endpoint with port 443 and the existing Gateway token, then check the connection here. Saved profiles use encrypted storage.</string>
+    <string name="conn_notice_check_in_settings">Check connection in Settings</string>
+</resources>

@@ -15,7 +15,6 @@ import app.cmuxpocket.protocol.AgentSessionCompleted
 
 object AgentCompletionNotifications {
     private const val channelId = "agent-completions"
-    private const val channelName = "Agent completions"
     const val extraWorkspaceId = "app.cmuxpocket.extra.WORKSPACE_ID"
     const val extraSurfaceId = "app.cmuxpocket.extra.SURFACE_ID"
 
@@ -23,10 +22,10 @@ object AgentCompletionNotifications {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
             channelId,
-            channelName,
+            context.getString(R.string.notif_channel_name),
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Completed agent turns from cmux"
+            description = context.getString(R.string.notif_channel_desc)
         }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
@@ -50,11 +49,11 @@ object AgentCompletionNotifications {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val agentLabel = completion.agentKind?.takeIf { it.isNotBlank() } ?: "Agent"
+        val agentLabel = completion.agentKind?.takeIf { it.isNotBlank() } ?: context.getString(R.string.notif_agent_fallback)
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("$agentLabel task complete")
-            .setContentText("Tap to open the completed tab in cmux Pocket.")
+            .setContentTitle(context.getString(R.string.notif_task_complete, agentLabel))
+            .setContentText(context.getString(R.string.notif_tap_to_open))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)

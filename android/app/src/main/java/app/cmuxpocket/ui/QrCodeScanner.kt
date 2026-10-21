@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.res.stringResource
+import app.cmuxpocket.R
 import androidx.core.content.ContextCompat
 import com.google.zxing.*
 import com.google.zxing.common.GlobalHistogramBinarizer
@@ -367,7 +369,7 @@ fun ScannerOverlay(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Scan Connection QR",
+                    text = stringResource(R.string.scan_title),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -384,7 +386,7 @@ fun ScannerOverlay(
                 ) {
                     Icon(
                         imageVector = if (isTorchEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                        contentDescription = "Toggle Flashlight",
+                        contentDescription = stringResource(R.string.scan_torch_toggle_cd),
                         tint = if (isTorchEnabled) theme.primary else Color.White
                     )
                 }
@@ -400,7 +402,7 @@ fun ScannerOverlay(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Cancel Scanning",
+                        contentDescription = stringResource(R.string.scan_close_cd),
                         tint = Color.White
                     )
                 }
@@ -444,7 +446,7 @@ fun ScannerOverlay(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Point camera at cmux-pocket QR code",
+                text = stringResource(R.string.scan_hint_point_camera),
                 color = Color.White,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
@@ -452,7 +454,7 @@ fun ScannerOverlay(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Tap screen to focus if blurry · Supports dark terminal screens",
+                text = stringResource(R.string.scan_hint_focus),
                 color = Color.LightGray,
                 fontSize = 12.sp,
                 textAlign = TextAlign.Center
@@ -467,7 +469,7 @@ fun ScannerOverlay(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.height(44.dp)
             ) {
-                Text("Cancel", fontSize = 13.sp)
+                Text(stringResource(R.string.scan_cancel), fontSize = 13.sp)
             }
         }
     }
@@ -501,7 +503,7 @@ fun PermissionDeniedView(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Camera Permission Required",
+                text = stringResource(R.string.scan_permission_denied_title),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = theme.onSurface,
@@ -509,7 +511,7 @@ fun PermissionDeniedView(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Camera access is needed to scan connection QR codes. Please enable it in Settings, or enter connection details manually.",
+                text = stringResource(R.string.scan_permission_denied_desc),
                 fontSize = 13.sp,
                 color = theme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -524,7 +526,7 @@ fun PermissionDeniedView(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Cancel", color = theme.onSurfaceVariant)
+                    Text(stringResource(R.string.scan_cancel), color = theme.onSurfaceVariant)
                 }
                 Button(
                     onClick = {
@@ -537,7 +539,7 @@ fun PermissionDeniedView(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
                 ) {
-                    Text("App Settings", color = Color.White)
+                    Text(stringResource(R.string.scan_app_settings), color = Color.White)
                 }
             }
         }
@@ -571,7 +573,7 @@ fun PermissionRequestView(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Scan Gateway QR Code",
+                text = stringResource(R.string.scan_permission_request_title),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = theme.onSurface,
@@ -579,7 +581,7 @@ fun PermissionRequestView(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Grant camera permission to automatically scan and import connection configuration from your computer terminal.",
+                text = stringResource(R.string.scan_permission_request_desc),
                 fontSize = 13.sp,
                 color = theme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -593,14 +595,14 @@ fun PermissionRequestView(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Cancel", color = theme.onSurfaceVariant)
+                    Text(stringResource(R.string.scan_cancel), color = theme.onSurfaceVariant)
                 }
                 Button(
                     onClick = onRequestPermission,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
                 ) {
-                    Text("Allow", color = Color.White)
+                    Text(stringResource(R.string.scan_permission_allow), color = Color.White)
                 }
             }
         }

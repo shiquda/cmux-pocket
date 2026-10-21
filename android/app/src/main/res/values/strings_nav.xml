@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Landscape sidebar navigation -->
+    <string name="sidebar_collapse">Collapse Sidebar</string>
+    <string name="sidebar_brand">cmux Pocket</string>
+    <string name="sidebar_expand">Expand Sidebar</string>
+    <string name="sidebar_workspaces_header">WORKSPACES</string>
+    <string name="sidebar_new_workspace">New Workspace</string>
+    <string name="sidebar_tabs_header">TABS</string>
+    <string name="sidebar_new_tab">New Tab</string>
+    <string name="sidebar_close_tab">Close</string>
+    <string name="sidebar_add_tab">Add Tab</string>
+    <string name="sidebar_settings">Settings</string>
+    <string name="sidebar_tab_count_one">1 tab</string>
+    <string name="sidebar_tab_count_many">%1$d tabs</string>
+
+    <!-- Open source licenses dialog -->
+    <string name="lic_title">Open Source Licenses</string>
+    <string name="lic_subtitle">Open Source Licenses &amp; Notices</string>
+    <string name="lic_close_button">Close</string>
+    <string name="lic_card_cmux_pocket_title">cmux pocket</string>
+    <string name="lic_card_cmux_pocket_license">GNU Affero General Public License v3.0 (AGPL-3.0)</string>
+    <string name="lic_card_cmux_pocket_desc">cmux pocket is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.\n\nThis program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.</string>
+    <string name="lic_card_compose_title">Jetpack Compose &amp; AndroidX Libraries</string>
+    <string name="lic_card_compose_license">Apache License 2.0</string>
+    <string name="lic_card_compose_desc">Copyright (C) The Android Open Source Project. Licensed under the Apache License, Version 2.0.</string>
+    <string name="lic_card_okhttp_title">OkHttp &amp; Okio</string>
+    <string name="lic_card_okhttp_license">Apache License 2.0</string>
+    <string name="lic_card_okhttp_desc">Copyright 2019 Square, Inc. Licensed under the Apache License, Version 2.0.</string>
+    <string name="lic_card_kotlin_title">Kotlin &amp; KotlinX (Coroutines, Serialization)</string>
+    <string name="lic_card_kotlin_license">Apache License 2.0</string>
+    <string name="lic_card_kotlin_desc">Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors.</string>
+    <string name="lic_card_camerax_title">CameraX &amp; ZXing Core</string>
+    <string name="lic_card_camerax_license">Apache License 2.0</string>
+    <string name="lic_card_camerax_desc">ZXing: Copyright (C) 2008 ZXing authors. Licensed under the Apache License, Version 2.0.</string>
+    <string name="lic_card_maple_title">Maple Mono Font</string>
+    <string name="lic_card_maple_license">SIL Open Font License 1.1</string>
+    <string name="lic_card_maple_desc">Copyright (c) 2021-2024 Subframe &amp; Maple Mono Project Contributors. Licensed under SIL Open Font License, Version 1.1.</string>
+    <string name="lic_dismiss">Close</string>
+
+    <!-- Diagnostics viewer dialog -->
+    <string name="diag_title">Real-time Gateway Diagnostic Logs</string>
+    <string name="diag_status_enabled">Enabled</string>
+    <string name="diag_status_disabled">Disabled</string>
+    <string name="diag_subtitle">Ring buffer caching the last 500 handshake &amp; RPC diagnostic frames</string>
+    <string name="diag_close_button">Close</string>
+    <string name="diag_empty_disabled">Diagnostic logging is disabled\nPlease enable \"Real-time Gateway Diagnostic Logs\" in Settings</string>
+    <string name="diag_empty_no_logs">No diagnostic logs yet\nLogs will appear here after connecting or performing actions</string>
+    <string name="diag_clear_button">Clear</string>
+    <string name="diag_toast_cleared">Diagnostic logs cleared</string>
+    <string name="diag_clip_label">cmux pocket diagnostics</string>
+    <string name="diag_toast_copied">Sanitized diagnostics bundle copied to clipboard</string>
+    <string name="diag_export_button">Export Sanitized</string>
+</resources>

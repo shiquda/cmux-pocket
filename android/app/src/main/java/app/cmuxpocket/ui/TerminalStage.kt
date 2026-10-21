@@ -1,5 +1,7 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
+import androidx.compose.ui.res.stringResource
 import app.cmuxpocket.engine.TerminalScreenState
 import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.transport.ConnectionStatus
@@ -11,6 +13,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,7 +29,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun TerminalStage(
     surfaces: List<SurfaceInfo>,
-    activeScreenState: TerminalScreenState,
+    activeScreenState: TerminalScreenState? = null,
+    screenStateFlow: StateFlow<TerminalScreenState>? = null,
     connectionStatus: ConnectionStatus,
     onTapCanvas: () -> Unit,
     onTerminalScroll: (Double) -> Unit,
@@ -29,13 +38,26 @@ fun TerminalStage(
     modifier: Modifier = Modifier,
     displayPreference: TerminalDisplayPreference = TerminalDisplayPreference(),
     onDisplayPreferenceChange: (TerminalDisplayPreference) -> Unit = {},
-    themeHex: String = "#1E1E1E"
+    themeHex: String = "#1E1E1E",
+    onSendKey: (String) -> Unit = {},
+    onClearScreen: () -> Unit = {},
+    renderEnabled: Boolean = true
 ) {
     val theme = CmuxTheme.colors
     val stageBg = try {
         Color(android.graphics.Color.parseColor(themeHex))
     } catch (_: Exception) {
         theme.background
+    }
+
+    val effectiveScreenState by if (screenStateFlow != null) {
+        if (renderEnabled) {
+            screenStateFlow.collectAsState()
+        } else {
+            remember { mutableStateOf(screenStateFlow.value) }
+        }
+    } else {
+        rememberUpdatedState(activeScreenState ?: TerminalScreenState())
     }
 
     Box(
@@ -60,14 +82,14 @@ fun TerminalStage(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "No Active Terminal Tabs",
+                    text = stringResource(R.string.stage_no_tabs),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = theme.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Create a new tab to start running commands",
+                    text = stringResource(R.string.stage_no_tabs_hint),
                     fontSize = 13.sp,
                     color = theme.onSurfaceVariant
                 )
@@ -75,8 +97,8 @@ fun TerminalStage(
                 Button(
                     onClick = onNewSurfaceClick,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (theme.isDark) Color(0xFF00FF7F) else Color(0xFF007AFF),
-                        contentColor = Color.Black
+                        containerColor = theme.primary,
+                        contentColor = theme.onPrimary
                     ),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(48.dp)
@@ -87,18 +109,21 @@ fun TerminalStage(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add Terminal Tab", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.stage_add_tab), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
         } else {
             // Active Terminal Canvas
             TerminalCanvas(
-                screenState = activeScreenState,
+                screenState = effectiveScreenState,
+                renderEnabled = renderEnabled,
                 onTap = onTapCanvas,
                 onTerminalScroll = onTerminalScroll,
                 displayPreference = displayPreference,
                 onDisplayPreferenceChange = onDisplayPreferenceChange,
                 themeHex = themeHex,
+                onSendKey = onSendKey,
+                onClearScreen = onClearScreen,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -106,7 +131,7 @@ fun TerminalStage(
         // Offline / Reconnecting Banner
         if (connectionStatus == ConnectionStatus.CONNECTING || connectionStatus == ConnectionStatus.AUTHENTICATING) {
             Surface(
-                color = Color(0xB3212121),
+                color = theme.scrim,
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
@@ -119,13 +144,13 @@ fun TerminalStage(
                     CircularProgressIndicator(
                         modifier = Modifier.size(12.dp),
                         strokeWidth = 2.dp,
-                        color = Color(0xFFFFB300)
+                        color = theme.accentOrange
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Syncing with cmux host...",
+                        text = stringResource(R.string.stage_syncing),
                         fontSize = 11.sp,
-                        color = Color(0xFFFFB300)
+                        color = theme.accentOrange
                     )
                 }
             }

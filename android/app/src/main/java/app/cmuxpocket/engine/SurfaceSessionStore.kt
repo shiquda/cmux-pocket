@@ -73,6 +73,14 @@ class SurfaceSessionStore {
         return session.engine.applyFrame(frame)
     }
 
+
+    fun clearScrollback(surfaceId: String? = null) {
+        if (surfaceId != null) {
+            sessions[surfaceId]?.engine?.clearScrollback()
+        } else {
+            sessions.values.forEach { it.engine.clearScrollback() }
+        }
+    }
     fun clear() {
         sessions.clear()
     }

@@ -608,4 +608,16 @@ class TerminalViewModel : ViewModel() {
             }
         }
     }
+
+    fun clearScrollback(surfaceId: String? = null) {
+        sessionStore.clearScrollback(surfaceId)
+        val activeId = _selectedSurfaceId.value
+        if (surfaceId == null || surfaceId == activeId) {
+            activeId?.let { id ->
+                sessionStore.getSession(id)?.let { session ->
+                    _activeScreenState.value = session.engine.screenState.value
+                }
+            }
+        }
+    }
 }
