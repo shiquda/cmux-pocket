@@ -64,20 +64,11 @@ fun OpenSourceLicensesDialog(
                         )
                     }
 
-                    IconButton(
-                        onClick = onDismissRequest,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(theme.controlBg)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = stringResource(R.string.lic_close_button),
-                            tint = theme.onContainer,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    CircleIconButton(
+                        icon = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.lic_close_button),
+                        onClick = onDismissRequest
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))

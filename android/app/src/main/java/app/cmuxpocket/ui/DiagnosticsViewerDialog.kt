@@ -115,20 +115,11 @@ fun DiagnosticsViewerDialog(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    IconButton(
-                        onClick = onDismissRequest,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(theme.controlBg)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = stringResource(R.string.diag_close_button),
-                            tint = theme.onContainer,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    CircleIconButton(
+                        icon = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.diag_close_button),
+                        onClick = onDismissRequest
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
