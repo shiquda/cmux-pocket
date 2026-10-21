@@ -89,6 +89,45 @@ internal fun transformTerminalDisplay(
     ).normalized()
 }
 
+/**
+ * Damping applied to scrollback lines converted from a drag that the viewport can no longer
+ * absorb. The viewport pan itself stays 1:1 so content tracks the finger; the damped part only
+ * keeps an inward nudge at the boundary from jumping several history rows at once.
+ */
+internal const val BOUNDARY_SCROLL_DAMPING = 0.85f
+
+/**
+ * A vertical pan split into the part the viewport can still absorb and the part that chains into
+ * scrollback: `pan.y` is the residual viewport movement, `scrollLines` the history rows the drag
+ * requested past the boundary (positive = older rows).
+ */
+internal data class TerminalBoundaryPan(val pan: Offset, val scrollLines: Float)
+
+/**
+ * Splits [pan] at the vertical edge of the rendered grid.
+ *
+ * The viewport can only move while there is content left to reveal; a finger that keeps pulling at
+ * the top (older) or bottom (newest) edge produces excess pixels, which become scrollback lines at
+ * one line per [TerminalGeometry.rowHeight]. Zooming never chains because pinch is reserved for
+ * font scaling.
+ */
+internal fun chainTerminalBoundaryPan(
+    geometry: TerminalGeometry,
+    pan: Offset,
+    isZooming: Boolean,
+    damping: Float = BOUNDARY_SCROLL_DAMPING
+): TerminalBoundaryPan {
+    if (isZooming || pan.y == 0f || geometry.rowHeight <= 0f) return TerminalBoundaryPan(pan, 0f)
+    val contentHeight = geometry.rows * geometry.rowHeight
+    val currentPanY = geometry.originY - (geometry.canvasHeight - contentHeight)
+    val maxPanY = (contentHeight - geometry.canvasHeight).coerceAtLeast(0f)
+    val nextPanY = (currentPanY + pan.y).coerceIn(0f, maxPanY)
+    val consumed = nextPanY - currentPanY
+    val excess = pan.y - consumed
+    val scrollLines = if (kotlin.math.abs(excess) < 0.01f) 0f else excess / geometry.rowHeight * damping
+    return TerminalBoundaryPan(pan.copy(y = consumed), scrollLines)
+}
+
 /** A manual vertical position applies only while the cursor remains at its original row. */
 internal fun terminalViewportIsDetached(preference: TerminalDisplayPreference, liveCursorRow: Int?): Boolean =
     preference.panY != null && preference.panAnchorRow != null &&
