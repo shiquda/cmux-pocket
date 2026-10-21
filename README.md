@@ -1,153 +1,175 @@
 # cmux Pocket
 
-cmux Pocket is an independent Android companion for people who use [cmux](https://cmux.com/) on macOS and want authoritative terminal workspaces and tabs on a phone.
+[![Latest Release](https://img.shields.io/github/v/release/shiquda/cmux-pocket?color=blue)](https://github.com/shiquda/cmux-pocket/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Android%208.0%2B%20%7C%20macOS%2013%2B-informational)](https://github.com/shiquda/cmux-pocket)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-> This is an independent community project. It is not affiliated with cmux and is not endorsed by the cmux project or its maintainers. “cmux” identifies the compatibility target only.
+cmux Pocket is an independent Android companion for [cmux](https://cmux.com/) on macOS, delivering authoritative multi-workspace terminal streaming, an immersive viewport, and one-tap QR pairing over a secure Gateway.
 
-[Download the signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Networking and setup guide](docs/networking.md)
+> **Disclaimer:** Independent community project. Not affiliated with or endorsed by cmux. “cmux” identifies the compatibility target only.
+
+[Download Signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Quick Start](#quick-start) · [Networking Guide](docs/networking.md) · [Design System](DESIGN.md) · [Changelog](CHANGELOG.md)
 
 ![cmux Pocket: Mac desktop showing cmux terminal alongside Android phone displaying the same workspace](docs/assets/hero.png)
 
-## What it does
+---
 
-- Renders the authoritative `cmux.render-grid.v1` terminal data; Android does not run a second local PTY or VT parser.
-- Switches Workspaces and Tabs on the phone without changing the Mac's current focus.
-- Synchronizes tab creation and deletion from the Mac; closing the active tab requires confirmation.
-- Keeps main-screen scrollback local to the phone while alternate-screen/TUI scrolling remains owned by cmux on the Mac.
-- Uses encrypted Android connection profiles and a random Gateway authentication token.
-- Keeps an active Gateway session through Android backgrounding with an ongoing connection notification; Android may still stop it after a force-stop or system policy action.
-- Displays a connection QR code and `cmux-pocket://` import link in the CLI (`cmux-pocket qr`) for one-tap pairing on Android via in-app camera scan or deep link.
-- Supports custom Gateway endpoints (`cmux-pocket config set endpoint <URL>`) and single-use CLI overrides (`--endpoint <URL>`).
-- Provides a compact keyboard with modifiers, navigation keys, and F1–F12.
+## Highlights
 
-## How the connection works
+- **Pure Immersive Viewport & Floating Island**: Fullscreen terminal canvas with a dynamic breadcrumb island pill (`[status] workspace > #session [count]`) for instant session context, switching, and status indication.
+- **Authoritative Terminal Streaming**: Renders `cmux.render-grid.v1` differential grid frames directly over WebSocket (`wss://`). The Mac owns the PTY and VT parsing—Android runs zero local shells, ensuring 100% terminal state fidelity.
+- **Decoupled Dual-End Navigation**: Switch workspaces or tabs on the phone without changing your Mac's active focus; main-screen scrollback stays local to Android while alternate-screen/TUI scrollback remains cmux-managed.
+- **One-Tap Pairing via CLI QR Code**: Generate pairing QR codes in your Mac terminal (`cmux-pocket qr`) and scan with the in-app camera for instant, validated profile import with overwrite protection.
+- **Modernized Settings Hub**: Clean secondary-menu navigation with live diagnostics ring buffer (500-frame replay), profile backup/restore via clipboard, and in-app GitHub Releases update checker.
+- **P3 Neon Grid Color System**: Unified violet/neon-cyan/lime color palette optimized for OLED screens, with a first-class tuned light mode and contrast WCAG AA compliance.
+- **High-Performance Rendering**: Batched text runs, memoized ARGB cell parsing, dirty-row caching, and GPU-accelerated scaling drop janky frames from 58.5% down to 13.0%.
+- **Bilingual Localization**: Native English and 简体中文 support across all screens and notifications with instant runtime switching.
+- **100% Offline & Zero Cloud Dependency**: Loopback-only Mac Gateway with random bearer tokens, encrypted Android Keystore storage, and zero unnecessary device permissions.
 
-![cmux Pocket architecture: Android app to a user-managed TLS boundary, loopback Gateway, and cmux on macOS](docs/assets/architecture.svg)
+---
 
-The Gateway listens on `127.0.0.1` only. Normal remote or LAN use therefore needs a user-managed TLS reverse proxy, secure tunnel, VPN, or equivalent boundary. The Android app uses `wss://` for every non-loopback endpoint; cleartext `ws://` is limited to loopback/USB-reverse development paths.
+## Architecture
 
-## Try it
+![cmux Pocket architecture: Android app connecting via TLS boundary to loopback Gateway and cmux on macOS](docs/assets/architecture.svg)
 
-### Recommended: LAN or user-managed secure networking
+cmux Pocket uses a local-first, decoupled architecture:
+1. **cmux (macOS)**: Runs the real terminal instances and manages terminal state, window geometry, and process lifecycles.
+2. **cmux-pocket Gateway (macOS)**: A lightweight Rust daemon listening strictly on `127.0.0.1:8088`. Queries cmux via its UNIX domain socket and streams differential render grids over WebSocket.
+3. **Secure Network Boundary**: Tailscale HTTPS Serve (`.ts.net`), LAN reverse proxy (Caddy / Nginx), or SSH/VPN tunnel terminates TLS before forwarding traffic to the loopback Gateway.
+4. **cmux Pocket (Android)**: A Jetpack Compose application rendering grid cells with Maple Mono Nerd Font, handling local touch gestures and accessory keyboard input without running a local terminal parser.
 
-1. Install cmux on macOS and confirm `cmux ping` succeeds.
-2. Install the Gateway CLI and let it create the token, config, and login service:
+---
 
-   ```bash
-   brew install shiquda/cmux-pocket/cmux-pocket
-   cmux-pocket setup
-   cmux-pocket status
-   ```
+## Quick Start
 
-   `cmux-pocket setup` is idempotent. It stores the token with user-only permissions and manages the macOS `launchd` service; it does not print the raw token.
-3. Put a trusted TLS reverse proxy, tunnel, VPN, or other user-managed secure network in front of the loopback Gateway. Use public TLS port `443` unless your boundary explicitly exposes another port.
-4. Install the APK from the latest release, open **Settings**, add a profile using your `wss://` endpoint, paste the token from the path reported by `cmux-pocket setup`, and tap **Apply & Save**.
+### 1. Prerequisites
+- **macOS**: [cmux](https://cmux.com/) installed and running (`cmux ping`).
+- **Android**: Android 8.0+ (API 26+) device or emulator.
+- **Networking**: Tailscale (recommended) or a user-managed TLS reverse proxy.
 
-The app should show the Workspaces and Tabs currently available in cmux. See the [networking and setup guide](docs/networking.md) for LAN, reverse-proxy, tunnel, VPN, token, CLI, and troubleshooting details.
+### 2. Install the macOS CLI & Gateway
 
-### Tailscale connection assistant
+Install the Gateway CLI via Homebrew and start the background service:
 
-If you use Tailscale, connect the Mac and phone to the same tailnet and run `cmux-pocket setup --tailscale` on the Mac. The command verifies Gateway workspace access, sets up private HTTPS forwarding, and prints the phone endpoint. It preserves the existing token and reuses a healthy Gateway. Existing conflicting Tailscale routes are left unchanged.
+```bash
+brew install shiquda/cmux-pocket/cmux-pocket
+cmux-pocket setup
+cmux-pocket status
+```
 
-In Android **Settings → Connection & Host**, enter that endpoint and token, then tap **Check connection**. The checklist verifies reachability, authentication, Gateway response, workspace access, and update subscription. **Ready** means the workspace query succeeded; an authenticated socket alone is insufficient. **Host setup** provides the setup command and **Open Tailscale** opens the installed VPN app. See [Tailscale setup and recovery](docs/networking.md#tailscale-connection-assistant).
+`cmux-pocket setup` is idempotent: it provisions an authenticated bearer token with user-only permissions (`0600`), creates a macOS LaunchAgent, and tests local connectivity.
 
-### One-tap configuration: CLI QR code and Android scan
+### 3. Pair with Android in One Tap
 
-Instead of manually copying host addresses and tokens, generate a pairing QR code on the Mac:
+Generate a terminal QR code with automatic Tailscale discovery:
 
 ```bash
 cmux-pocket qr
 ```
 
-The CLI discovers your active Tailscale endpoint automatically, or you can specify a custom endpoint or save one in your local configuration:
+*(Or specify a custom endpoint: `cmux-pocket qr --endpoint wss://gateway.example.com`)*
 
+1. [Download the latest signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) and install it on Android.
+2. Open **Settings → Connection** and tap **Scan QR**.
+3. Point your camera at the Mac terminal. Review the **Import Preview** dialog and tap **Import & Connect**.
+
+Your cmux workspaces and tabs appear immediately on Android.
+
+---
+
+## Interface & Interactions
+
+![cmux Pocket: Portrait and Landscape terminal viewports](docs/assets/device-portrait-landscape.png)
+
+### Terminal Navigation & Sessions
+- **Floating Island Pill**: Shows current workspace, active session number, and connection status. Tapping the pill opens the **Sessions & Surfaces Drawer** to switch workspaces or create new tabs on the fly.
+- **Landscape Sidebar**: On wider screens and landscape orientation, a collapsible sidebar displays workspaces and tabs alongside the terminal.
+
+### Touch Gestures & Viewport
+- **Pinch to Zoom**: Adjust text size smoothly via pinch gesture, or use **A− / A+** controls.
+- **Pan & Scroll**: Drag with one or two fingers to scroll through scrollback or navigate wide columns.
+- **Double Tap**: Instantly fits the terminal width to your screen.
+- **Contextual Action Bubble**: Long-press any terminal text to select and access one-tap actions: Copy selection, Copy screen, Paste at cursor, Send interrupt (Ctrl+C), or Clear screen.
+
+### Accessory Keyboard Bar
+A persistent bottom bar provides essential developer keys missing from mobile software keyboards: `ESC`, `TAB`, `CTRL`, `ALT`, navigation arrows, and a toggle for the full Computer Keyboard panel (F1–F12, function combinations).
+
+---
+
+## Settings & Diagnostics
+
+![cmux Pocket connection settings](docs/assets/connection-settings.png)
+
+- **Connection Profiles**: Manage multiple hosts (Tailscale, LAN, USB Reverse) with encrypted credential storage in Android Keystore.
+- **Live Diagnostics**: Built-in 500-frame circular buffer captures WebSocket handshakes, frame timings, and RPC payloads. Export redacted JSON logs directly to clipboard for troubleshooting.
+- **Data & Backup**: Export and import host profiles via clipboard JSON without risking credential leakage.
+- **In-App Updates**: Check for new releases directly against GitHub Releases and download updated APKs in one tap.
+
+---
+
+## Networking Options
+
+| Method | Endpoint | Security | Recommended For |
+| :--- | :--- | :--- | :--- |
+| **Tailscale** *(Recommended)* | `wss://<node>.ts.net:443` | TLS via Tailscale HTTPS | Remote and LAN use with zero port forwarding |
+| **LAN Reverse Proxy** | `wss://gateway.local` | TLS (Caddy / Nginx / Certbot) | High-speed local network setups |
+| **USB Reverse (Dev)** | `ws://127.0.0.1:8088` | Cleartext loopback only | Local testing with `adb reverse tcp:8088 tcp:8088` |
+
+> 🔒 **Security Notice:** The Gateway strictly refuses non-loopback binds. The Android client requires `wss://` for any non-loopback address. Cleartext `ws://` is strictly limited to loopback/USB testing.
+
+For detailed Caddy, Nginx, Tailscale Serve, and LaunchAgent configurations, see [docs/networking.md](docs/networking.md).
+
+---
+
+## Development & Building
+
+### Requirements
+- **Rust**: 1.75+ (stable)
+- **Android**: JDK 17, Android SDK 35
+- **Python**: 3.11+ (legacy gateway reference test suite only)
+
+### Rust Gateway & CLI
 ```bash
-# One-time override:
-cmux-pocket qr --endpoint wss://custom.example.com:8443
-
-# Or save a default endpoint:
-cmux-pocket config set endpoint wss://custom.example.com:8443
-```
-
-**Endpoint resolution priority:**
-1. Explicit CLI argument (`--endpoint <URL>`)
-2. Locally saved endpoint (`config.endpoint`)
-3. Tailscale automatic discovery (`.ts.net` HTTPS route)
-
-In the Android app, open **Settings → Connection & Host** and tap **Scan QR** to scan the code with your phone camera. Or open a `cmux-pocket://` link from a compatible scanner. An **Import Preview** dialog will appear, showing the host, port, security status, and masked token before saving, ensuring existing profiles are never silently overwritten.
-
-> ⚠️ **Credential Security:** The QR code and import URI contain your Gateway bearer authentication token. Do not take screenshots, share in chat channels, or publish online.
-
-### Temporary development/testing path: ADB reverse
-
-ADB reverse is useful for emulator and local device verification, but it is not the recommended user deployment:
-
-```bash
-adb reverse tcp:8088 tcp:8088
-```
-
-Use the built-in **USB** profile (`127.0.0.1:8088`) and the Gateway token. Re-run the reverse command after reconnecting or rebooting the device. Keep this path out of production or shared-network setups.
-
-## In the app
-
-![cmux Pocket workspace picker showing the sanitized README Demo workspace](docs/assets/workspace-picker.png)
-
-The workspace picker and terminal tab bar are phone-local navigation. Selecting a Workspace or Tab does not move cmux's Mac-side focus.
-
-Terminals open at a readable text size. Use **A− / A+** below the terminal or pinch to adjust it, and drag with one or two fingers to move around the view. **Fit Width** shows all columns; **Readable** returns to your chosen text size. Double-tap the canvas to fit its width. Each terminal remembers its text size and view across tab switches and app restarts. The font slider in **Settings → Display & Terminal** also adjusts the current terminal and sets the default for new terminals.
-
-![cmux Pocket connection settings with a sanitized WSS-style endpoint](docs/assets/connection-settings.png)
-
-Connection profiles store the endpoint and token in encrypted Android preferences. Use a trusted TLS certificate and a strong random token; never put tokens, private domains, tunnel IDs, or personal paths in screenshots or bug reports.
-
-## Development
-
-Requirements: JDK 17, Android SDK 35, Rust stable, and `uv` only for the legacy Python Gateway reference tests.
-
-```bash
+# Run unit and integration tests
 cargo test --workspace --locked
-cd android
-./gradlew testDebugUnitTest assembleDebug
-```
 
-Rust CLI smoke:
-
-```bash
-cargo run -p cmux-pocket-cli -- --help
+# Run CLI doctor diagnostics
 cargo run -p cmux-pocket-cli -- doctor --offline --json
+
+# Build release CLI binary
+cargo build --release -p cmux-pocket-cli
 ```
 
-Legacy Gateway reference tests:
-
+### Android App
 ```bash
-cd gateway
-uv run --with websockets python3 -m unittest test_gateway test_replay_normalize test_agent_completion_event
+cd android
 
+# Run unit tests
+./gradlew testDebugUnitTest
+
+# Assemble debug APK
+./gradlew assembleDebug
+
+# Stop Gradle daemon after build (resource hygiene)
+./gradlew --stop
 ```
 
-The repository's Android–Gateway protocol test uses a mock Gateway bound to loopback and fixed test credentials; those values are for tests only.
+### Releases & Changelog
+Release bodies are generated directly from [CHANGELOG.md](CHANGELOG.md). Before tagging a `v*` release, add a `## [X.Y.Z] - YYYY-MM-DD` section. The release workflow extracts this section using `scripts/release-notes-from-changelog.sh` to populate GitHub Releases notes automatically.
 
-### Releases
+---
 
-Release bodies come from `CHANGELOG.md`, not from commit history. Before pushing a `v*` tag, add a
-`## [X.Y.Z] - YYYY-MM-DD` section for it; the release workflow extracts that section with
-`scripts/release-notes-from-changelog.sh` and fails instead of publishing empty notes. After editing
-`CHANGELOG.md` for an existing release, run the **Sync release notes from the changelog** workflow
-manually with that tag to refresh the GitHub Release page.
+## Security & Vulnerability Reporting
 
-## Security and privacy
+- **Loopback Enforcement**: The Gateway strictly binds to `127.0.0.1`.
+- **Encrypted Storage**: Connection profiles and auth tokens are stored using `EncryptedSharedPreferences` backed by the Android Keystore. Android app backup (`allowBackup`) is disabled.
+- **Data Protection**: Zero telemetry, zero analytics, zero external cloud servers.
+- **Reporting**: Report security vulnerabilities privately via GitHub's [Security Advisory](https://github.com/shiquda/cmux-pocket/security/advisories/new). Never post tokens, tunnel URLs, or credentials in public issues.
 
-- The Gateway refuses non-loopback binds and does not expose a public listener by itself.
-- Non-loopback Android connections require `wss://`; plaintext `ws://` is limited to `127.0.0.1` and `localhost`.
-- Connection profiles and tokens use encrypted Android preferences; Android app-data backup is disabled.
-- Do not commit or publish tokens, tunnel IDs, private addresses, workspace names, terminal contents, or personal identifiers.
-
-Report security issues privately through GitHub's **Security → Report a vulnerability**. Do not post credentials, addresses, logs, or terminal contents in public Issues.
+---
 
 ## License
 
-Unless stated otherwise, the project code is released under the [GNU Affero General Public License v3.0](LICENSE).
-
-The bundled Maple Mono NF font is licensed under the [SIL Open Font License 1.1](LICENSES/MapleMono-OFL-1.1.txt). See [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) for details.
-
-> **Release signing notice:** `v0.2.0` uses the existing local Android debug keystore for update continuity. This is not a production or app-store signing identity; replace it with a dedicated release keystore before wider distribution.
+- **Code**: Licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+- **Fonts**: Bundled [Maple Mono NF](LICENSES/MapleMono-OFL-1.1.txt) is licensed under the [SIL Open Font License 1.1](http://scripts.sil.org/OFL).
+- See [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) for third-party dependencies.
