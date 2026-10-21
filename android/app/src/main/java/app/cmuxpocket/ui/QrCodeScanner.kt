@@ -388,7 +388,7 @@ fun ScannerOverlay(
                     Icon(
                         imageVector = if (isTorchEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
                         contentDescription = stringResource(R.string.scan_torch_toggle_cd),
-                        tint = if (isTorchEnabled) theme.primary else Color.White
+                        tint = Color.White
                     )
                 }
 
@@ -443,7 +443,7 @@ fun ScannerOverlay(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 60.dp, start = 24.dp, end = 24.dp),
+                .padding(bottom = 48.dp, start = 24.dp, end = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -460,7 +460,7 @@ fun ScannerOverlay(
                 fontSize = 12.sp,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
             Text(
                 text = stringResource(R.string.scan_hint_terminal),
                 color = Color.LightGray,
@@ -480,7 +480,7 @@ fun ScannerOverlay(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
             OutlinedButton(
                 onClick = onClose,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
@@ -560,7 +560,7 @@ fun PermissionDeniedView(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
                 ) {
-                    Text(stringResource(R.string.scan_app_settings), color = Color.White)
+                    Text(stringResource(R.string.scan_app_settings))
                 }
             }
         }
@@ -623,7 +623,7 @@ fun PermissionRequestView(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
                 ) {
-                    Text(stringResource(R.string.scan_permission_allow), color = Color.White)
+                    Text(stringResource(R.string.scan_permission_allow))
                 }
             }
         }

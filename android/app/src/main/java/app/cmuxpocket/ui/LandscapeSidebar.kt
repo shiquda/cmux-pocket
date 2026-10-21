@@ -50,6 +50,7 @@ fun LandscapeSidebar(
     onCloseWorkspace: ((String) -> Unit)? = null,
     onRenameSurface: ((SurfaceInfo) -> Unit)? = null,
     onSettingsClick: () -> Unit,
+    onFloatingWindowClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val theme = CmuxTheme.colors
@@ -118,7 +119,7 @@ fun LandscapeSidebar(
                             ConnectionStatus.CONNECTED -> theme.accentGreen
                             ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> theme.accentOrange
                             ConnectionStatus.ERROR -> theme.accentRed
-                            ConnectionStatus.DISCONNECTED -> theme.onSurfaceVariant
+                            ConnectionStatus.DISCONNECTED -> theme.accentRed
                         }
                         Box(
                             modifier = Modifier
@@ -304,7 +305,7 @@ fun LandscapeSidebar(
                                     // Agent Attention / Activity Dot
                                     if (surf.attention || surf.agentState != null) {
                                         val dotColor = when (surf.agentState) {
-                                            "working" -> theme.primary
+                                            "working" -> theme.accentOrange
                                             "needs_input" -> theme.accentOrange
                                             "done" -> theme.accentGreen
                                             else -> theme.accentRed
@@ -390,7 +391,7 @@ fun LandscapeSidebar(
 
                                     if (surf.attention || surf.agentState != null) {
                                         val dotColor = when (surf.agentState) {
-                                            "working" -> theme.primary
+                                            "working" -> theme.accentOrange
                                             "needs_input" -> theme.accentOrange
                                             "done" -> theme.accentGreen
                                             else -> theme.accentRed
@@ -426,7 +427,20 @@ fun LandscapeSidebar(
 
             HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
 
-            // Bottom Actions: Settings with 48dp Touch Target
+            // Bottom Actions: floating window + settings with 48dp touch targets
+            if (onFloatingWindowClick != null) {
+                IconButton(
+                    onClick = onFloatingWindowClick,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PictureInPictureAlt,
+                        contentDescription = stringResource(R.string.floating_window_open),
+                        tint = theme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
             IconButton(
                 onClick = onSettingsClick,
                 modifier = Modifier.size(48.dp)

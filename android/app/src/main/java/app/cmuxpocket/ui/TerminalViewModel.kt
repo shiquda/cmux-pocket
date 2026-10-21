@@ -1,5 +1,6 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
 import app.cmuxpocket.engine.*
 import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.protocol.AgentSessionCompleted
@@ -141,6 +142,7 @@ class TerminalViewModel : ViewModel() {
     private var lastConnectionTarget: ConnectionTarget? = null
     private var reconnectJob: Job? = null
     private var reconnectAttempt = 0
+    private var foregroundProbeJob: Job? = null
     private var manualDisconnect = true
     private var connectionValidationError: String? = null
     private var pendingNotificationWorkspaceId: String? = null
@@ -272,6 +274,13 @@ class TerminalViewModel : ViewModel() {
                                 ConnectionFailure.DNS -> "Gateway hostname could not be resolved"
                                 else -> "Cannot reach the Gateway"
                             },
+                            problemRes = when (wsClient.connectionFailure) {
+                                ConnectionFailure.AUTHENTICATION -> R.string.conn_err_auth_rejected
+                                ConnectionFailure.AUTHENTICATION_TIMEOUT -> R.string.conn_err_auth_timeout
+                                ConnectionFailure.TLS -> R.string.conn_err_tls
+                                ConnectionFailure.DNS -> R.string.conn_err_dns
+                                else -> R.string.conn_err_unreachable
+                            },
                         )
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
                         _statusMessage.value = _connectionReadiness.value.summary
@@ -285,8 +294,8 @@ class TerminalViewModel : ViewModel() {
                         connectionGeneration++
                         if (connectionValidationError != null || _connectionReadiness.value.started) {
                             _connectionReadiness.value = _connectionReadiness.value.copy(
-                                started = true,
                                 problem = connectionValidationError ?: "Gateway disconnected",
+                                problemRes = if (connectionValidationError != null) null else R.string.conn_err_disconnected,
                             )
                         }
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
@@ -382,6 +391,51 @@ class TerminalViewModel : ViewModel() {
             }
             reconnectJob = null
         }
+    }
+
+    /**
+     * Called when the activity returns to the foreground. A backgrounded process can keep a dead
+     * socket behind a stale CONNECTED status, and a retry scheduled while backgrounded can still
+     * be waiting for its backoff delay (or already be paused). Probe the live socket and recover
+     * immediately instead of leaving the terminal on a stale screen.
+     */
+    fun onAppForegrounded() {
+        val target = lastConnectionTarget ?: return
+        if (manualDisconnect) return
+        when (wsClient.statusFlow.value) {
+            ConnectionStatus.CONNECTED -> verifyConnectionAfterForeground(target)
+            ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Unit
+            else -> reconnectNow(target)
+        }
+    }
+
+    private fun verifyConnectionAfterForeground(target: ConnectionTarget) {
+        if (foregroundProbeJob?.isActive == true) return
+        foregroundProbeJob = viewModelScope.launch {
+            try {
+                wsClient.callRpc("mobile.host.status")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.i(tag, "Foreground liveness probe failed; reconnecting", e)
+                if (!manualDisconnect &&
+                    lastConnectionTarget == target &&
+                    wsClient.statusFlow.value == ConnectionStatus.CONNECTED
+                ) {
+                    reconnectNow(target)
+                }
+            }
+        }
+    }
+
+    /** Replaces a stale attempt with a fresh connection now, instead of waiting out a backoff. */
+    private fun reconnectNow(target: ConnectionTarget) {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        reconnectAttempt = 0
+        if (manualDisconnect || lastConnectionTarget != target) return
+        wsClient.discardSocket()
+        connectTarget(target)
     }
 
     fun scrollTerminal(deltaLines: Double) {
@@ -567,10 +621,15 @@ class TerminalViewModel : ViewModel() {
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
                         _statusMessage.value = "Bootstrap failed: ${e.message}"
                         _connectionReadiness.value = _connectionReadiness.value.failed(
-                            when (_connectionReadiness.value.step) {
+                            message = when (_connectionReadiness.value.step) {
                                 ConnectionStep.WORKSPACES -> "Gateway connected, but cmux workspaces are unavailable"
                                 ConnectionStep.GATEWAY -> "Gateway did not complete the readiness handshake"
                                 else -> "Workspace synchronization failed"
+                            },
+                            resId = when (_connectionReadiness.value.step) {
+                                ConnectionStep.WORKSPACES -> R.string.conn_err_workspaces_unavailable
+                                ConnectionStep.GATEWAY -> R.string.conn_err_handshake_incomplete
+                                else -> R.string.conn_err_sync_failed
                             }
                         )
                     }
@@ -607,16 +666,19 @@ class TerminalViewModel : ViewModel() {
         )
         _selectedWorkspaceKey.value = newWorkspaceKey
         _selectedSurfaceId.value = newSurfaceId
-        applyPendingNotificationNavigation()
+        val navigationApplied = applyPendingNotificationNavigation()
 
-        // When enabled, sync focus to gateway whenever selection changes (including null -> new and old -> null/new)
-        if (syncReconciledFocus && prevSurfaceId != newSurfaceId) {
+        // When enabled, sync focus to gateway whenever selection changes (including null -> new and old -> null/new).
+        // A pending notification tap already dispatched its own focus, and the reconciled surface is the
+        // wrong target once that tap moved the selection — syncing it would fight the tap.
+        if (syncReconciledFocus && !navigationApplied && prevSurfaceId != _selectedSurfaceId.value) {
+            val targetSurfaceId = _selectedSurfaceId.value
             prevSurfaceId?.let { releasePhoneWidth(it) }
             viewModelScope.launch {
                 try {
-                    wsClient.focusSurface(newSurfaceId)
-                    if (newSurfaceId != null) {
-                        requestSingleFlightReplay(newSurfaceId)
+                    wsClient.focusSurface(targetSurfaceId)
+                    if (targetSurfaceId != null) {
+                        requestSingleFlightReplay(targetSurfaceId)
                     }
                 } catch (e: Exception) {
                     Log.w(tag, "Failed to update focus on selection reconciliation", e)
@@ -647,19 +709,26 @@ class TerminalViewModel : ViewModel() {
     fun navigateToSurface(workspaceId: String?, surfaceId: String) {
         pendingNotificationWorkspaceId = workspaceId
         pendingNotificationSurfaceId = surfaceId
+        Log.d(tag, "Pending navigation: workspace=$workspaceId surface=$surfaceId workspaces=${_workspaces.value.size}")
         applyPendingNotificationNavigation()
     }
 
-    private fun applyPendingNotificationNavigation() {
-        val surfaceId = pendingNotificationSurfaceId ?: return
-        val workspace = _workspaces.value.firstOrNull { ws ->
-            (pendingNotificationWorkspaceId == null || ws.id == pendingNotificationWorkspaceId || ws.stableKey == pendingNotificationWorkspaceId) &&
-                ws.surfaces.any { it.id == surfaceId }
-        } ?: return
+    private fun applyPendingNotificationNavigation(): Boolean {
+        val surfaceId = pendingNotificationSurfaceId ?: return false
+        val workspace = WorkspaceSelection.locateSurface(
+            workspaces = _workspaces.value,
+            workspaceId = pendingNotificationWorkspaceId,
+            surfaceId = surfaceId,
+        ) ?: run {
+            Log.d(tag, "Pending navigation waits for surface $surfaceId")
+            return false
+        }
+        Log.d(tag, "Applying pending navigation: ${workspace.stableKey} / $surfaceId")
         pendingNotificationWorkspaceId = null
         pendingNotificationSurfaceId = null
         _selectedWorkspaceKey.value = workspace.stableKey
         userSelectSurface(surfaceId)
+        return true
     }
 
     private fun userSelectSurface(surfaceId: String?) {

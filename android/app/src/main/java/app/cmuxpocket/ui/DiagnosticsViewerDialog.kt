@@ -101,7 +101,7 @@ fun DiagnosticsViewerDialog(
                                     },
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (DiagnosticsManager.isEnabled) theme.accentGreen else theme.onContainerMuted
+                                    color = if (DiagnosticsManager.isEnabled) theme.accentGreenInk else theme.onContainerMuted
                                 )
                             }
                         }
@@ -115,20 +115,11 @@ fun DiagnosticsViewerDialog(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    IconButton(
-                        onClick = onDismissRequest,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(theme.controlBg)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = stringResource(R.string.diag_close_button),
-                            tint = theme.onContainer,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    CircleIconButton(
+                        icon = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.diag_close_button),
+                        onClick = onDismissRequest
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -139,7 +130,7 @@ fun DiagnosticsViewerDialog(
                         .fillMaxWidth()
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(theme.background)
+                        .background(theme.surfaceVariant)
                         .border(1.dp, theme.cardBorder, RoundedCornerShape(12.dp))
                         .padding(10.dp)
                 ) {
@@ -170,10 +161,10 @@ fun DiagnosticsViewerDialog(
                         ) {
                             items(logs) { line ->
                                 val color = when {
-                                    line.contains("[AUTH]") -> theme.accentOrange
+                                    line.contains("[AUTH]") -> theme.accentOrangeInk
                                     line.contains("[RPC]") -> theme.primary
-                                    line.contains("error", ignoreCase = true) || line.contains("failed", ignoreCase = true) -> theme.accentRed
-                                    line.contains("success", ignoreCase = true) || line.contains("CONNECTED") -> theme.accentGreen
+                                    line.contains("error", ignoreCase = true) || line.contains("failed", ignoreCase = true) -> theme.accentRedInk
+                                    line.contains("success", ignoreCase = true) || line.contains("CONNECTED") -> theme.accentGreenInk
                                     else -> theme.onSurfaceVariant
                                 }
                                 Text(
@@ -206,7 +197,7 @@ fun DiagnosticsViewerDialog(
                             .height(44.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = theme.accentRed
+                            contentColor = theme.accentRedInk
                         ),
                         border = androidx.compose.foundation.BorderStroke(1.dp, theme.accentRed.copy(alpha = 0.2f))
                     ) {

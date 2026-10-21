@@ -75,6 +75,9 @@
     <string name="notif_agent_fallback">Agent</string>
     <string name="notif_task_complete">%1$s task complete</string>
     <string name="notif_tap_to_open">Tap to open the completed tab in cmux Pocket.</string>
+    <string name="completion_banner_done">Done</string>
+    <string name="completion_banner_more">+%1$d</string>
+    <string name="completion_banner_open">Open the session that just finished</string>
     <string name="keepalive_channel_name">Connection</string>
     <string name="keepalive_channel_desc">Keeps the cmux Pocket Gateway connection active in the background.</string>
     <string name="keepalive_title">cmux Pocket connected</string>
@@ -97,6 +100,27 @@
     <string name="settings_section_opensource">Open Source</string>
     <string name="settings_section_diagnostics">Diagnostics</string>
     <string name="settings_section_storage">Storage</string>
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_section_floating_window">Floating window</string>
+
+    <!-- Settings · Floating window -->
+    <string name="settings_floating_window_title">Floating window</string>
+    <string name="settings_floating_window_desc">Show the latest terminal output in a system picture-in-picture window.</string>
+    <string name="settings_floating_window_auto">Auto-open when leaving the app</string>
+    <string name="settings_floating_window_auto_desc_on">Like YouTube: the window opens when the app goes to the background.</string>
+    <string name="settings_floating_window_auto_desc_off">Use the floating-window button in the accessory bar instead.</string>
+    <string name="settings_floating_window_aspect">Aspect ratio (width : height)</string>
+    <string name="settings_floating_window_aspect_value">%1$.2f : 1</string>
+    <string name="settings_floating_window_font">Floating window font size</string>
+    <string name="settings_floating_window_preview">Preview</string>
+    <string name="floating_window_open">Open floating window</string>
+    <string name="floating_window_no_surface">Open a terminal tab first</string>
+
+    <!-- Settings · Notifications -->
+    <string name="settings_notif_vibrate">Vibrate when the session on screen finishes</string>
+    <string name="settings_notif_vibrate_desc">Only while cmux Pocket is open. Other sessions finishing show a capsule at the top instead.</string>
+    <string name="settings_notif_on">On</string>
+    <string name="settings_notif_off">Off</string>
 
     <!-- Settings · General -->
     <string name="settings_theme_mode_title">App theme mode</string>
@@ -128,7 +152,7 @@
     <string name="settings_port">Port</string>
     <string name="settings_auth_token">Auth token</string>
     <string name="settings_toggle_token">Toggle token visibility</string>
-    <string name="settings_scan_none_found">No open gateway ports found on this subnet</string>
+    <string name="settings_scan_none_found">No open hosts found on this network</string>
     <string name="settings_scan_found">Found %1$s</string>
     <string name="settings_scan_host_one">1 host</string>
     <string name="settings_scan_host_many">%1$d hosts</string>
@@ -183,7 +207,13 @@
 
     <!-- Settings · Storage -->
     <string name="settings_export_profiles">Export host profiles</string>
-    <string name="settings_export_profiles_desc">Back up all %1$d profiles as JSON on the clipboard</string>
+    <string name="settings_export_profiles_desc">Choose whether the clipboard JSON carries access keys (all %1$d profiles)</string>
+    <string name="settings_export_dialog_title">Export host profiles</string>
+    <string name="settings_export_dialog_body">%1$d profiles are written to the clipboard as JSON. Gateway access keys are included only when you choose to carry them; otherwise fill a key in after importing.</string>
+    <string name="settings_export_without_credentials">Copy without keys</string>
+    <string name="settings_export_with_credentials">Copy with keys</string>
+    <string name="settings_export_dialog_cancel">Cancel</string>
+    <string name="settings_exported_with_credentials_toast">Exported %1$d host profiles including access keys to clipboard</string>
     <string name="settings_import_profiles">Import profiles from clipboard</string>
     <string name="settings_import_profiles_desc">Read JSON from the clipboard and merge it into your profiles</string>
     <string name="settings_clear_scrollback">Clear terminal scrollback</string>

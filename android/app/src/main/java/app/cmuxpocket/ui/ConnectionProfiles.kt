@@ -1,6 +1,8 @@
 package app.cmuxpocket.ui
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.util.UUID
 
 @Serializable
@@ -31,6 +33,31 @@ data class ConnectionProfile(
             )
         }
     }
+}
+
+/**
+ * Clipboard backup format for the saved profiles. Credentials are opt-in: without them every
+ * token is blanked, so the copied JSON carries endpoints and names but no access keys.
+ */
+fun encodeProfilesBackup(profiles: List<ConnectionProfile>, includeCredentials: Boolean): String {
+    val json = Json { prettyPrint = true; encodeDefaults = true }
+    val payload = if (includeCredentials) profiles else profiles.map { it.copy(token = "") }
+    return json.encodeToString(payload)
+}
+
+/**
+ * Matches each imported profile to the stored one it would overwrite. An import without
+ * credentials must not clear a token the device already holds for that endpoint.
+ */
+fun mergeImportedProfiles(
+    imported: List<ConnectionProfile>,
+    existing: List<ConnectionProfile>
+): List<ConnectionProfile> = imported.map { profile ->
+    val match = existing.firstOrNull { it.id == profile.id }
+        ?: existing.firstOrNull {
+            it.host.trim() == profile.host.trim() && it.port == profile.port
+        }
+    if (profile.token.isBlank() && match != null) profile.copy(token = match.token) else profile
 }
 
 object ConnectionEndpoint {

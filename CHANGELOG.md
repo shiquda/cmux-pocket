@@ -15,6 +15,7 @@ extracts the section for the pushed tag while publishing, and
 
 ### Added
 
+- Session completion feedback: when the session on screen finishes its agent turn, the phone gives a short haptic pulse; any other session raises a tappable capsule under the floating island (`workspace › #N title Done`) that jumps straight to it, with a `+N` badge for queued completions. **Settings → Notifications** turns the pulse off (on by default). While the app is in the foreground these replace the system notification; a backgrounded app still posts one labelled with its target (`workspace › #N title`), and tapping it opens that surface — including on a cold start or when the Gateway reports a workspace id the mobile tree does not know.
 - Remote wake: when the Gateway is online but cmux.app is not running, the Android terminal shows a **Mac online · cmux not running** card with a one-tap **Wake cmux on Mac** action. The Gateway launches the app through LaunchServices in the background (10-second debounce), polls the socket every 500 ms for up to 15 seconds, then pushes a full workspace sync.
 - Android **Settings → Connection** shows the Pocket Gateway version, the app version, the cmux protocol version, and remote-wake support with a compatibility badge, a **Recheck version** action, a copyable Mac upgrade command, and an APK download link when the app is older than the Gateway.
 - `mobile.host.status` now reports `gateway_version`, `protocol_version`, and `cmux_status` (`installed`, `running`, `can_wake`), and Gateways advertise the `mobile.host.wake_cmux.v1` capability plus a new `mobile.host.wake_cmux` RPC.
@@ -24,7 +25,7 @@ extracts the section for the pushed tag while publishing, and
 - Android connection assistant with a live checklist (reachability, token acceptance, Gateway status, update subscription, workspace access), the host setup command, and an **Open Tailscale** shortcut.
 - Floating breadcrumb island over the terminal exposing connection state, workspace, and session, with a session drawer for switching surfaces and workspaces.
 - Full-screen settings hub with a section rail: General, Connection, Display, Language, Updates, Open Source, Diagnostics, Storage.
-- Language choice between English and 简体中文, persisted in encrypted preferences; English remains the default regardless of device locale.
+- Language choice between System default, English, and 简体中文, persisted in encrypted preferences; a fresh install follows the device locale and falls back to English.
 - In-app update check against the latest GitHub Release with a semver comparison and direct APK download prompt.
 - Diagnostics: opt-in network and RPC logger with a 500-line buffer, token redaction, in-app viewer, and redacted JSON export; connection profiles can also be exported to and imported from JSON.
 
@@ -37,6 +38,7 @@ extracts the section for the pushed tag while publishing, and
 
 ### Fixed
 
+- Light and dark mode legibility pass: the status and navigation bars now follow the palette instead of staying black in light mode, terminal-palette swatch labels pick ink from the swatch's own luminance, empty terminal states render on the app background instead of on the dark terminal well, and accent chips, diagnostics logs, update and compatibility badges, gateway warnings, and the settings footer use AA-contrast ink in both modes.
 - Pending RPC requests now time out when the Gateway becomes unreachable, rejected credentials and DNS/TLS failures are reported distinctly, and queued messages from a previous socket are ignored.
 - A long-press on the terminal shows exactly one contextual bubble (Copy, Paste, Interrupt, Clear) with drag handles, replacing the duplicate Copy pill.
 - Settings content is no longer squeezed by the section rail, and palette swatch labels ellipsise instead of being cut mid-word.

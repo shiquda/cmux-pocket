@@ -131,11 +131,26 @@ class CmuxWebSocketClient(
     fun disconnect() {
         Log.i(tag, "Disconnecting...")
         DiagnosticsManager.log("WS", "Disconnecting...")
-        connectionTimeoutJob?.cancel()
         webSocket?.close(1000, "Normal Closure")
+        releaseSocket()
+        _statusFlow.value = ConnectionStatus.DISCONNECTED
+    }
+
+    /**
+     * Drops the current socket without publishing a status change. Used when the caller is
+     * about to publish CONNECTING itself, so the UI never flashes a disconnection it did not
+     * experience.
+     */
+    fun discardSocket() {
+        webSocket?.cancel()
+        releaseSocket()
+    }
+
+    /** Clears per-connection bookkeeping; the caller decides whether the socket is closed or cancelled. */
+    private fun releaseSocket() {
+        connectionTimeoutJob?.cancel()
         webSocket = null
         isAuthCompleted = false
-        _statusFlow.value = ConnectionStatus.DISCONNECTED
         pendingRequests.forEach { (_, deferred) ->
             deferred.completeExceptionally(Exception("WebSocket disconnected"))
         }

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.platform.LocalContext
 import app.cmuxpocket.diagnostics.DiagnosticsManager
 import app.cmuxpocket.transport.ConnectionStatus
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import android.app.Activity
 import androidx.annotation.StringRes
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
@@ -76,6 +79,7 @@ fun SettingsScreen(
     connectionStatus: ConnectionStatus,
     connectionReadiness: ConnectionReadiness,
     settingsManager: SettingsManager,
+    onFloatingWindowSettingsChanged: () -> Unit = {},
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onTokenChange: (String) -> Unit,
@@ -102,12 +106,34 @@ fun SettingsScreen(
     var showUpdateDialog by remember { mutableStateOf(false) }
     var showLicensesDialog by remember { mutableStateOf(false) }
     var showDiagnosticsDialog by remember { mutableStateOf(false) }
+    var showExportProfilesDialog by remember { mutableStateOf(false) }
     var isDiagnosticsEnabled by remember { mutableStateOf(settingsManager.isDiagnosticsEnabled) }
+    var vibrateOnSessionComplete by remember { mutableStateOf(settingsManager.vibrateOnSessionComplete) }
+    var floatingWindowEnabled by remember { mutableStateOf(settingsManager.floatingWindowEnabled) }
+    var floatingWindowAutoEnter by remember { mutableStateOf(settingsManager.floatingWindowAutoEnter) }
+    var pipAspectRatio by remember { mutableStateOf(settingsManager.pipAspectRatio) }
+    var pipFontSizeSp by remember { mutableStateOf(settingsManager.pipFontSizeSp) }
     // Ordinal rather than the enum itself so the page survives the activity recreation that a
     // language switch triggers; [ROOT_MENU] means the root list is showing.
     var openSectionOrdinal by rememberSaveable { mutableStateOf(ROOT_MENU) }
     val openSection = SettingsSection.entries.getOrNull(openSectionOrdinal)
     var appLanguage by remember { mutableStateOf(settingsManager.appLanguage) }
+
+    fun copyProfilesToClipboard(includeCredentials: Boolean) {
+        val count = settingsManager.profiles.size
+        val json = settingsManager.exportProfilesJson(includeCredentials)
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket host profiles", json))
+        Toast.makeText(
+            context,
+            context.getString(
+                if (includeCredentials) R.string.settings_exported_with_credentials_toast
+                else R.string.settings_exported_toast,
+                count
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
 
     BackHandler(enabled = openSection != null) { openSectionOrdinal = ROOT_MENU }
 
@@ -203,6 +229,28 @@ fun SettingsScreen(
                                 summary = stringResource(appLanguage.labelRes),
                                 onClick = { openSectionOrdinal = SettingsSection.LANGUAGE.ordinal }
                             )
+                            SettingsRowDivider()
+                            SettingsNavRow(
+                                section = SettingsSection.FLOATING_WINDOW,
+                                summary = stringResource(
+                                    if (floatingWindowEnabled) R.string.settings_notif_on
+                                    else R.string.settings_notif_off
+                                ),
+                                onClick = { openSectionOrdinal = SettingsSection.FLOATING_WINDOW.ordinal }
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_section_notifications)) {
+                            SettingsNavRow(
+                                section = SettingsSection.NOTIFICATIONS,
+                                summary = stringResource(
+                                    if (vibrateOnSessionComplete) R.string.settings_notif_on
+                                    else R.string.settings_notif_off
+                                ),
+                                onClick = { openSectionOrdinal = SettingsSection.NOTIFICATIONS.ordinal }
+                            )
                         }
                     }
 
@@ -291,6 +339,34 @@ fun SettingsScreen(
                             )
                         }
 
+                        SettingsSection.FLOATING_WINDOW -> item {
+                            FloatingWindowSection(
+                                enabled = floatingWindowEnabled,
+                                autoEnter = floatingWindowAutoEnter,
+                                aspectRatio = pipAspectRatio,
+                                fontSizeSp = pipFontSizeSp,
+                                onEnabledChange = {
+                                    floatingWindowEnabled = it
+                                    settingsManager.floatingWindowEnabled = it
+                                    onFloatingWindowSettingsChanged()
+                                },
+                                onAutoEnterChange = {
+                                    floatingWindowAutoEnter = it
+                                    settingsManager.floatingWindowAutoEnter = it
+                                    onFloatingWindowSettingsChanged()
+                                },
+                                onAspectRatioChange = {
+                                    pipAspectRatio = it
+                                    settingsManager.pipAspectRatio = it
+                                    onFloatingWindowSettingsChanged()
+                                },
+                                onFontSizeChange = {
+                                    pipFontSizeSp = it
+                                    settingsManager.pipFontSizeSp = it
+                                }
+                            )
+                        }
+
                         SettingsSection.LANGUAGE -> item {
                             LanguageSection(
                                 language = appLanguage,
@@ -345,6 +421,16 @@ fun SettingsScreen(
                             )
                         }
 
+                        SettingsSection.NOTIFICATIONS -> item {
+                            NotificationsSection(
+                                isVibrateEnabled = vibrateOnSessionComplete,
+                                onToggleVibrate = {
+                                    vibrateOnSessionComplete = it
+                                    settingsManager.vibrateOnSessionComplete = it
+                                }
+                            )
+                        }
+
                         SettingsSection.DIAGNOSTICS -> item {
                             DiagnosticsSection(
                                 isEnabled = isDiagnosticsEnabled,
@@ -377,20 +463,7 @@ fun SettingsScreen(
                             StorageSection(
                                 profileCount = settingsManager.profiles.size,
                                 onExportProfiles = {
-                                    val json = settingsManager.exportProfilesJson()
-                                    val clipboard =
-                                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(
-                                        ClipData.newPlainText("cmux pocket host profiles", json)
-                                    )
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(
-                                            R.string.settings_exported_toast,
-                                            settingsManager.profiles.size
-                                        ),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                    showExportProfilesDialog = true
                                 },
                                 onImportProfiles = {
                                     val clipboard =
@@ -439,6 +512,21 @@ fun SettingsScreen(
         )
     }
 
+    if (showExportProfilesDialog) {
+        ExportProfilesDialog(
+            profileCount = settingsManager.profiles.size,
+            onDismiss = { showExportProfilesDialog = false },
+            onExportWithoutCredentials = {
+                showExportProfilesDialog = false
+                copyProfilesToClipboard(includeCredentials = false)
+            },
+            onExportWithCredentials = {
+                showExportProfilesDialog = false
+                copyProfilesToClipboard(includeCredentials = true)
+            }
+        )
+    }
+
     if (showUpdateDialog && updateResult is UpdateCheckResult.UpdateAvailable) {
         val info = updateResult as UpdateCheckResult.UpdateAvailable
         AlertDialog(
@@ -483,10 +571,12 @@ enum class SettingsSection(@StringRes val labelRes: Int, val icon: ImageVector) 
     CONNECTION(R.string.settings_section_connection, Icons.Default.Cast),
     DISPLAY(R.string.settings_section_display, Icons.Default.TextFields),
     LANGUAGE(R.string.settings_section_language, Icons.Default.Translate),
+    FLOATING_WINDOW(R.string.settings_section_floating_window, Icons.Default.PictureInPictureAlt),
     UPDATES(R.string.settings_section_updates, Icons.Default.CloudDownload),
     OPENSOURCE(R.string.settings_section_opensource, Icons.Default.Code),
     DIAGNOSTICS(R.string.settings_section_diagnostics, Icons.Default.BugReport),
-    STORAGE(R.string.settings_section_storage, Icons.Default.Save)
+    STORAGE(R.string.settings_section_storage, Icons.Default.Save),
+    NOTIFICATIONS(R.string.settings_section_notifications, Icons.Default.Notifications)
 }
 
 @StringRes
@@ -590,7 +680,7 @@ private fun SettingsListFooter(
             text = stringResource(R.string.settings_footer_version, currentVersion),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = theme.onSurfaceVariant.copy(alpha = 0.85f)
+            color = theme.onSurfaceVariant
         )
         TextButton(
             onClick = onOpenSourceClick,
@@ -606,7 +696,7 @@ private fun SettingsListFooter(
         Text(
             text = stringResource(R.string.settings_footer_copyright),
             fontSize = 10.sp,
-            color = theme.onSurfaceVariant.copy(alpha = 0.5f)
+            color = theme.onSurfaceVariant
         )
     }
 }
@@ -690,11 +780,7 @@ fun LanguageSection(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = when (option) {
-                            AppLanguage.SYSTEM -> stringResource(R.string.settings_language_system)
-                            AppLanguage.ENGLISH -> stringResource(R.string.settings_language_english)
-                            AppLanguage.CHINESE -> stringResource(R.string.settings_language_chinese)
-                        },
+                        text = stringResource(option.labelRes),
                         fontSize = 14.sp,
                         color = theme.onContainer
                     )
@@ -719,6 +805,7 @@ fun ConnectionSection(
     connectionStatus: ConnectionStatus,
     connectionReadiness: ConnectionReadiness,
     settingsManager: SettingsManager,
+    onFloatingWindowSettingsChanged: () -> Unit = {},
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onTokenChange: (String) -> Unit,
@@ -1174,22 +1261,30 @@ fun DisplaySection(
             ) {
                 AVAILABLE_THEMES.forEach { opt ->
                     val isSelected = opt.hexColor == selectedThemeHex
-                    val borderColor = if (isSelected) theme.primary else Color.Transparent
+                    val swatchColor = Color(android.graphics.Color.parseColor(opt.hexColor))
+                    val borderColor = if (isSelected) theme.primary else theme.controlBorder
+                    // The swatch fill is chosen at runtime (user's terminal palette), so the label
+                    // ink must follow that fill's luminance rather than the app theme.
+                    val labelColor = if (swatchColor.luminance() > 0.45f) {
+                        theme.inkOnLightFill
+                    } else {
+                        theme.inkOnDarkFill
+                    }
 
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(android.graphics.Color.parseColor(opt.hexColor)))
-                            .border(2.dp, borderColor, RoundedCornerShape(6.dp))
+                            .background(swatchColor)
+                            .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(6.dp))
                             .clickable { onThemeChange(opt.hexColor) },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = stringResource(opt.nameRes),
                             fontSize = 11.sp,
-                            color = theme.onPrimary,
+                            color = labelColor,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1339,7 +1434,7 @@ fun ReleaseSection(
                                 text = stringResource(R.string.settings_update_available_badge),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = theme.accentOrange
+                                color = theme.accentOrangeInk
                             )
                         }
                     } else {
@@ -1538,6 +1633,53 @@ fun DiagnosticsSection(
         }
     }
 }
+
+@Composable
+fun NotificationsSection(
+    isVibrateEnabled: Boolean,
+    onToggleVibrate: (Boolean) -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f, fill = false)
+            ) {
+                SettingsIconTile(icon = Icons.Default.Vibration)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(stringResource(R.string.settings_notif_vibrate), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                    Text(stringResource(R.string.settings_notif_vibrate_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Switch(
+                checked = isVibrateEnabled,
+                onCheckedChange = onToggleVibrate,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = theme.onPrimary,
+                    checkedTrackColor = theme.accentGreen,
+                    uncheckedThumbColor = theme.onSurfaceVariant,
+                    uncheckedTrackColor = theme.surfaceVariant
+                )
+            )
+        }
+    }
+}
+
 @Composable
 fun StorageSection(
     profileCount: Int,
@@ -1615,7 +1757,7 @@ fun StorageSection(
                     SettingsIconTile(
                         icon = Icons.Default.CleaningServices,
                         container = theme.accentRed.copy(alpha = 0.16f),
-                        tint = theme.accentRed
+                        tint = theme.accentRedInk
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
@@ -1697,8 +1839,8 @@ fun GatewayVersionCard(
                 },
                 valueColor = when {
                     host == null -> theme.onSurfaceVariant
-                    host.supportsWake -> theme.accentGreen
-                    else -> theme.accentOrange
+                    host.supportsWake -> theme.accentGreenInk
+                    else -> theme.accentOrangeInk
                 },
             )
 
@@ -1706,7 +1848,7 @@ fun GatewayVersionCard(
                 GatewayCompatibility.GATEWAY_OUTDATED -> Text(
                     stringResource(R.string.conn_version_gateway_outdated_body),
                     fontSize = 11.sp,
-                    color = theme.accentOrange,
+                    color = theme.accentOrangeInk,
                 )
                 GatewayCompatibility.INCOMPATIBLE -> Text(
                     stringResource(
@@ -1715,12 +1857,12 @@ fun GatewayVersionCard(
                         GatewayVersions.EXPECTED_PROTOCOL_MAJOR,
                     ),
                     fontSize = 11.sp,
-                    color = theme.accentRed,
+                    color = theme.accentRedInk,
                 )
                 GatewayCompatibility.CLIENT_OUTDATED -> Text(
                     stringResource(R.string.conn_version_client_outdated_body),
                     fontSize = 11.sp,
-                    color = theme.accentBlue,
+                    color = theme.accentBlueInk,
                 )
                 else -> Unit
             }
@@ -1764,13 +1906,27 @@ fun GatewayVersionCard(
             title = { Text(stringResource(R.string.conn_upgrade_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(stringResource(R.string.conn_upgrade_body))
                     Text(
-                        MAC_GATEWAY_UPGRADE_COMMAND,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        color = theme.onSurface,
+                        stringResource(R.string.conn_upgrade_body),
+                        color = theme.onSurfaceVariant,
+                        fontSize = 13.sp,
                     )
+                    Surface(
+                        color = theme.cardBg,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, theme.cardBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                text = MAC_GATEWAY_UPGRADE_COMMAND,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                color = theme.onSurface,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -1822,16 +1978,21 @@ private fun GatewayVersionRow(
 @Composable
 private fun CompatibilityBadge(compatibility: GatewayCompatibility) {
     val theme = CmuxTheme.colors
-    val (label, color) = when (compatibility) {
-        GatewayCompatibility.MATCHED -> stringResource(R.string.conn_version_match) to theme.accentGreen
-        GatewayCompatibility.GATEWAY_OUTDATED -> stringResource(R.string.conn_version_outdated_badge) to theme.accentOrange
-        GatewayCompatibility.CLIENT_OUTDATED -> stringResource(R.string.conn_version_update_badge) to theme.accentBlue
-        GatewayCompatibility.INCOMPATIBLE -> stringResource(R.string.conn_version_incompatible_badge) to theme.accentRed
-        GatewayCompatibility.UNKNOWN -> stringResource(R.string.conn_version_unknown) to theme.onSurfaceVariant
+    val (label, color, ink) = when (compatibility) {
+        GatewayCompatibility.MATCHED ->
+            Triple(stringResource(R.string.conn_version_match), theme.accentGreen, theme.accentGreenInk)
+        GatewayCompatibility.GATEWAY_OUTDATED ->
+            Triple(stringResource(R.string.conn_version_outdated_badge), theme.accentOrange, theme.accentOrangeInk)
+        GatewayCompatibility.CLIENT_OUTDATED ->
+            Triple(stringResource(R.string.conn_version_update_badge), theme.accentBlue, theme.accentBlueInk)
+        GatewayCompatibility.INCOMPATIBLE ->
+            Triple(stringResource(R.string.conn_version_incompatible_badge), theme.accentRed, theme.accentRedInk)
+        GatewayCompatibility.UNKNOWN ->
+            Triple(stringResource(R.string.conn_version_unknown), theme.onSurfaceVariant, theme.onSurfaceVariant)
     }
     Surface(
         color = color.copy(alpha = 0.16f),
-        contentColor = color,
+        contentColor = ink,
         shape = RoundedCornerShape(6.dp),
     ) {
         Text(
@@ -1840,5 +2001,155 @@ private fun CompatibilityBadge(compatibility: GatewayCompatibility) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
         )
+    }
+}
+
+
+@Composable
+fun FloatingWindowSection(
+    enabled: Boolean,
+    autoEnter: Boolean,
+    aspectRatio: Float,
+    fontSizeSp: Float,
+    onEnabledChange: (Boolean) -> Unit,
+    onAutoEnterChange: (Boolean) -> Unit,
+    onAspectRatioChange: (Float) -> Unit,
+    onFontSizeChange: (Float) -> Unit
+) {
+    val theme = CmuxTheme.colors
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = theme.surfaceVariant),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onEnabledChange(!enabled) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.settings_floating_window_title),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = theme.onSurface
+                    )
+                    Text(
+                        stringResource(R.string.settings_floating_window_desc),
+                        fontSize = 10.sp,
+                        color = theme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = onEnabledChange)
+            }
+
+            if (enabled) {
+                HorizontalDivider(color = theme.divider)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAutoEnterChange(!autoEnter) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.settings_floating_window_auto),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = theme.onSurface
+                        )
+                        Text(
+                            stringResource(
+                                if (autoEnter) R.string.settings_floating_window_auto_desc_on
+                                else R.string.settings_floating_window_auto_desc_off
+                            ),
+                            fontSize = 10.sp,
+                            color = theme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = autoEnter, onCheckedChange = onAutoEnterChange)
+                }
+
+                HorizontalDivider(color = theme.divider)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        stringResource(R.string.settings_floating_window_aspect),
+                        fontSize = 13.sp,
+                        color = theme.onSurface
+                    )
+                    Text(
+                        stringResource(R.string.settings_floating_window_aspect_value, aspectRatio),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.primary
+                    )
+                }
+
+                Slider(
+                    value = aspectRatio,
+                    onValueChange = onAspectRatioChange,
+                    valueRange = SettingsManager.MIN_PIP_ASPECT_RATIO..SettingsManager.MAX_PIP_ASPECT_RATIO,
+                    colors = SliderDefaults.colors(
+                        thumbColor = theme.primary,
+                        activeTrackColor = theme.primary,
+                        inactiveTrackColor = theme.divider
+                    )
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        stringResource(R.string.settings_floating_window_font),
+                        fontSize = 13.sp,
+                        color = theme.onSurface
+                    )
+                    Text(
+                        stringResource(R.string.font_size_sp_value, fontSizeSp.toInt()),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.primary
+                    )
+                }
+
+                Slider(
+                    value = fontSizeSp,
+                    onValueChange = onFontSizeChange,
+                    valueRange = SettingsManager.MIN_PIP_FONT_SIZE..SettingsManager.MAX_PIP_FONT_SIZE,
+                    steps = (SettingsManager.MAX_PIP_FONT_SIZE - SettingsManager.MIN_PIP_FONT_SIZE).toInt() - 1,
+                    colors = SliderDefaults.colors(
+                        thumbColor = theme.primary,
+                        activeTrackColor = theme.primary,
+                        inactiveTrackColor = theme.divider
+                    )
+                )
+
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PipWindowPreview(
+                        aspectRatio = aspectRatio,
+                        fontSizeSp = fontSizeSp,
+                        modifier = Modifier.width(240.dp)
+                    )
+                }
+            }
+        }
     }
 }

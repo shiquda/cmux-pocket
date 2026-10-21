@@ -72,6 +72,9 @@
     <string name="notif_agent_fallback">Agent</string>
     <string name="notif_task_complete">%1$s 任务已完成</string>
     <string name="notif_tap_to_open">点击打开 cmux Pocket 中已完成的标签页。</string>
+    <string name="completion_banner_done">已完成</string>
+    <string name="completion_banner_more">+%1$d</string>
+    <string name="completion_banner_open">打开刚刚完成的会话</string>
     <string name="keepalive_channel_name">连接状态</string>
     <string name="keepalive_channel_desc">在后台保持 cmux Pocket Gateway 连接活跃。</string>
     <string name="keepalive_title">cmux Pocket 已连接</string>
@@ -94,6 +97,27 @@
     <string name="settings_section_opensource">开源</string>
     <string name="settings_section_diagnostics">诊断</string>
     <string name="settings_section_storage">存储</string>
+    <string name="settings_section_notifications">通知</string>
+    <string name="settings_section_floating_window">悬浮窗</string>
+
+    <!-- Settings · Floating window -->
+    <string name="settings_floating_window_title">悬浮窗</string>
+    <string name="settings_floating_window_desc">在系统画中画窗口中显示终端的最新输出。</string>
+    <string name="settings_floating_window_auto">离开应用时自动打开</string>
+    <string name="settings_floating_window_auto_desc_on">类似 YouTube：应用退到后台时自动打开小窗。</string>
+    <string name="settings_floating_window_auto_desc_off">使用底部工具栏的悬浮窗按钮手动打开。</string>
+    <string name="settings_floating_window_aspect">宽高比（宽 : 高）</string>
+    <string name="settings_floating_window_aspect_value">%1$.2f : 1</string>
+    <string name="settings_floating_window_font">悬浮窗字号</string>
+    <string name="settings_floating_window_preview">预览</string>
+    <string name="floating_window_open">打开悬浮窗</string>
+    <string name="floating_window_no_surface">请先打开一个终端标签页</string>
+
+    <!-- Settings · Notifications -->
+    <string name="settings_notif_vibrate">当前会话完成时震动</string>
+    <string name="settings_notif_vibrate_desc">仅在 cmux Pocket 前台时生效。其他会话完成时改为在顶部弹出提示胶囊。</string>
+    <string name="settings_notif_on">已开启</string>
+    <string name="settings_notif_off">已关闭</string>
 
     <!-- Settings · General -->
     <string name="settings_theme_mode_title">应用主题模式</string>
@@ -124,7 +148,7 @@
     <string name="settings_port">端口</string>
     <string name="settings_auth_token">认证 Token</string>
     <string name="settings_toggle_token">切换 Token 可见性</string>
-    <string name="settings_scan_none_found">当前子网未发现开放的 Gateway 端口</string>
+    <string name="settings_scan_none_found">当前网络未发现可用主机</string>
     <string name="settings_scan_found">发现 %1$s</string>
     <string name="settings_scan_host_one">1 个主机</string>
     <string name="settings_scan_host_many">%1$d 个主机</string>
@@ -179,7 +203,13 @@
 
     <!-- Settings · Storage -->
     <string name="settings_export_profiles">导出 Host 配置与预设</string>
-    <string name="settings_export_profiles_desc">备份全部 %1$d 个 Profiles（JSON 复制到剪贴板）</string>
+    <string name="settings_export_profiles_desc">选择复制到剪贴板的 JSON 是否携带访问密钥（共 %1$d 个 Profiles）</string>
+    <string name="settings_export_dialog_title">导出 Host 配置</string>
+    <string name="settings_export_dialog_body">将以 JSON 复制 %1$d 个配置到剪贴板。只有选择“携带密钥”时才会包含 Gateway 访问密钥；不携带时可在导入后补齐。</string>
+    <string name="settings_export_without_credentials">不携带密钥复制</string>
+    <string name="settings_export_with_credentials">携带密钥复制</string>
+    <string name="settings_export_dialog_cancel">取消</string>
+    <string name="settings_exported_with_credentials_toast">已将 %1$d 个 Host Profiles（含访问密钥）复制到剪贴板</string>
     <string name="settings_import_profiles">导入配置（从剪贴板）</string>
     <string name="settings_import_profiles_desc">从剪贴板读取 JSON 并合并入现有配置</string>
     <string name="settings_clear_scrollback">清空终端历史回滚缓冲区</string>

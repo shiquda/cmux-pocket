@@ -82,15 +82,14 @@ fun TerminalStage(
                     canWake = host.canWake,
                     wakeState = wakeState,
                     onWakeCmux = onWakeCmux,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
+                    modifier = Modifier.fillMaxSize(),
                 )
             } else {
                 // Empty Workspace state
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .background(theme.background)
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
@@ -199,7 +198,9 @@ private fun CmuxStoppedCard(
     val busy = wakeState == CmuxWakeState.WAKING || wakeState == CmuxWakeState.SYNCING
 
     Column(
-        modifier = modifier,
+        modifier = modifier
+            .background(theme.background)
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
