@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio::process::Command;
 use tokio::time::timeout;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TailnetEndpoint {
     pub host: String,
     pub port: u16,
@@ -35,6 +35,52 @@ fn tailnet_host(status: &Value) -> Result<String, CliError> {
         return Err(dependency("Tailscale has no usable tailnet DNS name. Enable MagicDNS and HTTPS certificates in Tailscale, then rerun setup --tailscale."));
     }
     Ok(host.to_string())
+}
+
+/// Returns the HTTPS Serve port whose root proxy targets this Gateway, if any.
+///
+/// Funnel-enabled authorities are skipped: discovery must not advertise public exposure.
+fn find_https_route(config: &Value, host: &str, port: u16) -> Result<Option<u16>, CliError> {
+    if config.is_null() {
+        return Ok(None);
+    }
+    if !config.is_object() {
+        return Err(dependency("Tailscale returned an unsupported Serve configuration. Existing forwarding was preserved."));
+    }
+
+    let upstreams = [
+        format!("http://127.0.0.1:{port}"),
+        format!("http://localhost:{port}"),
+        format!("http://[::1]:{port}"),
+    ];
+    let Some(web) = config["Web"].as_object() else {
+        return Ok(None);
+    };
+
+    let mut ports: Vec<u16> = web
+        .iter()
+        .filter_map(|(authority, entry)| {
+            let route_port = authority
+                .strip_prefix(host)?
+                .strip_prefix(':')?
+                .parse::<u16>()
+                .ok()?;
+            if config["AllowFunnel"][authority] == true {
+                return None;
+            }
+            if config["TCP"][route_port.to_string()]["HTTPS"] != true {
+                return None;
+            }
+            let proxy = entry["Handlers"]["/"]["Proxy"].as_str()?;
+            upstreams
+                .iter()
+                .any(|upstream| upstream == proxy)
+                .then_some(route_port)
+        })
+        .collect();
+
+    ports.sort_unstable();
+    Ok(ports.into_iter().next())
 }
 
 /// Returns true only when the existing HTTPS root already targets this Gateway.
@@ -121,10 +167,22 @@ impl Tailscale {
         })
     }
 
-    pub async fn discover_endpoint(&self) -> Result<String, CliError> {
+    /// Discovers a Tailscale Serve endpoint only when its root route already forwards to
+    /// the local Gateway. Unlike a bare `tailscale status` lookup, an unconfigured or
+    /// conflicting route yields `None` instead of an unreachable `.ts.net` URL.
+    pub async fn discover_verified(&self, port: u16) -> Result<Option<TailnetEndpoint>, CliError> {
         let status = self.json(&["status", "--json"]).await?;
         let host = tailnet_host(&status)?;
-        Ok(format!("wss://{}", host))
+        let config = self.json(&["serve", "status", "--json"]).await?;
+        let route_port = match find_https_route(&config, &host, port)? {
+            Some(route_port) => route_port,
+            None => return Ok(None),
+        };
+        Ok(Some(TailnetEndpoint {
+            host,
+            port: route_port,
+            route_created: false,
+        }))
     }
 }
 
@@ -256,5 +314,82 @@ esac
             std::fs::read_to_string(temp.path().join("config.json")).unwrap(),
             config.to_string()
         );
+    }
+
+    #[test]
+    fn find_https_route_requires_a_matching_root_proxy() {
+        let config = json!({
+            "TCP": {"443": {"HTTPS": true}, "8443": {"HTTPS": true}},
+            "Web": {
+                "mac.example.ts.net:443": {"Handlers": {"/": {"Proxy": "http://localhost:8088"}}},
+                "mac.example.ts.net:8443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:8088"}}}
+            }
+        });
+        // Lowest matching port wins; localhost and 127.0.0.1 are equivalent upstreams.
+        assert_eq!(
+            find_https_route(&config, "mac.example.ts.net", 8088).unwrap(),
+            Some(443)
+        );
+        assert_eq!(
+            find_https_route(&config, "mac.example.ts.net", 9090).unwrap(),
+            None
+        );
+        assert_eq!(
+            find_https_route(&json!({}), "mac.example.ts.net", 8088).unwrap(),
+            None
+        );
+        assert_eq!(
+            find_https_route(&Value::Null, "mac.example.ts.net", 8088).unwrap(),
+            None
+        );
+
+        let funnel = json!({
+            "TCP": {"443": {"HTTPS": true}},
+            "AllowFunnel": {"mac.example.ts.net:443": true},
+            "Web": {"mac.example.ts.net:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:8088"}}}}
+        });
+        assert_eq!(
+            find_https_route(&funnel, "mac.example.ts.net", 8088).unwrap(),
+            None
+        );
+
+        let not_https = json!({
+            "TCP": {"443": {"TCPForward": "localhost:22"}},
+            "Web": {"mac.example.ts.net:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:8088"}}}}
+        });
+        assert_eq!(
+            find_https_route(&not_https, "mac.example.ts.net", 8088).unwrap(),
+            None
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn discover_verified_reports_only_configured_routes() {
+        let (_unconfigured_temp, unconfigured) = fake_tailscale(&json!({}));
+        assert!(unconfigured
+            .discover_verified(8088)
+            .await
+            .unwrap()
+            .is_none());
+
+        let (_wrong_temp, wrong_target) = fake_tailscale(&json!({
+            "TCP": {"443": {"HTTPS": true}},
+            "Web": {"mac.example.ts.net:443": {"Handlers": {"/": {"Proxy": "http://localhost:9000"}}}}
+        }));
+        assert!(wrong_target
+            .discover_verified(8088)
+            .await
+            .unwrap()
+            .is_none());
+
+        let (_configured_temp, configured) = fake_tailscale(&json!({
+            "TCP": {"443": {"HTTPS": true}},
+            "Web": {"mac.example.ts.net:443": {"Handlers": {"/": {"Proxy": "http://localhost:8088"}}}}
+        }));
+        let endpoint = configured.discover_verified(8088).await.unwrap().unwrap();
+        assert_eq!(endpoint.host, "mac.example.ts.net");
+        assert_eq!(endpoint.port, 443);
+        assert!(!endpoint.route_created);
     }
 }

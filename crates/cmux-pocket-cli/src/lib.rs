@@ -1,10 +1,13 @@
 //! Library interface for the `cmux-pocket` CLI and service manager.
 
+pub mod adb;
 pub mod cli;
+pub mod cloudflare;
 pub mod commands;
 pub mod endpoint;
 pub mod error;
 pub mod output;
+pub mod picker;
 pub mod probe;
 pub mod tailscale;
 pub mod uri;
@@ -49,6 +52,9 @@ pub async fn run_cli(cli: Cli) -> Result<(), CliError> {
         }
         Commands::Token(args) => {
             commands::handle_token(&paths, &args.command, json_mode).await?;
+        }
+        Commands::Endpoint(args) => {
+            commands::handle_endpoint(&paths, &args.command, json_mode).await?;
         }
         Commands::Service(args) => {
             commands::handle_service(&paths, &args.command, json_mode).await?;

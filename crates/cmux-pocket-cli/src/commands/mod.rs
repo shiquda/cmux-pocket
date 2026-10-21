@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod doctor;
+pub mod endpoint;
 pub mod gateway;
 pub mod logs;
 pub mod qr;
@@ -12,6 +13,7 @@ pub mod token;
 
 pub use config::handle_config;
 pub use doctor::handle_doctor;
+pub use endpoint::handle_endpoint;
 pub use gateway::handle_gateway;
 pub use logs::handle_logs;
 pub use qr::handle_qr;
