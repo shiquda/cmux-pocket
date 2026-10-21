@@ -43,6 +43,11 @@ class SettingsManager(context: Context) {
         get() = prefs.getString(KEY_TERMINAL_BG, "#1E1E1E") ?: "#1E1E1E"
         set(value) = prefs.edit().putString(KEY_TERMINAL_BG, value).apply()
 
+    /** Haptic pulse when the session on screen finishes. On by default. */
+    var vibrateOnSessionComplete: Boolean
+        get() = prefs.getBoolean(KEY_VIBRATE_ON_SESSION_COMPLETE, true)
+        set(value) = prefs.edit().putBoolean(KEY_VIBRATE_ON_SESSION_COMPLETE, value).apply()
+
     var isDiagnosticsEnabled: Boolean
         get() = prefs.getBoolean(KEY_DIAGNOSTICS_ENABLED, false)
         set(value) {
@@ -194,6 +199,7 @@ class SettingsManager(context: Context) {
         private const val KEY_PROFILES = "connection_profiles"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
         private const val KEY_DIAGNOSTICS_ENABLED = "diagnostics_enabled"
+        private const val KEY_VIBRATE_ON_SESSION_COMPLETE = "vibrate_on_session_complete"
         private const val KEY_APP_LANGUAGE = "app_language"
     }
 

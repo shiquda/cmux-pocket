@@ -105,6 +105,7 @@ fun SettingsScreen(
     var showDiagnosticsDialog by remember { mutableStateOf(false) }
     var showExportProfilesDialog by remember { mutableStateOf(false) }
     var isDiagnosticsEnabled by remember { mutableStateOf(settingsManager.isDiagnosticsEnabled) }
+    var vibrateOnSessionComplete by remember { mutableStateOf(settingsManager.vibrateOnSessionComplete) }
     // Ordinal rather than the enum itself so the page survives the activity recreation that a
     // language switch triggers; [ROOT_MENU] means the root list is showing.
     var openSectionOrdinal by rememberSaveable { mutableStateOf(ROOT_MENU) }
@@ -220,6 +221,19 @@ fun SettingsScreen(
                                 section = SettingsSection.LANGUAGE,
                                 summary = stringResource(appLanguage.labelRes),
                                 onClick = { openSectionOrdinal = SettingsSection.LANGUAGE.ordinal }
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_section_notifications)) {
+                            SettingsNavRow(
+                                section = SettingsSection.NOTIFICATIONS,
+                                summary = stringResource(
+                                    if (vibrateOnSessionComplete) R.string.settings_notif_on
+                                    else R.string.settings_notif_off
+                                ),
+                                onClick = { openSectionOrdinal = SettingsSection.NOTIFICATIONS.ordinal }
                             )
                         }
                     }
@@ -358,6 +372,16 @@ fun SettingsScreen(
                                 onOpenRepo = { uriHandler.openUri(SOURCE_URL) },
                                 onOpenIssues = { uriHandler.openUri("$SOURCE_URL/issues") },
                                 onOpenLicenses = { showLicensesDialog = true }
+                            )
+                        }
+
+                        SettingsSection.NOTIFICATIONS -> item {
+                            NotificationsSection(
+                                isVibrateEnabled = vibrateOnSessionComplete,
+                                onToggleVibrate = {
+                                    vibrateOnSessionComplete = it
+                                    settingsManager.vibrateOnSessionComplete = it
+                                }
                             )
                         }
 
@@ -504,7 +528,8 @@ enum class SettingsSection(@StringRes val labelRes: Int, val icon: ImageVector) 
     UPDATES(R.string.settings_section_updates, Icons.Default.CloudDownload),
     OPENSOURCE(R.string.settings_section_opensource, Icons.Default.Code),
     DIAGNOSTICS(R.string.settings_section_diagnostics, Icons.Default.BugReport),
-    STORAGE(R.string.settings_section_storage, Icons.Default.Save)
+    STORAGE(R.string.settings_section_storage, Icons.Default.Save),
+    NOTIFICATIONS(R.string.settings_section_notifications, Icons.Default.Notifications)
 }
 
 @StringRes
@@ -1532,6 +1557,53 @@ fun DiagnosticsSection(
         }
     }
 }
+
+@Composable
+fun NotificationsSection(
+    isVibrateEnabled: Boolean,
+    onToggleVibrate: (Boolean) -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f, fill = false)
+            ) {
+                SettingsIconTile(icon = Icons.Default.Vibration)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(stringResource(R.string.settings_notif_vibrate), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                    Text(stringResource(R.string.settings_notif_vibrate_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Switch(
+                checked = isVibrateEnabled,
+                onCheckedChange = onToggleVibrate,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = theme.onPrimary,
+                    checkedTrackColor = theme.accentGreen,
+                    uncheckedThumbColor = theme.onSurfaceVariant,
+                    uncheckedTrackColor = theme.surfaceVariant
+                )
+            )
+        }
+    }
+}
+
 @Composable
 fun StorageSection(
     profileCount: Int,

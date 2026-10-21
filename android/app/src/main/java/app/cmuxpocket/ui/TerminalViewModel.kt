@@ -626,15 +626,18 @@ class TerminalViewModel : ViewModel() {
         )
         _selectedWorkspaceKey.value = newWorkspaceKey
         _selectedSurfaceId.value = newSurfaceId
-        applyPendingNotificationNavigation()
+        val navigationApplied = applyPendingNotificationNavigation()
 
-        // When enabled, sync focus to gateway whenever selection changes (including null -> new and old -> null/new)
-        if (syncReconciledFocus && prevSurfaceId != newSurfaceId) {
+        // When enabled, sync focus to gateway whenever selection changes (including null -> new and old -> null/new).
+        // A pending notification tap already dispatched its own focus, and the reconciled surface is the
+        // wrong target once that tap moved the selection — syncing it would fight the tap.
+        if (syncReconciledFocus && !navigationApplied && prevSurfaceId != _selectedSurfaceId.value) {
+            val targetSurfaceId = _selectedSurfaceId.value
             viewModelScope.launch {
                 try {
-                    wsClient.focusSurface(newSurfaceId)
-                    if (newSurfaceId != null) {
-                        requestSingleFlightReplay(newSurfaceId)
+                    wsClient.focusSurface(targetSurfaceId)
+                    if (targetSurfaceId != null) {
+                        requestSingleFlightReplay(targetSurfaceId)
                     }
                 } catch (e: Exception) {
                     Log.w(tag, "Failed to update focus on selection reconciliation", e)
@@ -665,19 +668,26 @@ class TerminalViewModel : ViewModel() {
     fun navigateToSurface(workspaceId: String?, surfaceId: String) {
         pendingNotificationWorkspaceId = workspaceId
         pendingNotificationSurfaceId = surfaceId
+        Log.d(tag, "Pending navigation: workspace=$workspaceId surface=$surfaceId workspaces=${_workspaces.value.size}")
         applyPendingNotificationNavigation()
     }
 
-    private fun applyPendingNotificationNavigation() {
-        val surfaceId = pendingNotificationSurfaceId ?: return
-        val workspace = _workspaces.value.firstOrNull { ws ->
-            (pendingNotificationWorkspaceId == null || ws.id == pendingNotificationWorkspaceId || ws.stableKey == pendingNotificationWorkspaceId) &&
-                ws.surfaces.any { it.id == surfaceId }
-        } ?: return
+    private fun applyPendingNotificationNavigation(): Boolean {
+        val surfaceId = pendingNotificationSurfaceId ?: return false
+        val workspace = WorkspaceSelection.locateSurface(
+            workspaces = _workspaces.value,
+            workspaceId = pendingNotificationWorkspaceId,
+            surfaceId = surfaceId,
+        ) ?: run {
+            Log.d(tag, "Pending navigation waits for surface $surfaceId")
+            return false
+        }
+        Log.d(tag, "Applying pending navigation: ${workspace.stableKey} / $surfaceId")
         pendingNotificationWorkspaceId = null
         pendingNotificationSurfaceId = null
         _selectedWorkspaceKey.value = workspace.stableKey
         userSelectSurface(surfaceId)
+        return true
     }
 
     private fun userSelectSurface(surfaceId: String?) {

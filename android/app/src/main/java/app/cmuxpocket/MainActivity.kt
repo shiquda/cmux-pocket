@@ -31,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.unit.dp
@@ -62,7 +63,14 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.CREATED) {
                 viewModel.agentSessionCompletions.collect { completion ->
-                    AgentCompletionNotifications.show(this@MainActivity, completion)
+                    // The foreground UI answers completions with a haptic pulse or an in-app
+                    // capsule; a system notification on top of that would double the alert.
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@collect
+                    AgentCompletionNotifications.show(
+                        this@MainActivity,
+                        completion,
+                        sessionNotificationLabel(completion, viewModel.workspaces.value)
+                    )
                 }
             }
         }
@@ -94,10 +102,9 @@ class MainActivity : ComponentActivity() {
 
     private fun handleNotificationIntent(intent: Intent?) {
         val surfaceId = intent?.getStringExtra(AgentCompletionNotifications.extraSurfaceId) ?: return
-        viewModel.navigateToSurface(
-            intent.getStringExtra(AgentCompletionNotifications.extraWorkspaceId),
-            surfaceId
-        )
+        val workspaceId = intent.getStringExtra(AgentCompletionNotifications.extraWorkspaceId)
+        android.util.Log.d("CmuxPocket", "Notification tap → workspace=$workspaceId surface=$surfaceId")
+        viewModel.navigateToSurface(workspaceId, surfaceId)
         intent.removeExtra(AgentCompletionNotifications.extraSurfaceId)
         intent.removeExtra(AgentCompletionNotifications.extraWorkspaceId)
     }
@@ -307,6 +314,40 @@ fun CmuxApp(
     var terminalInputView by remember { mutableStateOf<TerminalInputView?>(null) }
     val context = LocalContext.current
 
+    // Completion feedback for the foreground: a pulse for the session on screen, a capsule for
+    // every other one. While the app is backgrounded MainActivity posts a system notification
+    // instead, so the two paths never alert the same event twice.
+    var completionQueue by remember { mutableStateOf<List<SessionCompletionNotice>>(emptyList()) }
+    val activeCompletion = completionQueue.firstOrNull()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentSurfaces by rememberUpdatedState(activeSurfaces)
+    val currentWorkspaces by rememberUpdatedState(workspaces)
+    val currentSelectedSurfaceId by rememberUpdatedState(selectedSurfaceId)
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.agentSessionCompletions.collect { completion ->
+                if (isCurrentSession(completion, currentSelectedSurfaceId, currentSurfaces)) {
+                    if (settingsManager.vibrateOnSessionComplete) {
+                        SessionCompletionFeedback.vibrate(context)
+                    }
+                } else {
+                    val notice = sessionCompletionNotice(completion, currentWorkspaces)
+                    completionQueue = completionQueue.filterNot { it.surfaceId == notice.surfaceId } + notice
+                }
+            }
+        }
+    }
+    val activeCompletionKey = activeCompletion?.key
+    LaunchedEffect(activeCompletionKey) {
+        if (activeCompletionKey == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(6000)
+        completionQueue = completionQueue.drop(1)
+    }
+    val openCompletion: (SessionCompletionNotice) -> Unit = { notice ->
+        viewModel.navigateToSurface(notice.workspaceId, notice.surfaceId)
+        completionQueue = completionQueue.filterNot { it.key == notice.key }
+    }
+
     // Stable callbacks for the accessory bar: it sits inside the scope that recomposes on every
     // rendered terminal frame, so lambdas allocated per composition would drag all 14 keys
     // through recomposition on each frame.
@@ -407,6 +448,16 @@ fun CmuxApp(
                                 .statusBarsPadding()
                                 .padding(top = 8.dp)
                         )
+
+                        SessionCompletionBannerHost(
+                            notice = activeCompletion,
+                            extraCount = (completionQueue.size - 1).coerceAtLeast(0),
+                            onOpen = openCompletion,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .statusBarsPadding()
+                                .padding(top = 52.dp)
+                        )
                     }
 
                     AccessoryKeyboardBar(
@@ -466,6 +517,16 @@ fun CmuxApp(
                             .align(Alignment.TopCenter)
                             .statusBarsPadding()
                             .padding(top = 8.dp)
+                    )
+
+                    SessionCompletionBannerHost(
+                        notice = activeCompletion,
+                        extraCount = (completionQueue.size - 1).coerceAtLeast(0),
+                        onOpen = openCompletion,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 52.dp)
                     )
                 }
             }
