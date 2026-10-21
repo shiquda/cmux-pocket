@@ -623,8 +623,16 @@ pub async fn dispatch_rpc<'a>(
                 .or_else(|| ctx.session.active_surface_id())
                 .unwrap_or_else(|| "surface:1".to_string());
             let text = params.get("text").and_then(|v| v.as_str()).unwrap_or("");
+            let input_kind = match params.get("input_kind").and_then(|v| v.as_str()) {
+                Some("key") => cmux_pocket_cmux::TerminalInputKind::Key,
+                _ => cmux_pocket_cmux::TerminalInputKind::Text,
+            };
 
-            match ctx.backend.send_input(&surf_id, text).await {
+            match ctx
+                .backend
+                .send_input_with_kind(&surf_id, text, input_kind)
+                .await
+            {
                 Ok(()) => {
                     ctx.health.mark_healthy();
                     // Success ACK is delivered happens-before priority refresh

@@ -38,6 +38,7 @@ extracts the section for the pushed tag while publishing, and
 
 ### Fixed
 
+- Terminal input from Android is no longer swallowed by cmux 0.65.0's draft and dialog guard: the Gateway probes `cmux send --help` / `send-key --help` once (cached for five minutes) and sends every keystroke with `--force` when the flag exists. Older cmux builds, which reject unknown flags by typing them as text, keep the flagless command. IME text is classified separately from intentional keys, bound to the tab that opened the keyboard, and multi-character text uses `--paste` where supported so `\n` and option-like text stay literal. Timed-out local cmux processes are now killed and reaped.
 - Light and dark mode legibility pass: the status and navigation bars now follow the palette instead of staying black in light mode, terminal-palette swatch labels pick ink from the swatch's own luminance, empty terminal states render on the app background instead of on the dark terminal well, and accent chips, diagnostics logs, update and compatibility badges, gateway warnings, and the settings footer use AA-contrast ink in both modes.
 - Pending RPC requests now time out when the Gateway becomes unreachable, rejected credentials and DNS/TLS failures are reported distinctly, and queued messages from a previous socket are ignored.
 - A long-press on the terminal shows exactly one contextual bubble (Copy, Paste, Interrupt, Clear) with drag handles, replacing the duplicate Copy pill.

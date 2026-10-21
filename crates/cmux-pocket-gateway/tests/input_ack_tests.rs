@@ -1,13 +1,13 @@
 use async_trait::async_trait;
 use cmux_pocket_cmux::error::CmuxError;
 use cmux_pocket_cmux::events::CmuxEventStream;
-use cmux_pocket_cmux::{CmuxBackend, MockCmuxBackend};
+use cmux_pocket_cmux::{CmuxBackend, MockCmuxBackend, TerminalInputKind};
 use cmux_pocket_gateway::CmuxGateway;
 use cmux_pocket_protocol::{BackendHealth, RenderGridFrame, SurfaceInfo, WorkspaceInfo};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -50,7 +50,7 @@ async fn authenticate_ws(
 async fn test_ack_precedes_refresh() {
     let token = "test-token";
     let backend = Arc::new(MockCmuxBackend::default());
-    let (gw, port) = spawn_test_gateway(backend, token).await;
+    let (gw, port) = spawn_test_gateway(backend.clone(), token).await;
     let mut ws = authenticate_ws(port, token).await;
 
     // Focus surface
@@ -106,6 +106,7 @@ async fn test_ack_precedes_refresh() {
 struct FailingInputBackend {
     inner: MockCmuxBackend,
     fail_input: AtomicBool,
+    last_input_kind: Mutex<Option<TerminalInputKind>>,
 }
 
 impl FailingInputBackend {
@@ -113,6 +114,7 @@ impl FailingInputBackend {
         Self {
             inner: MockCmuxBackend::default(),
             fail_input: AtomicBool::new(true),
+            last_input_kind: Mutex::new(None),
         }
     }
 }
@@ -152,6 +154,15 @@ impl CmuxBackend for FailingInputBackend {
             Ok(())
         }
     }
+    async fn send_input_with_kind(
+        &self,
+        surf_id: &str,
+        text: &str,
+        kind: TerminalInputKind,
+    ) -> Result<(), CmuxError> {
+        *self.last_input_kind.lock().unwrap() = Some(kind);
+        self.send_input(surf_id, text).await
+    }
     async fn handle_scroll(
         &self,
         surf_id: &str,
@@ -183,7 +194,7 @@ impl CmuxBackend for FailingInputBackend {
 async fn test_host_write_failure_returns_error_no_ack() {
     let token = "test-token";
     let backend = Arc::new(FailingInputBackend::new());
-    let (gw, port) = spawn_test_gateway(backend, token).await;
+    let (gw, port) = spawn_test_gateway(backend.clone(), token).await;
     let mut ws = authenticate_ws(port, token).await;
 
     let input_req = json!({
@@ -192,6 +203,7 @@ async fn test_host_write_failure_returns_error_no_ack() {
         "params": {
             "surface_id": "surf-main-1",
             "text": "doomed input",
+            "input_kind": "key",
         }
     });
     ws.send(Message::Text(input_req.to_string())).await.unwrap();
@@ -205,6 +217,10 @@ async fn test_host_write_failure_returns_error_no_ack() {
         .as_str()
         .unwrap()
         .contains("Input failed"));
+    assert_eq!(
+        *backend.last_input_kind.lock().unwrap(),
+        Some(TerminalInputKind::Key)
+    );
 
     gw.stop().await;
 }

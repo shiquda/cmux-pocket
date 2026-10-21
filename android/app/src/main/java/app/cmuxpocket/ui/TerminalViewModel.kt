@@ -35,6 +35,15 @@ enum class AppSyncPhase {
     READY
 }
 
+/** Distinguishes literal text from an intentional control key press. */
+enum class TerminalInputKind {
+    TEXT,
+    KEY;
+
+    val wire: String
+        get() = name.lowercase()
+}
+
 /** Progress of a remote cmux launch requested from the terminal stage. */
 enum class CmuxWakeState {
     IDLE,
@@ -898,13 +907,29 @@ class TerminalViewModel : ViewModel() {
         }
     }
 
-    fun sendInput(text: String) {
-        val surfaceId = _selectedSurfaceId.value ?: return
+    fun sendInput(text: String, kind: TerminalInputKind = TerminalInputKind.TEXT) {
+        sendInputToSurface(_selectedSurfaceId.value, text, kind)
+    }
+
+    /**
+     * Sends input to the surface that owned the keyboard.
+     *
+     * A non-null [surfaceId] that is no longer selected is dropped so composed
+     * IME text can never land in a tab the user switched away from.
+     */
+    fun sendInputToSurface(
+        surfaceId: String?,
+        text: String,
+        kind: TerminalInputKind = TerminalInputKind.TEXT
+    ) {
+        val selected = _selectedSurfaceId.value
+        if (surfaceId != null && surfaceId != selected) return
+        val target = surfaceId ?: selected ?: return
         viewModelScope.launch {
             try {
-                wsClient.sendTerminalInput(surfaceId, text)
+                wsClient.sendTerminalInput(target, text, kind.wire)
             } catch (e: Exception) {
-                Log.e(tag, "Failed to send input to surface $surfaceId", e)
+                Log.e(tag, "Failed to send input to surface $target", e)
             }
         }
     }
