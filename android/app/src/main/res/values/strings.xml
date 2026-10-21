@@ -72,7 +72,6 @@
     <string name="settings_title">Settings</string>
     <string name="settings_back">Back</string>
     <string name="settings_close">Close settings</string>
-    <string name="settings_apply_save">Apply &amp; Save</string>
     <string name="settings_group_appearance">Appearance</string>
     <string name="settings_group_support">Support</string>
     <string name="settings_group_data">Data</string>
@@ -96,6 +95,7 @@
     <string name="settings_brand_tagline">cmux companion • multi-surface terminal client • v%1$s</string>
     <string name="settings_footer_version">cmux Pocket • v%1$s</string>
     <string name="settings_footer_license">AGPL-3.0 • No warranty • Source &amp; license</string>
+    <string name="settings_footer_copyright" translatable="false">© 2026 cmux pocket contributors. All rights reserved.</string>
 
     <!-- Settings · Language -->
     <string name="settings_language_title">App language</string>
