@@ -344,7 +344,7 @@ Both in-app scanning and external deep links always open the **Import Gateway Pr
 2. Tap **Add Host** and create a named profile.
 3. Set **Host or URL** to your secure endpoint, for example `wss://gateway.example.test`.
 4. Use port `443` for a bare hostname, or omit the separate port when the full URL contains its own port.
-5. Paste the Gateway token and tap **Apply & Save**.
+5. Paste the Gateway token and tap **Reconnect**. Edits are saved as you type; there is no separate apply step.
 
 The app stores profiles and tokens in encrypted Android preferences. A token is never needed in the hostname or URL.
 
@@ -384,7 +384,7 @@ adb devices
 adb reverse tcp:8088 tcp:8088
 ```
 
-In the app, select **USB**, use `127.0.0.1:8088`, enter the token, and tap **Apply & Save**. Re-run `adb reverse` after reconnecting or rebooting the device.
+In the app, select **USB**, use `127.0.0.1:8088`, enter the token, and tap **Reconnect**. Re-run `adb reverse` after reconnecting or rebooting the device.
 
 ADB reverse is intentionally not the normal LAN/remote setup. It depends on USB debugging and does not provide a user-managed network boundary.
 

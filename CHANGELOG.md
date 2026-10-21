@@ -26,6 +26,7 @@ extracts the section for the pushed tag while publishing, and
 
 ### Changed
 
+- Settings no longer reserve a pinned bottom bar for AGPL-3.0 metadata and **Apply & Save**: every control persists immediately, the close button dismisses the page, and the version, license link, and copyright now scroll at the end of the settings list, returning the full viewport to the content on small and landscape screens.
 - The terminal renders beneath the system status bar; the fixed workspace top bar and surface tab bar are replaced by the floating island, and the accessory keyboard is a single row of ESC, latching CTRL/ALT, TAB, `^C`, `|`, `/`, `-`, `~`, and arrows.
 - Colors come from the Neon Grid token set documented in `DESIGN.md` and exposed by `CmuxTheme`, including system bar icon appearance and Material 3 components in dark mode.
 - Layout orientation follows the real window size, so rotating no longer recreates the activity; the landscape sidebar and settings section rail were reflowed for English labels.

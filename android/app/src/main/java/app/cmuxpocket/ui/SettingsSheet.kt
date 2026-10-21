@@ -160,7 +160,10 @@ fun SettingsScreen(
 
             if (openSection == null) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .navigationBarsPadding(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
@@ -228,11 +231,21 @@ fun SettingsScreen(
                             )
                         }
                     }
+
+                    item {
+                        SettingsListFooter(
+                            currentVersion = currentVersion,
+                            onOpenSourceClick = { uriHandler.openUri(SOURCE_URL) }
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    contentPadding = PaddingValues(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .navigationBarsPadding(),
+                    contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     when (openSection) {
@@ -394,64 +407,6 @@ fun SettingsScreen(
                     }
                 }
             }
-            HorizontalDivider(color = theme.divider)
-
-            // AGPL-required source/license notice and the explicit apply action.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(theme.surfaceVariant)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(
-                    onClick = { uriHandler.openUri(SOURCE_URL) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                ) {
-                    Column {
-                        Text(
-                            text = stringResource(R.string.settings_footer_version, currentVersion),
-                            fontSize = 11.sp,
-                            color = theme.onSurfaceVariant
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_footer_license),
-                            fontSize = 9.sp,
-                            color = theme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = {
-                        onConnectClick()
-                        onDismissRequest()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = theme.primary,
-                        contentColor = theme.onPrimary
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = stringResource(R.string.settings_apply_save),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1
-                    )
-                }
-            }
         }
     }
 
@@ -593,6 +548,51 @@ private fun SettingsNavRow(
         }
         Spacer(modifier = Modifier.width(8.dp))
         Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
+    }
+}
+
+/**
+ * Scroll-away metadata at the end of the settings root list.
+ *
+ * Settings persist as they change, so there is no pinned action bar. The AGPL-3.0 source and
+ * license notice still has to be reachable, which a list footer does without claiming screen
+ * space from every section.
+ */
+@Composable
+private fun SettingsListFooter(
+    currentVersion: String,
+    onOpenSourceClick: () -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp, bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_footer_version, currentVersion),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = theme.onSurfaceVariant.copy(alpha = 0.85f)
+        )
+        TextButton(
+            onClick = onOpenSourceClick,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.heightIn(min = 40.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.settings_footer_license),
+                fontSize = 11.sp,
+                color = theme.primary
+            )
+        }
+        Text(
+            text = stringResource(R.string.settings_footer_copyright),
+            fontSize = 10.sp,
+            color = theme.onSurfaceVariant.copy(alpha = 0.5f)
+        )
     }
 }
 

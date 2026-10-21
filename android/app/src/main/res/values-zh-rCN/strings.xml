@@ -69,7 +69,6 @@
     <string name="settings_title">设置</string>
     <string name="settings_back">返回</string>
     <string name="settings_close">关闭设置</string>
-    <string name="settings_apply_save">应用并保存</string>
     <string name="settings_group_appearance">外观</string>
     <string name="settings_group_support">支持</string>
     <string name="settings_group_data">数据</string>
@@ -92,7 +91,7 @@
     <string name="settings_brand_badge">开源</string>
     <string name="settings_brand_tagline">cmux 伴侣 • 多 Surface 终端客户端 • v%1$s</string>
     <string name="settings_footer_version">cmux Pocket • v%1$s</string>
-    <string name="settings_footer_license">AGPL-3.0 • 无担保 • 源码与许可</string>
+    <string name="settings_footer_license">AGPL-3.0 • 不提供担保 • 源码与许可</string>
 
     <!-- Settings · Language -->
     <string name="settings_language_title">应用语言</string>
