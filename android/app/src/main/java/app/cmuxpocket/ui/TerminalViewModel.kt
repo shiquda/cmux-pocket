@@ -1,21 +1,26 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
 import app.cmuxpocket.engine.*
 import app.cmuxpocket.protocol.SurfaceInfo
 import app.cmuxpocket.protocol.AgentSessionCompleted
+import app.cmuxpocket.protocol.GatewayHostStatus
 import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.protocol.WorkspaceListResponse
 import app.cmuxpocket.protocol.WorkspaceSelection
 import app.cmuxpocket.transport.CmuxWebSocketClient
 import app.cmuxpocket.transport.ConnectionStatus
+import app.cmuxpocket.transport.ConnectionFailure
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import java.util.concurrent.ConcurrentHashMap
 
@@ -27,9 +32,21 @@ enum class AppSyncPhase {
     READY
 }
 
+/** Distinguishes literal text from an intentional control key press. */
 enum class TerminalInputKind {
     TEXT,
-    KEY,
+    KEY;
+
+    val wire: String
+        get() = name.lowercase()
+}
+
+/** Progress of a remote cmux launch requested from the terminal stage. */
+enum class CmuxWakeState {
+    IDLE,
+    WAKING,
+    SYNCING,
+    FAILED
 }
 
 class TerminalViewModel : ViewModel() {
@@ -48,6 +65,26 @@ class TerminalViewModel : ViewModel() {
     private val _statusMessage = MutableStateFlow<String>("Ready to connect")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
+    private val _connectionReadiness = MutableStateFlow(ConnectionReadiness())
+    val connectionReadiness: StateFlow<ConnectionReadiness> = _connectionReadiness.asStateFlow()
+
+    private val _wakeState = MutableStateFlow(CmuxWakeState.IDLE)
+    val wakeState: StateFlow<CmuxWakeState> = _wakeState.asStateFlow()
+
+    private val _hostStatusRefreshing = MutableStateFlow(false)
+    val hostStatusRefreshing: StateFlow<Boolean> = _hostStatusRefreshing.asStateFlow()
+    private var wakeTimeoutJob: Job? = null
+
+    private val _pendingImportUri = MutableStateFlow<String?>(null)
+    val pendingImportUri: StateFlow<String?> = _pendingImportUri.asStateFlow()
+
+    fun setPendingImportUri(uri: String?) {
+        _pendingImportUri.value = uri
+    }
+
+    fun clearPendingImportUri() {
+        _pendingImportUri.value = null
+    }
     private val _workspaces = MutableStateFlow<List<WorkspaceInfo>>(emptyList())
     private val _agentSessionCompletions = MutableSharedFlow<AgentSessionCompleted>(extraBufferCapacity = 32)
     val agentSessionCompletions: SharedFlow<AgentSessionCompleted> = _agentSessionCompletions.asSharedFlow()
@@ -58,14 +95,6 @@ class TerminalViewModel : ViewModel() {
 
     private val _selectedSurfaceId = MutableStateFlow<String?>(null)
     val selectedSurfaceId: StateFlow<String?> = _selectedSurfaceId.asStateFlow()
-
-    // Takeover is deliberately scoped to one selected surface and is never
-    // restored after reconnecting or returning to the app.
-    private val _remoteTakeoverSurfaceId = MutableStateFlow<String?>(null)
-    val remoteTakeoverSurfaceId: StateFlow<String?> = _remoteTakeoverSurfaceId.asStateFlow()
-
-    private val _hostInputProtectedSurfaceId = MutableStateFlow<String?>(null)
-    val hostInputProtectedSurfaceId: StateFlow<String?> = _hostInputProtectedSurfaceId.asStateFlow()
 
     private val _activeScreenState = MutableStateFlow(TerminalScreenState())
     val activeScreenState: StateFlow<TerminalScreenState> = _activeScreenState.asStateFlow()
@@ -98,6 +127,7 @@ class TerminalViewModel : ViewModel() {
     private var lastConnectionTarget: ConnectionTarget? = null
     private var reconnectJob: Job? = null
     private var reconnectAttempt = 0
+    private var foregroundProbeJob: Job? = null
     private var manualDisconnect = true
     private var connectionValidationError: String? = null
     private var pendingNotificationWorkspaceId: String? = null
@@ -175,16 +205,22 @@ class TerminalViewModel : ViewModel() {
         // 2. Watch connection status & advance lifecycle phases
         viewModelScope.launch {
             wsClient.statusFlow.collect { status ->
-                if (status != ConnectionStatus.CONNECTED) {
-                    clearRemoteTakeover()
-                    _hostInputProtectedSurfaceId.value = null
-                }
                 when (status) {
                     ConnectionStatus.CONNECTING -> {
+                        _connectionReadiness.value = _connectionReadiness.value.copy(
+                            step = ConnectionStep.NETWORK,
+                            started = true,
+                            problem = null,
+                        )
                         _syncPhase.value = AppSyncPhase.CONNECTING
                         _statusMessage.value = "Connecting..."
                     }
                     ConnectionStatus.AUTHENTICATING -> {
+                        _connectionReadiness.value = _connectionReadiness.value.copy(
+                            step = ConnectionStep.AUTHENTICATION,
+                            started = true,
+                            problem = null,
+                        )
                         _syncPhase.value = AppSyncPhase.AUTHENTICATING
                         _statusMessage.value = "Authenticating..."
                     }
@@ -200,13 +236,44 @@ class TerminalViewModel : ViewModel() {
                         subscribeAndBootstrap(connectionGeneration)
                     }
                     ConnectionStatus.ERROR -> {
+                        currentBootstrapJob?.cancel()
+                        connectionGeneration++
+                        val authFailed = wsClient.connectionFailure == ConnectionFailure.AUTHENTICATION
+                        val authTimedOut = wsClient.connectionFailure == ConnectionFailure.AUTHENTICATION_TIMEOUT
+                        if (authFailed) manualDisconnect = true
+                        _connectionReadiness.value = _connectionReadiness.value.copy(
+                            step = if (authFailed || authTimedOut) ConnectionStep.AUTHENTICATION else ConnectionStep.NETWORK,
+                            started = true,
+                            problem = when (wsClient.connectionFailure) {
+                                ConnectionFailure.AUTHENTICATION -> "Gateway rejected the token"
+                                ConnectionFailure.AUTHENTICATION_TIMEOUT -> "Gateway did not answer authentication"
+                                ConnectionFailure.TLS -> "Could not establish a trusted HTTPS connection"
+                                ConnectionFailure.DNS -> "Gateway hostname could not be resolved"
+                                else -> "Cannot reach the Gateway"
+                            },
+                            problemRes = when (wsClient.connectionFailure) {
+                                ConnectionFailure.AUTHENTICATION -> R.string.conn_err_auth_rejected
+                                ConnectionFailure.AUTHENTICATION_TIMEOUT -> R.string.conn_err_auth_timeout
+                                ConnectionFailure.TLS -> R.string.conn_err_tls
+                                ConnectionFailure.DNS -> R.string.conn_err_dns
+                                else -> R.string.conn_err_unreachable
+                            },
+                        )
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
-                        _statusMessage.value = "Connection error"
+                        _statusMessage.value = _connectionReadiness.value.summary
                         awaitingReplaySurfaces.clear()
                         mutationTracker.clear()
                         scheduleReconnect()
                     }
                     ConnectionStatus.DISCONNECTED -> {
+                        currentBootstrapJob?.cancel()
+                        connectionGeneration++
+                        if (connectionValidationError != null || _connectionReadiness.value.started) {
+                            _connectionReadiness.value = _connectionReadiness.value.copy(
+                                problem = connectionValidationError ?: "Gateway disconnected",
+                                problemRes = if (connectionValidationError != null) null else R.string.conn_err_disconnected,
+                            )
+                        }
                         _syncPhase.value = AppSyncPhase.DISCONNECTED
                         _statusMessage.value = connectionValidationError ?: "Disconnected"
                         awaitingReplaySurfaces.clear()
@@ -220,12 +287,6 @@ class TerminalViewModel : ViewModel() {
         // 3. React to selected surface changes
         viewModelScope.launch {
             _selectedSurfaceId.collect { surfaceId ->
-                if (_remoteTakeoverSurfaceId.value != surfaceId) {
-                    clearRemoteTakeover()
-                }
-                if (_hostInputProtectedSurfaceId.value != surfaceId) {
-                    _hostInputProtectedSurfaceId.value = null
-                }
                 currentScreenCollectorJob?.cancel()
                 if (surfaceId != null) {
                     val session = sessionStore.getOrCreateSession(surfaceId)
@@ -262,6 +323,9 @@ class TerminalViewModel : ViewModel() {
         reconnectJob?.cancel()
         reconnectJob = null
         wsClient.disconnect()
+        _connectionReadiness.value = ConnectionReadiness()
+        _wakeState.value = CmuxWakeState.IDLE
+        wakeTimeoutJob?.cancel()
         lastConnectionTarget = ConnectionTarget(host, port, token)
         reconnectAttempt = 0
         manualDisconnect = false
@@ -279,6 +343,7 @@ class TerminalViewModel : ViewModel() {
             wsClient.disconnect()
             _syncPhase.value = AppSyncPhase.DISCONNECTED
             _statusMessage.value = connectionValidationError!!
+            _connectionReadiness.value = ConnectionReadiness(started = true, problem = connectionValidationError)
         }
     }
 
@@ -301,6 +366,51 @@ class TerminalViewModel : ViewModel() {
             }
             reconnectJob = null
         }
+    }
+
+    /**
+     * Called when the activity returns to the foreground. A backgrounded process can keep a dead
+     * socket behind a stale CONNECTED status, and a retry scheduled while backgrounded can still
+     * be waiting for its backoff delay (or already be paused). Probe the live socket and recover
+     * immediately instead of leaving the terminal on a stale screen.
+     */
+    fun onAppForegrounded() {
+        val target = lastConnectionTarget ?: return
+        if (manualDisconnect) return
+        when (wsClient.statusFlow.value) {
+            ConnectionStatus.CONNECTED -> verifyConnectionAfterForeground(target)
+            ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Unit
+            else -> reconnectNow(target)
+        }
+    }
+
+    private fun verifyConnectionAfterForeground(target: ConnectionTarget) {
+        if (foregroundProbeJob?.isActive == true) return
+        foregroundProbeJob = viewModelScope.launch {
+            try {
+                wsClient.callRpc("mobile.host.status")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.i(tag, "Foreground liveness probe failed; reconnecting", e)
+                if (!manualDisconnect &&
+                    lastConnectionTarget == target &&
+                    wsClient.statusFlow.value == ConnectionStatus.CONNECTED
+                ) {
+                    reconnectNow(target)
+                }
+            }
+        }
+    }
+
+    /** Replaces a stale attempt with a fresh connection now, instead of waiting out a backoff. */
+    private fun reconnectNow(target: ConnectionTarget) {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        reconnectAttempt = 0
+        if (manualDisconnect || lastConnectionTarget != target) return
+        wsClient.discardSocket()
+        connectTarget(target)
     }
 
     fun scrollTerminal(deltaLines: Double) {
@@ -327,6 +437,60 @@ class TerminalViewModel : ViewModel() {
         }
     }
 
+    fun wakeCmux() {
+        if (_wakeState.value == CmuxWakeState.WAKING || _wakeState.value == CmuxWakeState.SYNCING) return
+        val host = _connectionReadiness.value.hostStatus ?: return
+        if (!host.cmuxInstalled || !host.canWake) return
+
+        _wakeState.value = CmuxWakeState.WAKING
+        _statusMessage.value = "Waking cmux on Mac..."
+        viewModelScope.launch {
+            try {
+                wsClient.wakeCmux()
+                // A workspace sync can arrive before this coroutine resumes; the
+                // tree collector already settled the state in that case.
+                if (_wakeState.value != CmuxWakeState.WAKING) return@launch
+                _wakeState.value = CmuxWakeState.SYNCING
+                _statusMessage.value = "Waiting for cmux to start..."
+                wakeTimeoutJob?.cancel()
+                wakeTimeoutJob = viewModelScope.launch {
+                    delay(WAKE_TIMEOUT_MS)
+                    if (_wakeState.value == CmuxWakeState.WAKING || _wakeState.value == CmuxWakeState.SYNCING) {
+                        _wakeState.value = CmuxWakeState.FAILED
+                        _statusMessage.value = "cmux did not respond; retry from the wake card"
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to wake cmux", e)
+                _wakeState.value = CmuxWakeState.FAILED
+                _statusMessage.value = "Failed to wake cmux: ${e.message}"
+            }
+        }
+    }
+
+    /** Re-reads `mobile.host.status` without reconnecting (version card and upgrade guide). */
+    fun refreshHostStatus() {
+        if (_hostStatusRefreshing.value) return
+        viewModelScope.launch {
+            _hostStatusRefreshing.value = true
+            try {
+                val status = wsClient.callRpc("mobile.host.status") as? JsonObject ?: return@launch
+                _connectionReadiness.value = _connectionReadiness.value.copy(
+                    hostStatus = decodeHostStatus(status),
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(tag, "Failed to refresh host status", e)
+                _statusMessage.value = "Unable to read Gateway version: ${e.message}"
+            } finally {
+                _hostStatusRefreshing.value = false
+            }
+        }
+    }
+
     fun disconnect() {
         manualDisconnect = true
         connectionValidationError = null
@@ -334,11 +498,11 @@ class TerminalViewModel : ViewModel() {
         reconnectAttempt = 0
         reconnectJob?.cancel()
         reconnectJob = null
+        wakeTimeoutJob?.cancel()
+        _wakeState.value = CmuxWakeState.IDLE
         wsClient.disconnect()
         awaitingReplaySurfaces.clear()
         mutationTracker.clear()
-        clearRemoteTakeover()
-        _hostInputProtectedSurfaceId.value = null
     }
 
     private suspend fun refreshWorkspacesInternal(generation: Long = connectionGeneration): List<WorkspaceInfo>? {
@@ -367,25 +531,77 @@ class TerminalViewModel : ViewModel() {
     private fun subscribeAndBootstrap(generation: Long) {
         currentBootstrapJob?.cancel()
         currentBootstrapJob = viewModelScope.launch {
+            var handshakeStatus: GatewayHostStatus? = null
             try {
-                wsClient.subscribeEvents(listOf("terminal.render_grid", "mobile.sync.delta", "workspace.tree", "agent.session.completed"))
-                val wsElement = wsClient.callRpc("mobile.workspace.list")
+                val handshake = verifyGatewayConnection(
+                    callRpc = { method -> wsClient.callRpc(method) },
+                    subscribe = {
+                        wsClient.subscribeEvents(listOf("terminal.render_grid", "mobile.sync.delta", "workspace.tree", "agent.session.completed"))
+                    },
+                    onStep = { step ->
+                        _connectionReadiness.value = _connectionReadiness.value.copy(
+                            step = step,
+                            started = true,
+                            problem = null,
+                        )
+                    },
+                    onHostStatus = { status ->
+                        handshakeStatus = status
+                        _connectionReadiness.value = _connectionReadiness.value.copy(hostStatus = status)
+                    },
+                )
                 if (generation == connectionGeneration) {
-                    val listResp = json.decodeFromJsonElement(WorkspaceListResponse.serializer(), wsElement)
-                    updateWorkspaces(listResp.workspaces, syncReconciledFocus = false)
+                    updateWorkspaces(handshake.workspaces, syncReconciledFocus = false)
                     _selectedSurfaceId.value?.let { surfaceId ->
                         wsClient.focusSurface(surfaceId)
                         requestSingleFlightReplay(surfaceId)
                     }
                     _syncPhase.value = AppSyncPhase.READY
                     _statusMessage.value = "Ready"
-                    Log.i(tag, "Bootstrap complete for generation $generation! Total workspaces=${listResp.workspaces.size}")
+                    _connectionReadiness.value = ConnectionReadiness(
+                        step = ConnectionStep.READY,
+                        started = true,
+                        workspaceCount = handshake.workspaces.size,
+                        terminalCount = handshake.workspaces.sumOf { ws -> ws.surfaces.count { it.type == "terminal" } },
+                        hostStatus = handshake.hostStatus,
+                    )
+                    Log.i(tag, "Bootstrap complete for generation $generation! Total workspaces=${handshake.workspaces.size}")
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 if (generation == connectionGeneration) {
                     Log.e(tag, "Failed in bootstrap", e)
-                    _syncPhase.value = AppSyncPhase.DISCONNECTED
-                    _statusMessage.value = "Bootstrap failed: ${e.message}"
+                    val host = handshakeStatus ?: _connectionReadiness.value.hostStatus
+                    if (host != null && host.cmuxInstalled && !host.cmuxRunning) {
+                        // The Gateway is healthy; a stopped cmux app is a recoverable
+                        // state with its own wake card, not a red connection failure.
+                        updateWorkspaces(emptyList(), syncReconciledFocus = false)
+                        _syncPhase.value = AppSyncPhase.READY
+                        _statusMessage.value = "Mac online · cmux not running"
+                        _connectionReadiness.value = _connectionReadiness.value.copy(
+                            step = ConnectionStep.READY,
+                            started = true,
+                            problem = null,
+                            workspaceCount = 0,
+                            terminalCount = 0,
+                            hostStatus = host,
+                        )
+                    } else {
+                        _syncPhase.value = AppSyncPhase.DISCONNECTED
+                        _statusMessage.value = "Bootstrap failed: ${e.message}"
+                        _connectionReadiness.value = _connectionReadiness.value.failed(
+                            message = when (_connectionReadiness.value.step) {
+                                ConnectionStep.WORKSPACES -> "Gateway connected, but cmux workspaces are unavailable"
+                                ConnectionStep.GATEWAY -> "Gateway did not complete the readiness handshake"
+                                else -> "Workspace synchronization failed"
+                            },
+                            resId = when (_connectionReadiness.value.step) {
+                                ConnectionStep.WORKSPACES -> R.string.conn_err_workspaces_unavailable
+                                ConnectionStep.GATEWAY -> R.string.conn_err_handshake_incomplete
+                                else -> R.string.conn_err_sync_failed
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -394,6 +610,21 @@ class TerminalViewModel : ViewModel() {
     fun updateWorkspaces(list: List<WorkspaceInfo>, syncReconciledFocus: Boolean = true) {
         val prevSurfaceId = _selectedSurfaceId.value
         _workspaces.value = list
+        if (_wakeState.value != CmuxWakeState.IDLE) {
+            wakeTimeoutJob?.cancel()
+            _wakeState.value = CmuxWakeState.IDLE
+            refreshHostStatus()
+        }
+        if (_connectionReadiness.value.step == ConnectionStep.READY) {
+            _connectionReadiness.value = _connectionReadiness.value.copy(
+                workspaceCount = list.size,
+                terminalCount = list.sumOf { ws -> ws.surfaces.count { it.type == "terminal" } },
+            )
+        }
+        if (list.isNotEmpty() && _connectionReadiness.value.cmuxStopped) {
+            // cmux came back without another bootstrap; refresh the reported host state.
+            refreshHostStatus()
+        }
         list.forEach { ws ->
             sessionStore.syncFromSurfaces(ws.surfaces, ws.stableKey)
         }
@@ -404,15 +635,18 @@ class TerminalViewModel : ViewModel() {
         )
         _selectedWorkspaceKey.value = newWorkspaceKey
         _selectedSurfaceId.value = newSurfaceId
-        applyPendingNotificationNavigation()
+        val navigationApplied = applyPendingNotificationNavigation()
 
-        // When enabled, sync focus to gateway whenever selection changes (including null -> new and old -> null/new)
-        if (syncReconciledFocus && prevSurfaceId != newSurfaceId) {
+        // When enabled, sync focus to gateway whenever selection changes (including null -> new and old -> null/new).
+        // A pending notification tap already dispatched its own focus, and the reconciled surface is the
+        // wrong target once that tap moved the selection — syncing it would fight the tap.
+        if (syncReconciledFocus && !navigationApplied && prevSurfaceId != _selectedSurfaceId.value) {
+            val targetSurfaceId = _selectedSurfaceId.value
             viewModelScope.launch {
                 try {
-                    wsClient.focusSurface(newSurfaceId)
-                    if (newSurfaceId != null) {
-                        requestSingleFlightReplay(newSurfaceId)
+                    wsClient.focusSurface(targetSurfaceId)
+                    if (targetSurfaceId != null) {
+                        requestSingleFlightReplay(targetSurfaceId)
                     }
                 } catch (e: Exception) {
                     Log.w(tag, "Failed to update focus on selection reconciliation", e)
@@ -443,19 +677,26 @@ class TerminalViewModel : ViewModel() {
     fun navigateToSurface(workspaceId: String?, surfaceId: String) {
         pendingNotificationWorkspaceId = workspaceId
         pendingNotificationSurfaceId = surfaceId
+        Log.d(tag, "Pending navigation: workspace=$workspaceId surface=$surfaceId workspaces=${_workspaces.value.size}")
         applyPendingNotificationNavigation()
     }
 
-    private fun applyPendingNotificationNavigation() {
-        val surfaceId = pendingNotificationSurfaceId ?: return
-        val workspace = _workspaces.value.firstOrNull { ws ->
-            (pendingNotificationWorkspaceId == null || ws.id == pendingNotificationWorkspaceId || ws.stableKey == pendingNotificationWorkspaceId) &&
-                ws.surfaces.any { it.id == surfaceId }
-        } ?: return
+    private fun applyPendingNotificationNavigation(): Boolean {
+        val surfaceId = pendingNotificationSurfaceId ?: return false
+        val workspace = WorkspaceSelection.locateSurface(
+            workspaces = _workspaces.value,
+            workspaceId = pendingNotificationWorkspaceId,
+            surfaceId = surfaceId,
+        ) ?: run {
+            Log.d(tag, "Pending navigation waits for surface $surfaceId")
+            return false
+        }
+        Log.d(tag, "Applying pending navigation: ${workspace.stableKey} / $surfaceId")
         pendingNotificationWorkspaceId = null
         pendingNotificationSurfaceId = null
         _selectedWorkspaceKey.value = workspace.stableKey
         userSelectSurface(surfaceId)
+        return true
     }
 
     private fun userSelectSurface(surfaceId: String?) {
@@ -481,7 +722,7 @@ class TerminalViewModel : ViewModel() {
         }
     }
 
-    fun createWorkspace(name: String, initialTerminal: Boolean = true) {
+    fun createWorkspace(name: String? = null, initialTerminal: Boolean = true) {
         val gen = connectionGeneration
         val mutationId = java.util.UUID.randomUUID().toString()
         mutationTracker.registerTicket(mutationId, gen, "workspace_created")
@@ -499,6 +740,44 @@ class TerminalViewModel : ViewModel() {
                 mutationTracker.onRpcFailure(mutationId, gen)
                 Log.e(tag, "Failed to create workspace", e)
                 _statusMessage.value = "Failed to create workspace: ${e.message}"
+            }
+        }
+    }
+
+    fun renameWorkspace(workspaceKey: String, newName: String) {
+        val gen = connectionGeneration
+        val mutationId = java.util.UUID.randomUUID().toString()
+        mutationTracker.registerTicket(mutationId, gen, "workspace_renamed")
+        viewModelScope.launch {
+            try {
+                _statusMessage.value = "Renaming workspace..."
+                wsClient.renameWorkspace(workspaceKey, newName, mutationId)
+                mutationTracker.onRpcSuccess(mutationId, gen)
+                refreshWorkspacesInternal(gen)
+                _statusMessage.value = "Workspace renamed"
+            } catch (e: Exception) {
+                mutationTracker.onRpcFailure(mutationId, gen)
+                Log.e(tag, "Failed to rename workspace", e)
+                _statusMessage.value = "Failed to rename workspace: ${e.message}"
+            }
+        }
+    }
+
+    fun closeWorkspace(workspaceKey: String) {
+        val gen = connectionGeneration
+        val mutationId = java.util.UUID.randomUUID().toString()
+        mutationTracker.registerTicket(mutationId, gen, "workspace_closed")
+        viewModelScope.launch {
+            try {
+                _statusMessage.value = "Closing workspace..."
+                wsClient.closeWorkspace(workspaceKey, mutationId)
+                mutationTracker.onRpcSuccess(mutationId, gen)
+                refreshWorkspacesInternal(gen)
+                _statusMessage.value = "Workspace closed"
+            } catch (e: Exception) {
+                mutationTracker.onRpcFailure(mutationId, gen)
+                Log.e(tag, "Failed to close workspace", e)
+                _statusMessage.value = "Failed to close workspace: ${e.message}"
             }
         }
     }
@@ -561,47 +840,65 @@ class TerminalViewModel : ViewModel() {
         }
     }
 
-    fun enableRemoteTakeover() {
-        val surfaceId = _selectedSurfaceId.value ?: return
-        _remoteTakeoverSurfaceId.value = surfaceId
-        _hostInputProtectedSurfaceId.value = null
-        _statusMessage.value = "Remote takeover enabled for this tab"
-    }
-
-    fun clearRemoteTakeover() {
-        _remoteTakeoverSurfaceId.value = null
-    }
-
-    fun sendInput(
-        text: String,
-        kind: TerminalInputKind = TerminalInputKind.KEY,
-        targetSurfaceId: String? = _selectedSurfaceId.value,
-    ) {
-        val surfaceId = targetSurfaceId ?: return
-        // An IME composition begun on a previous tab must never land in the
-        // newly selected terminal.
-        if (_selectedSurfaceId.value != surfaceId) return
-        val takeover = _remoteTakeoverSurfaceId.value == surfaceId
-        val paste = kind == TerminalInputKind.TEXT && text.codePointCount(0, text.length) > 1
+    fun renameSurface(surfaceId: String, newTitle: String) {
+        val gen = connectionGeneration
+        val mutationId = java.util.UUID.randomUUID().toString()
+        mutationTracker.registerTicket(mutationId, gen, "surface_renamed")
         viewModelScope.launch {
             try {
-                if (_selectedSurfaceId.value != surfaceId) return@launch
-                wsClient.sendTerminalInput(
-                    surfaceId = surfaceId,
-                    text = text,
-                    inputKind = kind.name.lowercase(),
-                    remoteTakeover = takeover,
-                    paste = paste,
-                )
+                _statusMessage.value = "Renaming tab..."
+                wsClient.renameSurface(surfaceId, newTitle, _selectedWorkspaceKey.value, mutationId)
+                mutationTracker.onRpcSuccess(mutationId, gen)
+                sessionStore.getSession(surfaceId)?.title = newTitle
+                refreshWorkspacesInternal(gen)
+                _statusMessage.value = "Tab renamed"
             } catch (e: Exception) {
-                Log.e(tag, "Failed to send input to surface $surfaceId", e)
-                if (!takeover && _selectedSurfaceId.value == surfaceId) {
-                    _hostInputProtectedSurfaceId.value = surfaceId
-                    _statusMessage.value = "Host input is protected. Enable Remote takeover for this tab."
-                } else {
-                    _statusMessage.value = "Input failed: ${e.message ?: "gateway unavailable"}"
+                mutationTracker.onRpcFailure(mutationId, gen)
+                Log.e(tag, "Failed to rename surface", e)
+                _statusMessage.value = "Failed to rename tab: ${e.message}"
+            }
+        }
+    }
+
+    fun sendInput(text: String, kind: TerminalInputKind = TerminalInputKind.TEXT) {
+        sendInputToSurface(_selectedSurfaceId.value, text, kind)
+    }
+
+    /**
+     * Sends input to the surface that owned the keyboard.
+     *
+     * A non-null [surfaceId] that is no longer selected is dropped so composed
+     * IME text can never land in a tab the user switched away from.
+     */
+    fun sendInputToSurface(
+        surfaceId: String?,
+        text: String,
+        kind: TerminalInputKind = TerminalInputKind.TEXT
+    ) {
+        val selected = _selectedSurfaceId.value
+        if (surfaceId != null && surfaceId != selected) return
+        val target = surfaceId ?: selected ?: return
+        viewModelScope.launch {
+            try {
+                wsClient.sendTerminalInput(target, text, kind.wire)
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to send input to surface $target", e)
+            }
+        }
+    }
+
+    fun clearScrollback(surfaceId: String? = null) {
+        sessionStore.clearScrollback(surfaceId)
+        val activeId = _selectedSurfaceId.value
+        if (surfaceId == null || surfaceId == activeId) {
+            activeId?.let { id ->
+                sessionStore.getSession(id)?.let { session ->
+                    _activeScreenState.value = session.engine.screenState.value
                 }
             }
         }
     }
 }
+
+/** How long the wake card waits for the Gateway's `workspace.tree` sync. */
+private const val WAKE_TIMEOUT_MS = 15_000L

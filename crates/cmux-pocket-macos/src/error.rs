@@ -59,6 +59,9 @@ pub enum MacOsError {
     #[error("Invalid configuration: {0}")]
     InvalidConfiguration(String),
 
+    #[error("cmux launch failed: {0}")]
+    LaunchFailed(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 

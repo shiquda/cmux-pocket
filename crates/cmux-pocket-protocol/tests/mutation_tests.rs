@@ -112,5 +112,8 @@ fn test_terminal_viewport_and_host_status() {
     let host_val = serde_json::to_value(&host_resp).unwrap();
     assert_eq!(host_val["mac_display_name"], "MacBook Pro M1");
     assert_eq!(host_val["mac_app_version"], "2.0.0");
+    assert_eq!(host_val["gateway_version"], "2.0.0");
+    assert_eq!(host_val["protocol_version"], "2.0.0");
+    assert_eq!(host_val["cmux_status"]["running"], false);
     assert!(host_val["capabilities"].as_array().unwrap().len() >= 6);
 }

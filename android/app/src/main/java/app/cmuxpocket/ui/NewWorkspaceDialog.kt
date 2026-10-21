@@ -8,34 +8,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import app.cmuxpocket.R
 
 @Composable
 fun NewWorkspaceDialog(
     onDismissRequest: () -> Unit,
     onConfirm: (name: String, initialTerminal: Boolean) -> Unit
 ) {
+    val theme = CmuxTheme.colors
     var nameInput by remember { mutableStateOf("") }
     var createInitialTerminal by remember { mutableStateOf(true) }
-
+    val defaultWorkspaceName = stringResource(R.string.dlg_new_workspace_default_name)
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        containerColor = Color(0xFF222228),
-        titleContentColor = Color.White,
-        textContentColor = Color.White,
-        title = { Text("New Workspace", fontSize = 18.sp) },
+        containerColor = theme.containerBg,
+        titleContentColor = theme.onContainer,
+        textContentColor = theme.onContainer,
+        title = { Text(stringResource(R.string.dlg_new_workspace_title), fontSize = 18.sp) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = nameInput,
                     onValueChange = { nameInput = it },
-                    label = { Text("Workspace Name") },
-                    placeholder = { Text("e.g. backend-api, my-feature") },
+                    label = { Text(stringResource(R.string.dlg_new_workspace_name_label)) },
+                    placeholder = { Text(stringResource(R.string.dlg_new_workspace_name_placeholder)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color(0xFF64B5F6),
-                        unfocusedBorderColor = Color(0xFF555555)
+                        focusedTextColor = theme.onContainer,
+                        unfocusedTextColor = theme.onContainer,
+                        focusedBorderColor = theme.primary,
+                        unfocusedBorderColor = theme.divider
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -48,35 +51,35 @@ fun NewWorkspaceDialog(
                         checked = createInitialTerminal,
                         onCheckedChange = { createInitialTerminal = it },
                         colors = CheckboxDefaults.colors(
-                            checkedColor = Color(0xFF00FF7F),
-                            uncheckedColor = Color.Gray
+                            checkedColor = theme.primary,
+                            uncheckedColor = theme.onSurfaceVariant
                         )
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Create initial terminal tab", fontSize = 13.sp, color = Color(0xFFDDDDDD))
+                    Text(stringResource(R.string.dlg_new_workspace_create_initial_tab), fontSize = 13.sp, color = theme.onContainerMuted)
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val finalName = nameInput.trim().ifEmpty { "New Workspace" }
+                    val finalName = nameInput.trim().ifEmpty { defaultWorkspaceName }
                     onConfirm(finalName, createInitialTerminal)
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF1976D2),
-                    contentColor = Color.White
+                    containerColor = theme.primary,
+                    contentColor = theme.onPrimary
                 )
             ) {
-                Text("Create")
+                Text(stringResource(R.string.dlg_new_workspace_create))
             }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismissRequest,
-                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFAAAAAA))
+                colors = ButtonDefaults.textButtonColors(contentColor = theme.onContainerMuted)
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.dlg_new_workspace_cancel))
             }
         }
     )
@@ -88,32 +91,33 @@ fun NewSurfaceDialog(
     onDismissRequest: () -> Unit,
     onConfirm: (title: String?) -> Unit
 ) {
+    val theme = CmuxTheme.colors
     var titleInput by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        containerColor = Color(0xFF222228),
-        titleContentColor = Color.White,
-        textContentColor = Color.White,
-        title = { Text("New Terminal Tab", fontSize = 18.sp) },
+        containerColor = theme.containerBg,
+        titleContentColor = theme.onContainer,
+        textContentColor = theme.onContainer,
+        title = { Text(stringResource(R.string.dlg_new_surface_title), fontSize = 18.sp) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Add a new terminal session in '$workspaceName'",
+                    text = stringResource(R.string.dlg_new_surface_desc, workspaceName),
                     fontSize = 13.sp,
-                    color = Color(0xFFAAAAAA)
+                    color = theme.onContainerMuted
                 )
                 OutlinedTextField(
                     value = titleInput,
                     onValueChange = { titleInput = it },
-                    label = { Text("Tab Title (Optional)") },
-                    placeholder = { Text("e.g. zsh, logs, tests") },
+                    label = { Text(stringResource(R.string.dlg_new_surface_title_label)) },
+                    placeholder = { Text(stringResource(R.string.dlg_new_surface_title_placeholder)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color(0xFF00FF7F),
-                        unfocusedBorderColor = Color(0xFF555555)
+                        focusedTextColor = theme.onContainer,
+                        unfocusedTextColor = theme.onContainer,
+                        focusedBorderColor = theme.primary,
+                        unfocusedBorderColor = theme.divider
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -126,19 +130,19 @@ fun NewSurfaceDialog(
                     onConfirm(finalTitle)
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF00C853),
-                    contentColor = Color.White
+                    containerColor = theme.primary,
+                    contentColor = theme.onPrimary
                 )
             ) {
-                Text("Add Tab")
+                Text(stringResource(R.string.dlg_new_surface_add))
             }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismissRequest,
-                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFAAAAAA))
+                colors = ButtonDefaults.textButtonColors(contentColor = theme.onContainerMuted)
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.dlg_new_surface_cancel))
             }
         }
     )

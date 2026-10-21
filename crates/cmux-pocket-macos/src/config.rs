@@ -4,7 +4,7 @@
 //! Homebrew Cellar, and configuration files are written atomically with user-only permissions.
 
 use crate::error::MacOsError;
-use crate::loopback::validate_loopback_host;
+use crate::loopback::{is_loopback_host, validate_loopback_host};
 use crate::paths::{validate_outside_cellar, PocketPaths};
 use crate::permissions::{atomic_write_secret_file, ensure_file_user_only};
 use serde::{Deserialize, Serialize};
@@ -40,6 +40,9 @@ pub struct GatewayConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cmux_path: Option<PathBuf>,
 
+    /// Optional custom remote endpoint for phone connections (e.g. wss://example.com, https://tunnel.domain:8443).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
     /// Additional unrecognized fields preserved across roundtrips.
     #[serde(flatten)]
     pub extra: toml::Table,
@@ -62,6 +65,7 @@ impl Default for GatewayConfig {
             log_dir: None,
             cmux_path: None,
             extra: toml::Table::new(),
+            endpoint: None,
         }
     }
 }
@@ -92,6 +96,10 @@ impl GatewayConfig {
             validate_outside_cellar(cmux_path, "cmux_path")?;
         }
 
+        if let Some(endpoint) = &self.endpoint {
+            validate_remote_endpoint(endpoint)?;
+        }
+
         Ok(())
     }
 
@@ -119,6 +127,157 @@ impl GatewayConfig {
     pub fn to_redacted_toml_string(&self) -> Result<String, MacOsError> {
         self.to_toml_string()
     }
+}
+
+/// Parsed representation of an endpoint for mobile connection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ParsedEndpoint {
+    pub raw: String,
+    pub scheme: String,
+    pub host: String,
+    pub port: u16,
+    pub is_loopback: bool,
+    pub is_tls: bool,
+}
+
+/// Parses and validates a Gateway endpoint string intended for phone connection.
+///
+/// Enforces TLS for all non-loopback connections, and prevents arbitrary cleartext WebSockets.
+pub fn parse_and_validate_endpoint(endpoint: &str) -> Result<ParsedEndpoint, MacOsError> {
+    let trimmed = endpoint.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Err(MacOsError::InvalidConfiguration(
+            "Endpoint cannot be empty".to_string(),
+        ));
+    }
+
+    let (scheme_opt, rest) = if let Some(idx) = trimmed.find("://") {
+        let scheme = &trimmed[..idx];
+        let rest = &trimmed[idx + 3..];
+        (Some(scheme), rest)
+    } else {
+        (None, trimmed)
+    };
+
+    let authority = if let Some(idx) = rest.find(['/', '?']) {
+        &rest[..idx]
+    } else {
+        rest
+    };
+
+    if authority.is_empty() {
+        return Err(MacOsError::InvalidConfiguration(
+            "Endpoint has no valid host authority".to_string(),
+        ));
+    }
+
+    let (host, explicit_port) = if authority.starts_with('[') {
+        let end_bracket = authority.find(']').ok_or_else(|| {
+            MacOsError::InvalidConfiguration("Unclosed IPv6 bracket in endpoint".to_string())
+        })?;
+        let host = &authority[1..end_bracket];
+        let after = &authority[end_bracket + 1..];
+        let port = if let Some(rest) = after.strip_prefix(':') {
+            let p: u16 = rest.parse().map_err(|_| {
+                MacOsError::InvalidConfiguration(format!(
+                    "Invalid port in endpoint '{}'",
+                    authority
+                ))
+            })?;
+            Some(p)
+        } else {
+            None
+        };
+        (host, port)
+    } else if let Some(idx) = authority.rfind(':') {
+        let host = &authority[..idx];
+        let p: u16 = authority[idx + 1..].parse().map_err(|_| {
+            MacOsError::InvalidConfiguration(format!("Invalid port in endpoint '{}'", authority))
+        })?;
+        (host, Some(p))
+    } else {
+        (authority, None)
+    };
+
+    if host.is_empty() {
+        return Err(MacOsError::InvalidConfiguration(
+            "Endpoint host cannot be empty".to_string(),
+        ));
+    }
+    if host == "0.0.0.0" || host == "::" {
+        return Err(MacOsError::InvalidConfiguration(
+            "Wildcard address (0.0.0.0 / ::) cannot be used as an endpoint".to_string(),
+        ));
+    }
+
+    let is_loopback = is_loopback_host(host);
+
+    let (is_tls, scheme) = match scheme_opt {
+        Some(s) if s.eq_ignore_ascii_case("wss") => (true, "wss".to_string()),
+        Some(s) if s.eq_ignore_ascii_case("https") => (true, "wss".to_string()),
+        Some(s) if s.eq_ignore_ascii_case("ws") => {
+            if !is_loopback {
+                return Err(MacOsError::InvalidConfiguration(
+                    "Cleartext WebSocket is only allowed for loopback connections; use https:// or wss://".to_string(),
+                ));
+            }
+            (false, "ws".to_string())
+        }
+        Some(s) if s.eq_ignore_ascii_case("http") => {
+            if !is_loopback {
+                return Err(MacOsError::InvalidConfiguration(
+                    "Cleartext WebSocket is only allowed for loopback connections; use https:// or wss://".to_string(),
+                ));
+            }
+            (false, "ws".to_string())
+        }
+        Some(s) => {
+            return Err(MacOsError::InvalidConfiguration(format!(
+                "Unsupported scheme '{}': must be wss://, https://, ws://, or http://",
+                s
+            )));
+        }
+        None => {
+            if is_loopback {
+                (false, "ws".to_string())
+            } else {
+                (true, "wss".to_string())
+            }
+        }
+    };
+
+    let port = explicit_port.unwrap_or(if is_tls { 443 } else { 8088 });
+    if port == 0 {
+        return Err(MacOsError::InvalidConfiguration(
+            "Port 0 is not permitted".to_string(),
+        ));
+    }
+
+    let host_formatted = if host.contains(':') && !host.starts_with('[') {
+        format!("[{}]", host)
+    } else {
+        host.to_string()
+    };
+
+    let raw = if (is_tls && port == 443) || (!is_tls && port == 80) {
+        format!("{}://{}", scheme, host_formatted)
+    } else {
+        format!("{}://{}:{}", scheme, host_formatted, port)
+    };
+
+    Ok(ParsedEndpoint {
+        raw,
+        scheme,
+        host: host.to_string(),
+        port,
+        is_loopback,
+        is_tls,
+    })
+}
+
+/// Validates a custom remote endpoint.
+pub fn validate_remote_endpoint(endpoint: &str) -> Result<ParsedEndpoint, MacOsError> {
+    parse_and_validate_endpoint(endpoint)
 }
 
 /// Loads and validates configuration from a file.
@@ -240,5 +399,70 @@ custom_timeout_ms = 5000
         let reloaded_raw = fs::read_to_string(&config_path).unwrap();
         assert!(reloaded_raw.contains("future_feature_flag = true"));
         assert!(reloaded_raw.contains("custom_timeout_ms = 5000"));
+    }
+
+    #[test]
+    fn test_endpoint_validation_and_parsing() {
+        let ep = parse_and_validate_endpoint("wss://mac.ts.net").unwrap();
+        assert_eq!(ep.scheme, "wss");
+        assert_eq!(ep.host, "mac.ts.net");
+        assert_eq!(ep.port, 443);
+        assert!(!ep.is_loopback);
+        assert!(ep.is_tls);
+        assert_eq!(ep.raw, "wss://mac.ts.net");
+
+        let ep = parse_and_validate_endpoint("https://tunnel.example.com:8443").unwrap();
+        assert_eq!(ep.scheme, "wss");
+        assert_eq!(ep.host, "tunnel.example.com");
+        assert_eq!(ep.port, 8443);
+        assert!(!ep.is_loopback);
+        assert!(ep.is_tls);
+        assert_eq!(ep.raw, "wss://tunnel.example.com:8443");
+
+        let ep = parse_and_validate_endpoint("mac.example.ts.net").unwrap();
+        assert_eq!(ep.scheme, "wss");
+        assert_eq!(ep.host, "mac.example.ts.net");
+        assert_eq!(ep.port, 443);
+        assert!(!ep.is_loopback);
+        assert!(ep.is_tls);
+
+        let ep = parse_and_validate_endpoint("ws://127.0.0.1:8088").unwrap();
+        assert_eq!(ep.scheme, "ws");
+        assert_eq!(ep.host, "127.0.0.1");
+        assert_eq!(ep.port, 8088);
+        assert!(ep.is_loopback);
+        assert!(!ep.is_tls);
+
+        let ep = parse_and_validate_endpoint("127.0.0.1:8088").unwrap();
+        assert_eq!(ep.scheme, "ws");
+        assert_eq!(ep.host, "127.0.0.1");
+        assert_eq!(ep.port, 8088);
+        assert!(ep.is_loopback);
+
+        assert!(parse_and_validate_endpoint("ws://example.com:8088").is_err());
+        assert!(parse_and_validate_endpoint("http://192.168.1.10:8088").is_err());
+        assert!(parse_and_validate_endpoint("0.0.0.0:8088").is_err());
+        assert!(parse_and_validate_endpoint("").is_err());
+    }
+
+    #[test]
+    fn test_endpoint_config_roundtrip() {
+        let tmp = tempdir().unwrap();
+        let config_path = tmp.path().join("config.toml");
+        let config = GatewayConfig {
+            port: 8088,
+            host: "127.0.0.1".to_string(),
+            endpoint: Some("wss://custom.domain.com:8443".to_string()),
+            ..GatewayConfig::default()
+        };
+        config.validate().unwrap();
+        save_config(&config_path, &config).unwrap();
+
+        let loaded = load_config(&config_path).unwrap();
+        assert_eq!(
+            loaded.endpoint.as_deref(),
+            Some("wss://custom.domain.com:8443")
+        );
+        loaded.validate().unwrap();
     }
 }

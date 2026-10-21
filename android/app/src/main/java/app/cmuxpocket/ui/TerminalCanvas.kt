@@ -1,5 +1,8 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
+import androidx.compose.ui.res.stringResource
+
 import app.cmuxpocket.engine.NumericTraceHelper
 import app.cmuxpocket.engine.TerminalCell
 import app.cmuxpocket.engine.TerminalScreenState
@@ -21,11 +24,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import android.graphics.Picture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -64,6 +67,58 @@ object FontLoader {
     }
 }
 
+private val DEFAULT_FOREGROUND_COLOR = 0xFFD4D4D4.toInt()
+
+/**
+ * HarfBuzz shapes a batched run, so the font's ligature/contextual features have to stay off:
+ * a cell is drawn alone today, and a single glyph can neither ligate nor kern. Without this a
+ * run such as `->` would render as one ligature glyph instead of two cells.
+ */
+private const val CELL_ALIGNED_FONT_FEATURES = "\"liga\" 0, \"clig\" 0, \"calt\" 0, \"kern\" 0"
+
+/**
+ * True when [cell] can join a batched glyph run: exactly one printable ASCII glyph (a space
+ * included — its advance is one cell, so runs may span word gaps) occupying one column. Anything
+ * else (empty, wide, or multi-character cells) is drawn on its own so its position stays exact.
+ */
+private fun isBatchableGlyph(cell: TerminalCell): Boolean =
+    cell.width == 1 && cell.text.length == 1 && cell.text[0] in ' '..'~'
+
+/**
+ * Memoizes hex -> ARGB resolution for terminal cells.
+ *
+ * The renderer resolves a colour for every visible cell on every frame, so a 200x50 viewport
+ * issues roughly 10k [Color.parseColor] calls per frame; that parsing alone exceeds a 16ms frame
+ * budget. A terminal palette holds a handful of distinct colours, so a small map collapses the
+ * parses into hash lookups.
+ */
+internal class TerminalColorCache(
+    private val parse: (String) -> Int? = { hex ->
+        try {
+            Color.parseColor(hex)
+        } catch (_: Exception) {
+            null
+        }
+    }
+) {
+    private val resolved = HashMap<String, Int>(64)
+
+    /** Resolves [hex], returning [fallback] for unparseable values (which are never cached). */
+    fun resolve(hex: String, fallback: Int): Int {
+        resolved[hex]?.let { return it }
+        val parsed = parse(hex) ?: return fallback
+        if (resolved.size >= MAX_ENTRIES) resolved.clear()
+        resolved[hex] = parsed
+        return parsed
+    }
+
+    fun clear() = resolved.clear()
+
+    private companion object {
+        const val MAX_ENTRIES = 256
+    }
+}
+
 
 internal data class TerminalGeometry(
     val canvasWidth: Float,
@@ -75,7 +130,13 @@ internal data class TerminalGeometry(
     val baselineOffset: Float,
     val originX: Float,
     val originY: Float,
-    val fontSizePx: Float
+    val fontSizePx: Float,
+    /**
+     * Letter spacing, in em, that makes the typeface advance exactly [cellWidth] per glyph. The
+     * grid stretches text to fit the viewport, while a shaped run uses the typeface's own
+     * advances, so runs drawn without this correction drift away from the column grid.
+     */
+    val letterSpacingEm: Float = 0f
 ) {
     fun cellToPoint(row: Int, column: Int): Offset {
         return Offset(
@@ -127,6 +188,7 @@ internal fun computeTerminalGeometry(
 
     textPaint.isFakeBoldText = false
     textPaint.isUnderlineText = false
+    textPaint.letterSpacing = 0f
     textPaint.textSize = 100f
     val referenceAdvance = textPaint.measureText("M").coerceAtLeast(1f)
     val cellWidth = terminalCellWidth(
@@ -143,6 +205,13 @@ internal fun computeTerminalGeometry(
 
     // Derive strictly proportional typography from Maple Mono character metrics
     textPaint.textSize = (100f * cellWidth) / referenceAdvance
+
+    // The rendered advance at that size is not the linearly extrapolated one: the grid is
+    // stretched to the viewport, and hinting adjusts small glyph advances. Measure what the
+    // typeface really produces and add the difference as letter spacing, so a run of glyphs
+    // advances exactly one cell per glyph instead of drifting off the column grid.
+    val renderedAdvance = textPaint.measureText("M").coerceAtLeast(0.01f)
+    val letterSpacingEm = (cellWidth - renderedAdvance) / textPaint.textSize
 
     val fontMetrics = textPaint.fontMetrics
     val rowHeight = (fontMetrics.bottom - fontMetrics.top) * 1.10f
@@ -165,8 +234,96 @@ internal fun computeTerminalGeometry(
         baselineOffset = baselineOffset,
         originX = originX,
         originY = originY,
-        fontSizePx = textPaint.textSize
+        fontSizePx = textPaint.textSize,
+        letterSpacingEm = letterSpacingEm
     )
+}
+
+internal class TerminalRowCache {
+    private var cachedPictures = arrayOfNulls<Picture>(128)
+    private var cachedRows: Int = 0
+    private var cachedCols: Int = 0
+    private var cachedCellWidth: Float = 0f
+    private var cachedRowHeight: Float = 0f
+    private var cachedFontSizePx: Float = 0f
+    private var cachedLetterSpacingEm: Float = 0f
+    private var cachedOriginX: Float = 0f
+    private var cachedOriginY: Float = 0f
+    private var cachedDefaultBg: Int = 0
+    private var cachedSurfaceId: String = ""
+    private var cachedEpoch: String? = null
+    private var cachedEffectiveOffset: Int = 0
+
+    fun prepare(
+        surfaceId: String,
+        epoch: String?,
+        rows: Int,
+        cols: Int,
+        cellWidth: Float,
+        rowHeight: Float,
+        fontSizePx: Float,
+        letterSpacingEm: Float,
+        originX: Float,
+        originY: Float,
+        defaultBg: Int,
+        effectiveOffset: Int,
+        dirtyRows: Set<Int>?
+    ) {
+        val geometryOrStyleChanged = rows != cachedRows ||
+            cols != cachedCols ||
+            cellWidth != cachedCellWidth ||
+            rowHeight != cachedRowHeight ||
+            fontSizePx != cachedFontSizePx ||
+            letterSpacingEm != cachedLetterSpacingEm ||
+            originX != cachedOriginX ||
+            originY != cachedOriginY ||
+            defaultBg != cachedDefaultBg ||
+            surfaceId != cachedSurfaceId ||
+            epoch != cachedEpoch ||
+            effectiveOffset != cachedEffectiveOffset
+
+        if (cachedPictures.size < rows) {
+            val old = cachedPictures
+            cachedPictures = arrayOfNulls(maxOf(rows, old.size * 2))
+            System.arraycopy(old, 0, cachedPictures, 0, old.size)
+        }
+
+        if (geometryOrStyleChanged || dirtyRows == null) {
+            invalidateAll()
+            cachedRows = rows
+            cachedCols = cols
+            cachedCellWidth = cellWidth
+            cachedRowHeight = rowHeight
+            cachedFontSizePx = fontSizePx
+            cachedLetterSpacingEm = letterSpacingEm
+            cachedOriginX = originX
+            cachedOriginY = originY
+            cachedDefaultBg = defaultBg
+            cachedSurfaceId = surfaceId
+            cachedEpoch = epoch
+            cachedEffectiveOffset = effectiveOffset
+        } else {
+            for (r in dirtyRows) {
+                if (r in cachedPictures.indices) {
+                    cachedPictures[r] = null
+                }
+            }
+        }
+    }
+
+    fun get(r: Int): Picture? = if (r in cachedPictures.indices) cachedPictures[r] else null
+
+    fun put(r: Int, picture: Picture) {
+        if (r in cachedPictures.indices) {
+            cachedPictures[r] = picture
+        }
+    }
+
+    fun invalidateAll() {
+        for (i in cachedPictures.indices) {
+            cachedPictures[i] = null
+        }
+    }
 }
 
 @Composable
@@ -177,9 +334,16 @@ fun TerminalCanvas(
     modifier: Modifier = Modifier,
     displayPreference: TerminalDisplayPreference = TerminalDisplayPreference(),
     onDisplayPreferenceChange: (TerminalDisplayPreference) -> Unit = {},
-    themeHex: String = "#1E1E1E"
+    themeHex: String = "#1E1E1E",
+    onSendKey: (String) -> Unit = {},
+    onClearScreen: () -> Unit = {},
+    renderEnabled: Boolean = true
 ) {
     val context = LocalContext.current
+    val readyLabel = stringResource(R.string.canvas_ready)
+    val connectingLabel = stringResource(R.string.canvas_connecting)
+    val startHandleLabel = stringResource(R.string.canvas_selection_start_handle)
+    val endHandleLabel = stringResource(R.string.canvas_selection_end_handle)
     val density = LocalDensity.current
     val requestedFontSizePx = with(density) { displayPreference.fontSizeSp.sp.toPx() }
     val panOffset = Offset(displayPreference.panX, displayPreference.panY ?: 0f)
@@ -187,6 +351,7 @@ fun TerminalCanvas(
     val currentOnDisplayPreferenceChange by rememberUpdatedState(onDisplayPreferenceChange)
     var canvasSizePx by remember { mutableStateOf(Size.Zero) }
     val lastDrawnTraceId = remember(screenState.surfaceId) { AtomicLong(0L) }
+    val rowCache = remember { TerminalRowCache() }
     val localScrollOffsets = remember { mutableStateMapOf<String, Int>() }
     val localScrollAccumulators = remember { mutableStateMapOf<String, Float>() }
     val lastSeenHistoryRows = remember { mutableStateMapOf<String, Long>() }
@@ -194,6 +359,7 @@ fun TerminalCanvas(
 
     var selectionState by remember { mutableStateOf<TerminalSelectionState?>(null) }
     var selectionBackgroundColor by remember { mutableStateOf<Int?>(null) }
+    var contextualBubbleOffset by remember { mutableStateOf<Offset?>(null) }
 
     val surfaceId = screenState.surfaceId
     val isConfirmedPrimary = screenState.activeScreen == "primary"
@@ -244,6 +410,23 @@ fun TerminalCanvas(
         selectionBackgroundColor = null
     }
 
+    // The joystick and a drag that runs past the rendered edge both feed this one handler, so the
+    // viewport offset, the knob position, and accumulated fractional lines can never disagree.
+    fun applyScrollLines(deltaLines: Double) {
+        if (deltaLines == 0.0) return
+        if (isConfirmedPrimary && screenState.scrollback.isNotEmpty()) {
+            val maxScroll = screenState.scrollback.size.toFloat()
+            val curAcc = localScrollAccumulators[surfaceId] ?: 0f
+            val newAcc = (curAcc + deltaLines.toFloat()).coerceIn(0f, maxScroll)
+            val newOff = kotlin.math.round(newAcc).toInt().coerceIn(0, screenState.scrollback.size)
+            localScrollAccumulators[surfaceId] = newAcc
+            localScrollOffsets[surfaceId] = newOff
+        } else {
+            onTerminalScroll(deltaLines)
+        }
+    }
+    val currentApplyScrollLines by rememberUpdatedState<(Double) -> Unit>({ applyScrollLines(it) })
+
     LaunchedEffect(surfaceId) {
         clearSelection()
     }
@@ -252,10 +435,12 @@ fun TerminalCanvas(
         clearSelection()
     }
 
-    val effectiveGrid = if (effectiveOffset > 0 && screenState.scrollback.isNotEmpty()) {
-        selectViewportRows(screenState.scrollback, screenState.grid, screenState.rows, effectiveOffset)
-    } else {
-        screenState.grid
+    val effectiveGrid = remember(screenState.scrollback, screenState.grid, screenState.rows, effectiveOffset) {
+        if (effectiveOffset > 0 && screenState.scrollback.isNotEmpty()) {
+            selectViewportRows(screenState.scrollback, screenState.grid, screenState.rows, effectiveOffset)
+        } else {
+            screenState.grid
+        }
     }
 
     val mapleTypeface = remember(context) {
@@ -266,6 +451,12 @@ fun TerminalCanvas(
         Paint().apply {
             isAntiAlias = true
             typeface = mapleTypeface
+            try {
+                fontFeatureSettings = CELL_ALIGNED_FONT_FEATURES
+            } catch (_: Exception) {
+                // Older platforms may reject the CSS syntax; runs then fall back to the font's
+                // default features, which the per-cell path never exercises anyway.
+            }
         }
     }
 
@@ -274,6 +465,10 @@ fun TerminalCanvas(
             style = Paint.Style.FILL
         }
     }
+
+    val colorCache = remember { TerminalColorCache() }
+
+    val cursorBlockColor = remember { Color.parseColor("#4CAF50") }
 
     val selHighlightPaint = remember {
         Paint().apply {
@@ -321,13 +516,18 @@ fun TerminalCanvas(
     val currentSelection = selectionState
 
     val activeGrid = currentSelection?.viewport?.grid ?: effectiveGrid
-    val activeSourceCols = currentSelection?.viewport?.columns ?: calculateRenderSourceCols(effectiveGrid, screenState.columns)
+    val effectiveSourceCols = remember(effectiveGrid, screenState.columns) {
+        calculateRenderSourceCols(effectiveGrid, screenState.columns)
+    }
+    val activeSourceCols = currentSelection?.viewport?.columns ?: effectiveSourceCols
     val activeRows = currentSelection?.viewport?.rows ?: maxOf(screenState.rows, 1)
     val liveCursorRow = if (screenState.cursor.visible && effectiveOffset == 0) {
         screenState.cursor.row.coerceIn(0, activeRows - 1)
     } else null
-    val activeFocusRow = liveCursorRow
-        ?: activeGrid.indexOfLast { row -> row.any { it.text.isNotBlank() } }.coerceAtLeast(0)
+    val lastContentRow = remember(activeGrid) {
+        activeGrid.indexOfLast { row -> row.any { it.text.isNotBlank() } }.coerceAtLeast(0)
+    }
+    val activeFocusRow = liveCursorRow ?: lastContentRow
     val focusRow = if (isSelecting || terminalViewportIsDetached(displayPreference, liveCursorRow)) null else activeFocusRow
 
     LaunchedEffect(displayPreference.panY, displayPreference.panAnchorRow, liveCursorRow) {
@@ -364,8 +564,8 @@ fun TerminalCanvas(
             .pointerInput(surfaceId, isSelecting) {
                 if (!isSelecting) {
                     detectTapGestures(
-                        onDoubleTap = {
-                            currentOnDisplayPreferenceChange(currentDisplayPreference.copy(fitWidth = true, panX = 0f, panY = null))
+                        onDoubleTap = { offset ->
+                            contextualBubbleOffset = offset
                         },
                         onLongPress = { offset ->
                             val geom = currentGeometry ?: return@detectTapGestures
@@ -381,14 +581,20 @@ fun TerminalCanvas(
                                 panY = geom.originY - (geom.canvasHeight - geom.rows * geom.rowHeight)
                             ))
                             selectionState = beginWordSelection(viewport, geom.pointToCell(offset))
+                            contextualBubbleOffset = offset
                         },
                         onTap = { offset ->
-                            if (offset.y < canvasSizePx.height) currentOnTap()
+                            if (contextualBubbleOffset != null) {
+                                contextualBubbleOffset = null
+                            } else if (offset.y < canvasSizePx.height) {
+                                currentOnTap()
+                            }
                         }
                     )
                 } else {
                     detectTapGestures(
                         onTap = { offset ->
+                            contextualBubbleOffset = null
                             val currentSel = currentSelectionState ?: return@detectTapGestures
                             val geom = currentGeometry ?: return@detectTapGestures
                             if (!geom.containsGridPoint(offset) || !currentSel.contains(geom.pointToCell(offset))) {
@@ -400,24 +606,32 @@ fun TerminalCanvas(
             }
             .pointerInput(surfaceId, isSelecting, density) {
                 if (!isSelecting) {
+                    // The viewport is re-rendered on every gesture event: the transform is applied to
+                    // the layout, not to a composited snapshot, so content that scrolls into view is
+                    // painted in the same frame instead of staying blank until the gesture ends.
                     detectTransformGestures(panZoomLock = false) { centroid, pan, zoom, _ ->
                         if (zoom != 1.0f || pan != Offset.Zero) {
+                            if (contextualBubbleOffset != null) {
+                                contextualBubbleOffset = null
+                            }
                             val geom = currentGeometry ?: return@detectTransformGestures
                             val pref = currentDisplayPreference
                             val nextFont = if (zoom != 1f) {
                                 (with(density) { geom.fontSizePx.toSp().value } * zoom).coerceIn(2f, 48f)
                             } else pref.fontSizeSp
                             val ratio = if (zoom != 1f) with(density) { nextFont.sp.toPx() } / geom.fontSizePx else 1f
+                            val boundaryPan = chainTerminalBoundaryPan(geom, pan, zoom != 1f)
                             currentOnDisplayPreferenceChange(transformTerminalDisplay(
                                 preference = pref,
                                 geometry = geom,
                                 nextFontSizeSp = nextFont,
                                 scaleRatio = ratio,
                                 centroid = centroid,
-                                pan = pan,
+                                pan = boundaryPan.pan,
                                 isZooming = zoom != 1f,
                                 focusRow = activeFocusRow
                             ))
+                            currentApplyScrollLines(boundaryPan.scrollLines.toDouble())
                         }
                     }
                 }
@@ -426,29 +640,36 @@ fun TerminalCanvas(
         Canvas(modifier = Modifier.fillMaxSize().padding(bottom = 48.dp).onSizeChanged {
             canvasSizePx = Size(it.width.toFloat(), it.height.toFloat())
         }) {
+            if (!renderEnabled) return@Canvas
             val nativeCanvas = drawContext.canvas.nativeCanvas
             val canvasWidth = size.width
             val canvasHeight = size.height
             if (canvasWidth <= 0 || canvasHeight <= 0) return@Canvas
 
-            val activeGeom = computeTerminalGeometry(
-                canvasWidth = canvasWidth,
-                canvasHeight = canvasHeight,
-                sourceCols = activeSourceCols,
-                rows = activeRows,
-                requestedFontSizePx = requestedFontSizePx,
-                fitWidth = displayPreference.fitWidth,
-                panOffset = panOffset,
-                focusRow = focusRow,
-                textPaint = textPaint
-            )
+            val activeGeom = geometry?.takeIf { it.canvasWidth == canvasWidth && it.canvasHeight == canvasHeight }
+                ?: computeTerminalGeometry(
+                    canvasWidth = canvasWidth,
+                    canvasHeight = canvasHeight,
+                    sourceCols = activeSourceCols,
+                    rows = activeRows,
+                    requestedFontSizePx = requestedFontSizePx,
+                    fitWidth = displayPreference.fitWidth,
+                    panOffset = panOffset,
+                    focusRow = focusRow,
+                    textPaint = textPaint
+                )
+            // computeTerminalGeometry derives the paint's text size from the cell metrics; the
+            // hoisted path has to re-apply it because the paint is shared across draws.
+            textPaint.textSize = activeGeom.fontSizePx
+            textPaint.letterSpacing = activeGeom.letterSpacingEm
 
             if (activeGrid.isEmpty()) {
                 textPaint.color = Color.parseColor("#888888")
+                textPaint.letterSpacing = 0f
                 textPaint.textSize = 34f
-                nativeCanvas.drawText("cmux Pocket Ready", 40f, 100f, textPaint)
+                nativeCanvas.drawText(readyLabel, 40f, 100f, textPaint)
                 textPaint.textSize = 26f
-                nativeCanvas.drawText("Connecting to session...", 40f, 150f, textPaint)
+                nativeCanvas.drawText(connectingLabel, 40f, 150f, textPaint)
                 return@Canvas
             }
 
@@ -456,39 +677,20 @@ fun TerminalCanvas(
             nativeCanvas.clipRect(0f, 0f, canvasWidth, canvasHeight)
             nativeCanvas.translate(activeGeom.originX, activeGeom.originY)
 
-            // Step 1: Draw Background Cells
-            for (r in 0 until minOf(activeRows, activeGrid.size)) {
-                val rowCells = activeGrid[r]
-                val y = r * activeGeom.rowHeight
+            val recordingWidth = canvasWidth.toInt().coerceAtLeast(1)
 
-                var c = 0
-                while (c < rowCells.size) {
-                    val cell = rowCells[c]
-                    if (cell.width == 0) {
-                        c++
-                        continue
-                    }
-
-                    val cellWidthPx = activeGeom.cellWidth * cell.width
-                    val x = c * activeGeom.cellWidth
-
-                    val cellBg = try {
-                        Color.parseColor(cell.background)
-                    } catch (_: Exception) {
-                        activeDefaultBgColor
-                    }
-
-                    if (cellBg != defaultBgColor) {
-                        bgPaint.color = cellBg
-                        nativeCanvas.drawRect(x, y, x + cellWidthPx, y + activeGeom.rowHeight, bgPaint)
-                    }
-
-                    c++
-                }
-            }
-
-            // Step 2: Draw Selection Highlights (before text)
             if (currentSelection != null) {
+                // Interactive selection: bypass cache so highlights render immediately
+                rowCache.invalidateAll()
+                for (r in 0 until minOf(activeRows, activeGrid.size)) {
+                    val rowCells = activeGrid[r]
+                    val y = r * activeGeom.rowHeight
+                    renderRowBackgrounds(
+                        nativeCanvas, rowCells, y, activeGeom.rowHeight, activeGeom.cellWidth,
+                        colorCache, activeDefaultBgColor, defaultBgColor, bgPaint
+                    )
+                }
+
                 for (r in 0 until activeRows) {
                     val range = selectedColumnRange(currentSelection, r)
                     if (range != null) {
@@ -498,39 +700,79 @@ fun TerminalCanvas(
                         nativeCanvas.drawRect(startX, y, endX, y + activeGeom.rowHeight, selHighlightPaint)
                     }
                 }
-            }
 
-            // Step 3: Draw Glyphs / Text
-            for (r in 0 until minOf(activeRows, activeGrid.size)) {
-                val rowCells = activeGrid[r]
-                val y = r * activeGeom.rowHeight
-                val textBaseline = y + activeGeom.baselineOffset
+                val runBuffer = StringBuilder(activeSourceCols.coerceAtLeast(1))
+                for (r in 0 until minOf(activeRows, activeGrid.size)) {
+                    val rowCells = activeGrid[r]
+                    val y = r * activeGeom.rowHeight
+                    renderRowGlyphs(
+                        nativeCanvas, rowCells, y + activeGeom.baselineOffset, activeGeom.cellWidth,
+                        colorCache, textPaint, runBuffer
+                    )
+                }
+            } else {
+                // Recording a row into a Picture only pays off when a small part of the grid
+                // changed. When everything is dirty (baseline, viewport move, resize) recording and
+                // replaying every row costs more than drawing the viewport once, so the cache is
+                // only engaged for genuinely partial updates.
+                val dirtyRows = screenState.dirtyRows
+                val useRowCache = dirtyRows != null && dirtyRows.size <= (activeRows / 2).coerceAtLeast(1)
+                if (useRowCache) {
+                    rowCache.prepare(
+                        surfaceId = surfaceId,
+                        epoch = screenState.renderEpoch,
+                        rows = activeRows,
+                        cols = activeSourceCols,
+                        cellWidth = activeGeom.cellWidth,
+                        rowHeight = activeGeom.rowHeight,
+                        fontSizePx = activeGeom.fontSizePx,
+                        letterSpacingEm = activeGeom.letterSpacingEm,
+                        originX = activeGeom.originX,
+                        originY = activeGeom.originY,
+                        defaultBg = defaultBgColor,
+                        effectiveOffset = effectiveOffset,
+                        dirtyRows = dirtyRows
+                    )
+                } else {
+                    rowCache.invalidateAll()
+                }
 
-                var c = 0
-                while (c < rowCells.size) {
-                    val cell = rowCells[c]
-                    if (cell.width == 0) {
-                        c++
-                        continue
-                    }
+                val runBuffer = StringBuilder(activeSourceCols.coerceAtLeast(1))
+                for (r in 0 until minOf(activeRows, activeGrid.size)) {
+                    val cached = if (useRowCache) rowCache.get(r) else null
+                    if (cached != null) {
+                        nativeCanvas.drawPicture(cached)
+                    } else {
+                        val rowCells = activeGrid[r]
+                        val y = r * activeGeom.rowHeight
+                        if (!useRowCache) {
+                            renderRowBackgrounds(
+                                nativeCanvas, rowCells, y, activeGeom.rowHeight, activeGeom.cellWidth,
+                                colorCache, activeDefaultBgColor, defaultBgColor, bgPaint
+                            )
+                            renderRowGlyphs(
+                                nativeCanvas, rowCells, y + activeGeom.baselineOffset, activeGeom.cellWidth,
+                                colorCache, textPaint, runBuffer
+                            )
+                        } else {
+                            val picture = Picture()
+                            val recordingHeight = (y + activeGeom.rowHeight).toInt().coerceAtLeast(1)
+                            val pCanvas = picture.beginRecording(recordingWidth, recordingHeight)
 
-                    val x = c * activeGeom.cellWidth
+                            renderRowBackgrounds(
+                                pCanvas, rowCells, y, activeGeom.rowHeight, activeGeom.cellWidth,
+                                colorCache, activeDefaultBgColor, defaultBgColor, bgPaint
+                            )
+                            renderRowGlyphs(
+                                pCanvas, rowCells, y + activeGeom.baselineOffset, activeGeom.cellWidth,
+                                colorCache, textPaint, runBuffer
+                            )
 
-                    if (cell.text.isNotEmpty() && cell.text != " ") {
-                        val cellFg = try {
-                            Color.parseColor(cell.foreground)
-                        } catch (_: Exception) {
-                            Color.parseColor("#D4D4D4")
+                            picture.endRecording()
+                            rowCache.put(r, picture)
+                            nativeCanvas.drawPicture(picture)
                         }
-
-                        textPaint.color = cellFg
-                        textPaint.isFakeBoldText = cell.bold
-                        textPaint.isUnderlineText = cell.underline
-
-                        nativeCanvas.drawText(cell.text, x, textBaseline, textPaint)
                     }
-
-                    c++
                 }
             }
 
@@ -542,7 +784,7 @@ fun TerminalCanvas(
                     val cursorX = cursor.column * activeGeom.cellWidth
                     val cursorY = cursor.row * activeGeom.rowHeight
 
-                    bgPaint.color = Color.parseColor("#4CAF50")
+                    bgPaint.color = cursorBlockColor
                     nativeCanvas.drawRect(cursorX, cursorY, cursorX + (activeGeom.cellWidth * 0.9f), cursorY + activeGeom.rowHeight, bgPaint)
 
                     if (cursor.row < activeGrid.size && cursor.column < activeGrid[cursor.row].size) {
@@ -630,7 +872,7 @@ fun TerminalCanvas(
                         )
                     }
                     .size(48.dp)
-                    .semantics { contentDescription = "Selection start handle" }
+                    .semantics { contentDescription = startHandleLabel }
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragStart = {
@@ -660,7 +902,7 @@ fun TerminalCanvas(
                         )
                     }
                     .size(48.dp)
-                    .semantics { contentDescription = "Selection end handle" }
+                    .semantics { contentDescription = endHandleLabel }
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragStart = {
@@ -679,68 +921,71 @@ fun TerminalCanvas(
                     }
             )
 
-            // Floating Copy Action
-            val startCellTopY = currentGeom.originY + normStart.row * currentGeom.rowHeight
-            val selectionMinX = minOf(startCellLeftX, endCellRightX)
-            val selectionMaxX = maxOf(startCellLeftX, endCellRightX)
+        }
 
-            val toolbarWidthPx = with(density) { 100.dp.toPx() }
-            val toolbarHeightPx = with(density) { 48.dp.toPx() }
-            val marginPx = with(density) { 8.dp.toPx() }
-
-            val preferredAboveY = startCellTopY - toolbarHeightPx - marginPx
-            val preferredBelowY = endCellBottomY + marginPx
-
-            val toolbarY = if (preferredAboveY >= marginPx) {
-                preferredAboveY
-            } else if (preferredBelowY + toolbarHeightPx <= canvasSizePx.height - marginPx) {
-                preferredBelowY
-            } else {
-                preferredAboveY.coerceIn(marginPx, (canvasSizePx.height - toolbarHeightPx - marginPx).coerceAtLeast(marginPx))
+        val bubblePos = contextualBubbleOffset
+        if (bubblePos != null) {
+            val bubbleWidthPx = with(density) { 190.dp.toPx() }
+            val bubbleHeightPx = with(density) { 180.dp.toPx() }
+            // The breadcrumb pill floats over the top of the canvas; keep the bubble clear of it
+            // so the two never overlap (status bar inset + pill height + margins).
+            val floatingChromePx = WindowInsets.statusBars.getTop(density) + with(density) { 60.dp.toPx() }
+            val lowestTop = (canvasSizePx.height - bubbleHeightPx - 12f).coerceAtLeast(floatingChromePx)
+            val clampedX = (bubblePos.x - bubbleWidthPx / 2f).coerceIn(12f, (canvasSizePx.width - bubbleWidthPx - 12f).coerceAtLeast(12f))
+            val clampedY = (bubblePos.y - bubbleHeightPx - 16f).let { y ->
+                if (y >= floatingChromePx) y
+                else (bubblePos.y + 16f).coerceIn(floatingChromePx, lowestTop)
             }
 
-            val centerX = (selectionMinX + selectionMaxX) / 2f
-            val preferredX = centerX - (toolbarWidthPx / 2f)
-            val toolbarX = preferredX.coerceIn(marginPx, (canvasSizePx.width - toolbarWidthPx - marginPx).coerceAtLeast(marginPx))
-
-            Surface(
-                modifier = Modifier
-                    .offset { IntOffset(toolbarX.roundToInt(), toolbarY.roundToInt()) }
-                    .clip(RoundedCornerShape(24.dp))
-                    .border(1.dp, ComposeColor(0x55FFFFFF), RoundedCornerShape(24.dp))
-                    .clickable {
-                        val text = extractSelectedText(activeSelection)
+            ContextualActionBubble(
+                offset = IntOffset(clampedX.roundToInt(), clampedY.roundToInt()),
+                hasSelection = selectionState != null,
+                onCopy = {
+                    val currentSel = selectionState
+                    val textToCopy = if (currentSel != null) {
+                        extractSelectedText(currentSel)
+                    } else {
+                        currentEffectiveGrid.joinToString("\n") { row ->
+                            row.map { it.text }.joinToString("").trimEnd()
+                        }.trim()
+                    }
+                    if (textToCopy.isNotEmpty()) {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("cmux terminal selection", text)
+                        val clip = ClipData.newPlainText("cmux terminal content", textToCopy)
                         clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                        clearSelection()
-                    },
-                color = ComposeColor(0xEE222226),
-                tonalElevation = 8.dp,
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "Copy",
-                        tint = ComposeColor(0xFF00FF7F),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "Copy",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ComposeColor.White
-                    )
+                        Toast.makeText(context, context.getString(R.string.canvas_copied_selection), Toast.LENGTH_SHORT).show()
+                    }
+                    clearSelection()
+                    contextualBubbleOffset = null
+                },
+                onPaste = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = clipboard.primaryClip
+                    if (clip != null && clip.itemCount > 0) {
+                        val pasteText = clip.getItemAt(0).text?.toString().orEmpty()
+                        if (pasteText.isNotEmpty()) {
+                            onSendKey(pasteText)
+                            Toast.makeText(context, context.getString(R.string.canvas_pasted), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    contextualBubbleOffset = null
+                },
+                onInterrupt = {
+                    onSendKey("\u0003")
+                    Toast.makeText(context, context.getString(R.string.canvas_interrupt_sent), Toast.LENGTH_SHORT).show()
+                    contextualBubbleOffset = null
+                },
+                onClear = {
+                    onClearScreen()
+                    onSendKey("\u000c")
+                    Toast.makeText(context, context.getString(R.string.canvas_cleared), Toast.LENGTH_SHORT).show()
+                    clearSelection()
+                    contextualBubbleOffset = null
+                },
+                onDismiss = {
+                    contextualBubbleOffset = null
                 }
-            }
+            )
         }
 
         Column(
@@ -752,18 +997,10 @@ fun TerminalCanvas(
         ) {
             if (selectionState == null) {
                 VerticalScrollJoystick(
-                    onScrollLines = { deltaLines ->
-                        if (isConfirmedPrimary && screenState.scrollback.isNotEmpty()) {
-                            val maxScroll = screenState.scrollback.size.toFloat()
-                            val curAcc = localScrollAccumulators[surfaceId] ?: 0f
-                            val newAcc = (curAcc + deltaLines.toFloat()).coerceIn(0f, maxScroll)
-                            val newOff = kotlin.math.round(newAcc).toInt().coerceIn(0, screenState.scrollback.size)
-                            localScrollAccumulators[surfaceId] = newAcc
-                            localScrollOffsets[surfaceId] = newOff
-                        } else {
-                            onTerminalScroll(deltaLines)
-                        }
-                    }
+                    onScrollLines = { deltaLines -> applyScrollLines(deltaLines) },
+                    historyFraction = if (scrollbackSize > 0) {
+                        effectiveOffset.toFloat() / scrollbackSize
+                    } else 0f
                 )
             }
         }
@@ -787,7 +1024,10 @@ private fun TerminalTextControls(
 ) {
     val canDecrease = enabled && !preference.fitWidth && preference.fontSizeSp > 2f
     val canIncrease = enabled && !preference.fitWidth && preference.fontSizeSp < 48f
-    Surface(modifier = modifier, color = ComposeColor(0xFF222226)) {
+    val decreaseLabel = stringResource(R.string.canvas_decrease_text_size)
+    val increaseLabel = stringResource(R.string.canvas_increase_text_size)
+    val theme = CmuxTheme.colors
+    Surface(modifier = modifier, color = theme.containerBg) {
         Row(
             modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -800,38 +1040,43 @@ private fun TerminalTextControls(
                     },
                     enabled = canDecrease,
                     modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                        .semantics { contentDescription = "Decrease terminal text size" }
-                ) { Text("A−", color = if (canDecrease) ComposeColor.White else ComposeColor.Gray) }
-                Text("${(renderedFontSizeSp * 10).roundToInt() / 10f} sp", color = ComposeColor(0xFFCCCCCC), fontSize = 12.sp)
+                        .semantics { contentDescription = decreaseLabel }
+                ) { Text("A−", color = if (canDecrease) theme.onContainer else theme.onContainerMuted) }
+                Text(stringResource(R.string.font_size_sp_value, ((renderedFontSizeSp * 10).roundToInt() / 10f).toString()), color = theme.onContainerMuted, fontSize = 12.sp)
                 TextButton(
                     onClick = {
                         onChange(preference.copy(fontSizeSp = (preference.fontSizeSp + 1f).coerceAtMost(48f), panX = 0f, panY = null))
                     },
                     enabled = canIncrease,
                     modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                        .semantics { contentDescription = "Increase terminal text size" }
-                ) { Text("A+", color = if (canIncrease) ComposeColor.White else ComposeColor.Gray) }
+                        .semantics { contentDescription = increaseLabel }
+                ) { Text("A+", color = if (canIncrease) theme.onContainer else theme.onContainerMuted) }
             }
             TextButton(
                 onClick = { onChange(preference.copy(fitWidth = !preference.fitWidth, panX = 0f, panY = null)) },
                 enabled = enabled,
                 modifier = Modifier.heightIn(min = 48.dp)
             ) {
-                Icon(Icons.Default.FitScreen, contentDescription = null, tint = ComposeColor(0xFF00FF7F), modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.FitScreen, contentDescription = null, tint = theme.primary, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(if (preference.fitWidth) "Readable" else "Fit Width", color = ComposeColor.White, fontSize = 12.sp)
+                Text(if (preference.fitWidth) stringResource(R.string.canvas_readable) else stringResource(R.string.canvas_fit_width), color = theme.onContainer, fontSize = 12.sp)
             }
         }
     }
 }
 
+// Lines scrolled per 50 ms tick when the joystick is at full deflection.
+private const val JOYSTICK_LINES_PER_TICK = 4.8
+
 @Composable
 private fun VerticalScrollJoystick(
     onScrollLines: (Double) -> Unit,
+    historyFraction: Float = 0f,
     modifier: Modifier = Modifier
 ) {
     var knobY by remember { mutableFloatStateOf(0f) }
     var held by remember { mutableStateOf(false) }
+    val theme = CmuxTheme.colors
 
     LaunchedEffect(held, knobY) {
         if (!held) return@LaunchedEffect
@@ -839,7 +1084,7 @@ private fun VerticalScrollJoystick(
             if (kotlin.math.abs(knobY) >= 0.08f) {
                 // Joystick-up (knobY < 0) emits positive (older output);
                 // Joystick-down (knobY > 0) emits negative (newer output).
-                onScrollLines(-knobY.toDouble() * 3.0)
+                onScrollLines(-knobY.toDouble() * JOYSTICK_LINES_PER_TICK)
             }
             kotlinx.coroutines.delay(50)
         }
@@ -850,8 +1095,8 @@ private fun VerticalScrollJoystick(
             .width(48.dp)
             .height(148.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(ComposeColor(0xCC1A1A1E))
-            .border(1.dp, ComposeColor(0x33FFFFFF), RoundedCornerShape(24.dp))
+            .background(theme.islandBg)
+            .border(1.dp, theme.islandBorder, RoundedCornerShape(24.dp))
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = { held = true },
@@ -879,14 +1124,136 @@ private fun VerticalScrollJoystick(
                 .width(4.dp)
                 .fillMaxHeight(0.72f)
                 .clip(RoundedCornerShape(2.dp))
-                .background(ComposeColor(0x33FFFFFF))
-        )
+                .background(theme.controlBorder)
+        ) {
+            // The fill mirrors the history offset a drag or the joystick produced, so the control
+            // shows where the viewport sits in the scrollback instead of only reacting to touch.
+            val filled = historyFraction.coerceIn(0f, 1f)
+            if (filled > 0f) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(filled)
+                        .background(theme.primary.copy(alpha = 0.55f))
+                )
+            }
+        }
         Box(
             modifier = Modifier
                 .offset(y = (knobY * 46).dp)
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(if (held) ComposeColor(0xFF64B5F6) else ComposeColor(0xFFE0E0E0))
+                .background(if (held) theme.primary else theme.onSurfaceVariant)
         )
+    }
+}
+
+private fun renderRowBackgrounds(
+    canvas: android.graphics.Canvas,
+    rowCells: List<TerminalCell>,
+    y: Float,
+    rowHeight: Float,
+    cellWidth: Float,
+    colorCache: TerminalColorCache,
+    activeDefaultBgColor: Int,
+    defaultBgColor: Int,
+    bgPaint: Paint
+) {
+    var c = 0
+    while (c < rowCells.size) {
+        val cell = rowCells[c]
+        if (cell.width == 0) {
+            c++
+            continue
+        }
+
+        val cellBg = colorCache.resolve(cell.background, activeDefaultBgColor)
+        if (cellBg == defaultBgColor) {
+            c++
+            continue
+        }
+
+        var span = cell.width
+        var end = c + 1
+        while (end < rowCells.size) {
+            val next = rowCells[end]
+            if (next.width == 0) break
+            if (colorCache.resolve(next.background, activeDefaultBgColor) != cellBg) break
+            span += next.width
+            end++
+        }
+
+        val x = c * cellWidth
+        bgPaint.color = cellBg
+        canvas.drawRect(x, y, x + span * cellWidth, y + rowHeight, bgPaint)
+
+        c = end
+    }
+}
+
+private fun renderRowGlyphs(
+    canvas: android.graphics.Canvas,
+    rowCells: List<TerminalCell>,
+    textBaseline: Float,
+    cellWidth: Float,
+    colorCache: TerminalColorCache,
+    textPaint: Paint,
+    runBuffer: StringBuilder
+) {
+    var c = 0
+    while (c < rowCells.size) {
+        val cell = rowCells[c]
+        if (!isBatchableGlyph(cell)) {
+            if (cell.width != 0 && cell.text.isNotEmpty() && cell.text != " ") {
+                textPaint.color = colorCache.resolve(cell.foreground, DEFAULT_FOREGROUND_COLOR)
+                textPaint.isFakeBoldText = cell.bold
+                textPaint.isUnderlineText = cell.underline
+                canvas.drawText(
+                    cell.text,
+                    c * cellWidth,
+                    textBaseline,
+                    textPaint
+                )
+            }
+            c++
+            continue
+        }
+
+        var end = c + 1
+        var inkEnd = if (cell.text[0] == ' ') c else c + 1
+        while (end < rowCells.size) {
+            val next = rowCells[end]
+            if (!isBatchableGlyph(next) ||
+                next.foreground != cell.foreground ||
+                next.bold != cell.bold ||
+                next.underline != cell.underline
+            ) {
+                break
+            }
+            if (next.text[0] != ' ') inkEnd = end + 1
+            end++
+        }
+
+        val x = c * cellWidth
+        val runLength = inkEnd - c
+        if (runLength <= 0) {
+            c = end
+            continue
+        }
+
+        textPaint.color = colorCache.resolve(cell.foreground, DEFAULT_FOREGROUND_COLOR)
+        textPaint.isFakeBoldText = cell.bold
+        textPaint.isUnderlineText = cell.underline
+
+        if (runLength == 1) {
+            canvas.drawText(cell.text, x, textBaseline, textPaint)
+        } else {
+            runBuffer.setLength(0)
+            for (index in c until inkEnd) runBuffer.append(rowCells[index].text)
+            canvas.drawText(runBuffer.toString(), x, textBaseline, textPaint)
+        }
+
+        c = end
     }
 }

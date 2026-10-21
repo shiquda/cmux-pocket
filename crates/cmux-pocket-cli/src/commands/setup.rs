@@ -4,6 +4,7 @@ use crate::cli::SetupArgs;
 use crate::error::CliError;
 use crate::output::{print_success, token_fingerprint};
 use crate::probe::probe_gateway;
+use crate::tailscale::{TailnetEndpoint, Tailscale};
 use cmux_pocket_cmux::{CmuxBackend, LiveCmuxBackend};
 use cmux_pocket_macos::{
     create_dir_user_only, ensure_token, generate_launchd_plist, get_current_uid,
@@ -33,6 +34,13 @@ pub struct SetupData {
     pub cmux_discovered: bool,
     pub cmux_path: String,
     pub probe_ok: bool,
+    pub gateway_reused: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tailscale: Option<TailnetEndpoint>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub qr_code: Option<String>,
     pub next_steps: String,
 }
 
@@ -88,6 +96,11 @@ pub async fn handle_setup(
         }
     }
 
+    if let Some(ref ep) = args.endpoint {
+        let parsed = cmux_pocket_macos::validate_remote_endpoint(ep)?;
+        config.endpoint = Some(parsed.raw);
+    }
+
     let (discovered_cmux, cmux_found) = discover_cmux_binary(&config);
     if config.cmux_path.is_none() && cmux_found {
         config.cmux_path = Some(discovered_cmux.clone());
@@ -125,8 +138,17 @@ pub async fn handle_setup(
     // 7. Optional service start
     let mut service_started = false;
     let mut probe_ok = false;
+    let mut gateway_reused = false;
 
     if !args.no_start {
+        gateway_reused = probe_gateway(&config.host, config.port, &token, Duration::from_secs(2))
+            .await
+            .is_ok_and(|report| report.is_backend_healthy());
+    }
+
+    if gateway_reused {
+        probe_ok = true;
+    } else if !args.no_start {
         let uid = get_current_uid();
         let target = LaunchdTarget::Gui(uid);
 
@@ -164,15 +186,65 @@ pub async fn handle_setup(
         }
     }
 
-    let endpoint = format!("ws://{}:{}", config.host, config.port);
-    let next_steps = format!(
-        "In Android cmux Pocket, add a connection profile with endpoint '{}' and copy the token from '{}'.",
-        endpoint,
+    let tailscale = if args.tailscale {
+        if !probe_ok {
+            return Err(CliError::DependencyUnavailable(
+                "Gateway workspace handshake failed. Run cmux-pocket gateway probe. If cmux uses 'cmux processes only' socket access, run cmux-pocket service stop, then cmux-pocket gateway run in a dedicated cmux terminal. Keep it running and rerun setup --tailscale in another tab.".to_string(),
+            ));
+        }
+        Some(
+            Tailscale::default()
+                .setup(&config.host, config.port)
+                .await?,
+        )
+    } else {
+        None
+    };
+
+    let (mobile_endpoint, mobile_source) = if let Some(ref ep) = args.endpoint {
+        let parsed = cmux_pocket_macos::validate_remote_endpoint(ep)?;
+        (parsed.raw, "CLI argument (--endpoint)")
+    } else if let Some(ref tailnet) = tailscale {
+        (format!("wss://{}", tailnet.host), "Tailscale Serve")
+    } else if let Some(ref saved) = config.endpoint {
+        (saved.clone(), "saved config.endpoint")
+    } else {
+        (
+            format!("ws://{}:{}", config.host, config.port),
+            "loopback default",
+        )
+    };
+
+    let parsed_mobile = cmux_pocket_macos::parse_and_validate_endpoint(&mobile_endpoint).ok();
+    let uri = parsed_mobile
+        .as_ref()
+        .map(|ep| crate::uri::build_import_uri(ep, &token, None));
+
+    let qr_code = if args.qr {
+        if let Some(ref u) = uri {
+            let invert = !args.no_invert;
+            crate::commands::qr::generate_ansi_qr(u, invert).ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let mut next_steps = format!(
+        "In Android cmux Pocket, add a connection profile with endpoint '{}' and copy the token from '{}'.\n\
+         Or run `cmux-pocket qr` to display a QR code for one-tap import into the Android app.",
+        mobile_endpoint,
         token_path.display()
     );
+    if tailscale.is_some() {
+        next_steps.push_str(" Connect Tailscale on both devices. In Pocket Settings, use Check connection to verify the phone-to-Gateway handshake and workspace access. Tailscale Serve stays configured in the background.");
+    } else {
+        next_steps.push_str(" This loopback endpoint works on the Mac or with USB reverse. For a phone over Tailscale, run cmux-pocket setup --tailscale.");
+    }
 
     let data = SetupData {
-        endpoint: endpoint.clone(),
+        endpoint: mobile_endpoint.clone(),
         config_path: paths.config_file.display().to_string(),
         token_path: token_path.display().to_string(),
         token_fingerprint: fp.clone(),
@@ -181,33 +253,66 @@ pub async fn handle_setup(
         cmux_discovered: cmux_found || cmux_ping_ok,
         cmux_path: discovered_cmux.display().to_string(),
         probe_ok,
+        gateway_reused,
+        tailscale,
+        uri: uri.clone(),
+        qr_code: qr_code.clone(),
         next_steps: next_steps.clone(),
     };
 
-    let prose = format!(
+    let mut prose = String::new();
+    if let Some(ref qr) = qr_code {
+        prose.push_str(qr);
+        prose.push_str("\n\n");
+    }
+    prose.push_str(&format!(
         "cmux-pocket Setup Complete\n\
          ==========================\n\
-         Endpoint:          {}\n\
+         Endpoint:          {} ({})\n\
          Config Path:       {}\n\
          Token Path:        {}\n\
          Token Fingerprint: {}\n\
          Launchd Service:   {}\n\
          cmux Discovered:   {} ({})\n\
-         Gateway Probe:     {}\n\n\
-         Next Steps:\n\
-         {}\n\
-         (Note: Raw secret token is stored securely in '{}' and is never printed in logs or terminal)",
-        endpoint,
+         Gateway Probe:     {}\n",
+        mobile_endpoint,
+        mobile_source,
         paths.config_file.display(),
         token_path.display(),
         fp,
-        if service_started { "Started & Enabled" } else if args.no_start { "Configured (no-start flag)" } else { "Created" },
-        if cmux_ping_ok { "Ready (ping ok)" } else if cmux_found { "Found" } else { "Not running" },
+        if gateway_reused {
+            "Existing Gateway reused"
+        } else if service_started {
+            "Started & Enabled"
+        } else if args.no_start {
+            "Configured (no-start flag)"
+        } else {
+            "Created"
+        },
+        if cmux_ping_ok {
+            "Ready (ping ok)"
+        } else if cmux_found {
+            "Found"
+        } else {
+            "Not running"
+        },
         discovered_cmux.display(),
-        if probe_ok { "OK (workspace access verified)" } else if args.no_start { "Skipped (--no-start)" } else { "Unavailable (run cmux-pocket gateway probe)" },
+        if probe_ok {
+            "OK (workspace access verified)"
+        } else if args.no_start {
+            "Skipped (--no-start)"
+        } else {
+            "Unavailable (run cmux-pocket gateway probe)"
+        },
+    ));
+    if let Some(ref u) = uri {
+        prose.push_str(&format!("Import Link:       {}\n", u));
+    }
+    prose.push_str(&format!(
+        "\nNext Steps:\n{}\n\n(Note: Raw secret token is stored securely in '{}' and is never printed in logs or terminal)",
         next_steps,
         token_path.display()
-    );
+    ));
 
     print_success(&data, &prose, json_mode);
     Ok(())

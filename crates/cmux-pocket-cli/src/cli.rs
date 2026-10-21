@@ -53,6 +53,10 @@ pub enum Commands {
 
     /// Gateway runtime and health probe
     Gateway(GatewayArgs),
+
+    /// Display connection QR code and import link for Android cmux-pocket
+    #[command(alias = "qrcode")]
+    Qr(QrArgs),
 }
 
 /// Arguments for `cmux-pocket setup`.
@@ -65,11 +69,55 @@ pub struct SetupArgs {
     /// Do not start or bootstrap the launchd service after configuration
     #[arg(long)]
     pub no_start: bool,
+
+    /// Configure private Tailscale HTTPS forwarding after verifying Gateway workspace access
+    #[arg(long, conflicts_with = "no_start")]
+    pub tailscale: bool,
+
+    /// Display connection QR code and import link after setup completes
+    #[arg(long)]
+    pub qr: bool,
+
+    /// Explicit Gateway phone endpoint URL (e.g. wss://example.ts.net) to use
+    #[arg(long, value_name = "URL")]
+    pub endpoint: Option<String>,
+
+    /// Do not invert QR code colors (useful if running in a light-themed terminal)
+    #[arg(long)]
+    pub no_invert: bool,
+
+    /// Explicitly invert QR code colors (enabled by default for dark terminals)
+    #[arg(long)]
+    pub invert: bool,
 }
 
 /// Arguments for `cmux-pocket status`.
 #[derive(Args, Debug, Clone, PartialEq, Eq, Default)]
 pub struct StatusArgs {}
+
+/// Arguments for `cmux-pocket qr`.
+#[derive(Args, Debug, Clone, PartialEq, Eq, Default)]
+pub struct QrArgs {
+    /// Explicit Gateway endpoint URL to encode (overrides saved config and Tailscale discovery)
+    #[arg(long, value_name = "URL")]
+    pub endpoint: Option<String>,
+
+    /// Print only the raw cmux-pocket:// import URL without the terminal QR block
+    #[arg(long)]
+    pub url_only: bool,
+
+    /// Custom display name for the imported connection profile
+    #[arg(long, value_name = "NAME")]
+    pub name: Option<String>,
+
+    /// Do not invert QR code colors (useful if running in a light-themed terminal)
+    #[arg(long)]
+    pub no_invert: bool,
+
+    /// Explicitly invert QR code colors (enabled by default for dark terminals)
+    #[arg(long)]
+    pub invert: bool,
+}
 
 /// Arguments for `cmux-pocket doctor`.
 #[derive(Args, Debug, Clone, PartialEq, Eq, Default)]

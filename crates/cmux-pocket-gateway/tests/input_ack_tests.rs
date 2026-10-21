@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use cmux_pocket_cmux::error::CmuxError;
 use cmux_pocket_cmux::events::CmuxEventStream;
-use cmux_pocket_cmux::{CmuxBackend, MockCmuxBackend, TerminalInputKind, TerminalInputOptions};
+use cmux_pocket_cmux::{CmuxBackend, MockCmuxBackend, TerminalInputKind};
 use cmux_pocket_gateway::CmuxGateway;
 use cmux_pocket_protocol::{BackendHealth, RenderGridFrame, SurfaceInfo, WorkspaceInfo};
 use futures_util::{SinkExt, StreamExt};
@@ -106,7 +106,7 @@ async fn test_ack_precedes_refresh() {
 struct FailingInputBackend {
     inner: MockCmuxBackend,
     fail_input: AtomicBool,
-    last_input_options: Mutex<Option<TerminalInputOptions>>,
+    last_input_kind: Mutex<Option<TerminalInputKind>>,
 }
 
 impl FailingInputBackend {
@@ -114,7 +114,7 @@ impl FailingInputBackend {
         Self {
             inner: MockCmuxBackend::default(),
             fail_input: AtomicBool::new(true),
-            last_input_options: Mutex::new(None),
+            last_input_kind: Mutex::new(None),
         }
     }
 }
@@ -154,13 +154,13 @@ impl CmuxBackend for FailingInputBackend {
             Ok(())
         }
     }
-    async fn send_input_with_options(
+    async fn send_input_with_kind(
         &self,
         surf_id: &str,
         text: &str,
-        options: TerminalInputOptions,
+        kind: TerminalInputKind,
     ) -> Result<(), CmuxError> {
-        *self.last_input_options.lock().unwrap() = Some(options);
+        *self.last_input_kind.lock().unwrap() = Some(kind);
         self.send_input(surf_id, text).await
     }
     async fn handle_scroll(
@@ -204,8 +204,6 @@ async fn test_host_write_failure_returns_error_no_ack() {
             "surface_id": "surf-main-1",
             "text": "doomed input",
             "input_kind": "key",
-            "remote_takeover": true,
-            "paste": true,
         }
     });
     ws.send(Message::Text(input_req.to_string())).await.unwrap();
@@ -220,13 +218,8 @@ async fn test_host_write_failure_returns_error_no_ack() {
         .unwrap()
         .contains("Input failed"));
     assert_eq!(
-        *backend.last_input_options.lock().unwrap(),
-        Some(TerminalInputOptions {
-            kind: TerminalInputKind::Key,
-            force: true,
-            // Paste is ignored for an intentional key request.
-            paste: false,
-        })
+        *backend.last_input_kind.lock().unwrap(),
+        Some(TerminalInputKind::Key)
     );
 
     gw.stop().await;

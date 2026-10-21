@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simplified Chinese dictionary. Key set must mirror values/strings.xml exactly. -->
+<resources>
+
+    <string name="app_name">cmux Pocket</string>
+
+    <!-- Main shell -->
+    <string name="main_connection_error">连接错误：请检查 IP 或启动 Gateway</string>
+    <string name="main_invalid_config_link">无效的 cmux-pocket 配置链接</string>
+    <string name="main_workspace_fallback">当前工作区</string>
+    <string name="main_close_tab_title">关闭标签页？</string>
+    <string name="main_close_tab_running">%1$s 仍有进程在运行，确定关闭吗？</string>
+    <string name="main_close_tab_still_running">%1$s 仍在运行，确定关闭吗？</string>
+    <string name="main_close_active_tab_title">关闭当前活跃标签页？</string>
+    <string name="main_close_active_tab_desc">「%1$s」为当前活跃标签页，确定关闭吗？</string>
+    <string name="main_close_active_workspace_title">删除当前活跃工作区？</string>
+    <string name="main_close_active_workspace_desc">工作区「%1$s」当前处于活跃状态，删除将同时关闭其中的 %2$d 个标签页。确定删除吗？</string>
+    <string name="main_delete">删除</string>
+    <string name="main_close">关闭</string>
+    <string name="main_cancel">取消</string>
+
+    <!-- Floating island pill -->
+    <string name="island_connecting">正在连接…</string>
+    <string name="island_disconnected">已断开</string>
+
+    <!-- Accessory keyboard bar -->
+    <string name="kb_open_panel">打开键盘面板</string>
+    <string name="kb_settings">设置</string>
+
+    <!-- Contextual action bubble -->
+    <string name="bubble_copy_selection">复制选中内容</string>
+    <string name="bubble_copy_screen">复制屏幕内容</string>
+    <string name="bubble_paste">粘贴至光标处</string>
+    <string name="bubble_interrupt">发送中断 (Ctrl+C)</string>
+    <string name="bubble_clear">清空屏幕 (Clear)</string>
+
+    <!-- Terminal canvas -->
+    <string name="canvas_ready">cmux Pocket 已就绪</string>
+    <string name="canvas_connecting">正在连接会话…</string>
+    <string name="canvas_selection_start_handle">选区起点手柄</string>
+    <string name="canvas_selection_end_handle">选区终点手柄</string>
+    <string name="canvas_copied_selection">已复制选中终端内容</string>
+    <string name="canvas_pasted">已粘贴剪贴板内容</string>
+    <string name="canvas_interrupt_sent">已发送中断 (Ctrl+C)</string>
+    <string name="canvas_cleared">终端画布已清屏</string>
+    <string name="canvas_decrease_text_size">减小终端字号</string>
+    <string name="canvas_increase_text_size">增大终端字号</string>
+    <string name="canvas_fit_width">适应宽度</string>
+    <string name="canvas_readable">可读模式</string>
+
+    <!-- Terminal stage -->
+    <string name="stage_no_tabs">暂无活跃终端标签</string>
+    <string name="stage_no_tabs_hint">新建一个标签页即可开始执行命令</string>
+    <string name="stage_add_tab">新建终端标签</string>
+    <string name="stage_syncing">正在与 cmux 主机同步…</string>
+
+    <!-- Notifications and foreground service -->
+    <string name="notif_channel_name">Agent 完成提醒</string>
+    <string name="notif_channel_desc">来自 cmux 的 Agent 完成提醒</string>
+    <string name="notif_agent_fallback">Agent</string>
+    <string name="notif_task_complete">%1$s 任务已完成</string>
+    <string name="notif_tap_to_open">点击打开 cmux Pocket 中已完成的标签页。</string>
+    <string name="completion_banner_done">已完成</string>
+    <string name="completion_banner_more">+%1$d</string>
+    <string name="completion_banner_open">打开刚刚完成的会话</string>
+    <string name="keepalive_channel_name">连接状态</string>
+    <string name="keepalive_channel_desc">在后台保持 cmux Pocket Gateway 连接活跃。</string>
+    <string name="keepalive_title">cmux Pocket 已连接</string>
+    <string name="keepalive_text">应用在后台时仍保持 Gateway 连接。</string>
+
+    <!-- Settings page shell -->
+    <string name="settings_title">设置</string>
+    <string name="settings_back">返回</string>
+    <string name="settings_close">关闭设置</string>
+    <string name="settings_group_appearance">外观</string>
+    <string name="settings_group_support">支持</string>
+    <string name="settings_group_data">数据</string>
+    <string name="settings_row_profiles">%1$d 个配置</string>
+    <string name="settings_row_diagnostics_on">已开启</string>
+    <string name="settings_row_diagnostics_off">已关闭</string>
+    <string name="settings_section_connection">连接</string>
+    <string name="settings_section_display">显示</string>
+    <string name="settings_section_language">语言</string>
+    <string name="settings_section_updates">更新</string>
+    <string name="settings_section_opensource">开源</string>
+    <string name="settings_section_diagnostics">诊断</string>
+    <string name="settings_section_storage">存储</string>
+    <string name="settings_section_notifications">通知</string>
+
+    <!-- Settings · Notifications -->
+    <string name="settings_notif_vibrate">当前会话完成时震动</string>
+    <string name="settings_notif_vibrate_desc">仅在 cmux Pocket 前台时生效。其他会话完成时改为在顶部弹出提示胶囊。</string>
+    <string name="settings_notif_on">已开启</string>
+    <string name="settings_notif_off">已关闭</string>
+
+    <!-- Settings · General -->
+    <string name="settings_theme_mode_title">应用主题模式</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_brand_badge">开源</string>
+    <string name="settings_brand_tagline">cmux 伴侣 • 多 Surface 终端客户端 • v%1$s</string>
+    <string name="settings_footer_version">cmux Pocket • v%1$s</string>
+    <string name="settings_footer_license">AGPL-3.0 • 不提供担保 • 源码与许可</string>
+
+    <!-- Settings · Language -->
+    <string name="settings_language_title">应用语言</string>
+    <string name="settings_language_desc">整个界面所使用的语言。</string>
+    <string name="settings_language_system">跟随系统</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_chinese">简体中文</string>
+
+    <!-- Settings · Connection -->
+    <string name="settings_profiles_title">连接配置</string>
+    <string name="settings_profile_delete">删除 %1$s</string>
+    <string name="settings_add_host">添加主机</string>
+    <string name="settings_scan_qr">扫描二维码</string>
+    <string name="settings_scan_qr_desc">扫描二维码</string>
+    <string name="settings_host_or_url">主机或 URL</string>
+    <string name="settings_host_placeholder">IP 或 https://tunnel.example.com</string>
+    <string name="settings_host_placeholder_short">host.example 或 https://tunnel.example</string>
+    <string name="settings_port">端口</string>
+    <string name="settings_auth_token">认证 Token</string>
+    <string name="settings_toggle_token">切换 Token 可见性</string>
+    <string name="settings_scan_none_found">当前网络未发现可用主机</string>
+    <string name="settings_scan_found">发现 %1$s</string>
+    <string name="settings_scan_host_one">1 个主机</string>
+    <string name="settings_scan_host_many">%1$d 个主机</string>
+    <string name="settings_scanning">扫描中…</string>
+    <string name="settings_scan_wifi">扫描 Wi-Fi</string>
+    <string name="settings_reconnect">重新连接</string>
+    <string name="settings_latency">%1$s • %2$d ms</string>
+    <string name="settings_use">使用</string>
+    <string name="settings_name">名称</string>
+    <string name="settings_save">保存</string>
+    <string name="settings_cancel">取消</string>
+
+    <!-- Settings · Display -->
+    <string name="settings_font_size_title">字号 · 当前终端</string>
+    <string name="font_size_sp_value">%1$s sp</string>
+    <string name="settings_font_builtin">Maple Mono NF（内置）</string>
+    <string name="settings_font_builtin_desc">Nerd Font v3 图标 + 中日韩等宽</string>
+    <string name="settings_terminal_palette">终端画布配色</string>
+    <string name="settings_theme_option_dark">默认深色</string>
+    <string name="settings_theme_option_oled">OLED 纯黑</string>
+    <string name="settings_theme_option_tokyo">Tokyo Night</string>
+    <string name="settings_theme_option_dracula">Dracula 深色</string>
+
+    <!-- Settings · Updates -->
+    <string name="settings_check_update">检查官网更新</string>
+    <string name="settings_current_version">当前版本 v%1$s</string>
+    <string name="settings_up_to_date">当前已是最新版本 (v%1$s)</string>
+    <string name="settings_update_failed">检查更新失败：%1$s</string>
+    <string name="settings_update_available_badge">有新版</string>
+    <string name="settings_check">检查</string>
+    <string name="settings_update_dialog_title">发现新版本 %1$s</string>
+    <string name="settings_update_dialog_body">当前版本 v%1$s，官方最新发布已就绪。点击前往下载 APK。</string>
+    <string name="settings_update_download">前往下载 APK</string>
+    <string name="settings_update_later">稍后</string>
+
+    <!-- Settings · Open source -->
+    <string name="settings_repo">GitHub 源码仓库</string>
+    <string name="settings_repo_value">shiquda/cmux-pocket</string>
+    <string name="settings_star">★ Star</string>
+    <string name="settings_feedback">问题反馈与功能提议</string>
+    <string name="settings_feedback_desc">提交 GitHub Issue 报告</string>
+    <string name="settings_licenses">开源协议与依赖声明</string>
+    <string name="settings_licenses_desc">GNU AGPL-3.0 及三方库许可</string>
+
+    <!-- Settings · Diagnostics -->
+    <string name="settings_diag_toggle">实时网关连接诊断日志</string>
+    <string name="settings_diag_enabled_desc">查看 WebSocket &amp; RPC 诊断帧</string>
+    <string name="settings_diag_disabled_desc">未开启日志记录（点击查看）</string>
+    <string name="settings_diag_export">一键导出故障诊断包</string>
+    <string name="settings_diag_export_desc">脱敏配置与近 500 行网络诊断 (JSON)</string>
+    <string name="settings_diag_copied">已复制脱敏诊断包至剪贴板</string>
+
+    <!-- Settings · Storage -->
+    <string name="settings_export_profiles">导出 Host 配置与预设</string>
+    <string name="settings_export_profiles_desc">选择复制到剪贴板的 JSON 是否携带访问密钥（共 %1$d 个 Profiles）</string>
+    <string name="settings_export_dialog_title">导出 Host 配置</string>
+    <string name="settings_export_dialog_body">将以 JSON 复制 %1$d 个配置到剪贴板。只有选择“携带密钥”时才会包含 Gateway 访问密钥；不携带时可在导入后补齐。</string>
+    <string name="settings_export_without_credentials">不携带密钥复制</string>
+    <string name="settings_export_with_credentials">携带密钥复制</string>
+    <string name="settings_export_dialog_cancel">取消</string>
+    <string name="settings_exported_with_credentials_toast">已将 %1$d 个 Host Profiles（含访问密钥）复制到剪贴板</string>
+    <string name="settings_import_profiles">导入配置（从剪贴板）</string>
+    <string name="settings_import_profiles_desc">从剪贴板读取 JSON 并合并入现有配置</string>
+    <string name="settings_clear_scrollback">清空终端历史回滚缓冲区</string>
+    <string name="settings_clear_scrollback_desc">重置 Scrollback 缓冲区并释放显存</string>
+    <string name="settings_exported_toast">已导出 %1$d 个 Host Profiles 到剪贴板</string>
+    <string name="settings_imported_toast">成功导入并合并 %1$d 个 Host Profiles</string>
+    <string name="settings_import_empty_toast">剪贴板中无有效的 Host Profiles JSON</string>
+    <string name="settings_scrollback_cleared_toast">已清空终端回滚历史缓冲区并释放显存</string>
+    <string name="settings_json_label">JSON</string>
+
+    <!-- Remote wake of the cmux desktop app -->
+    <string name="stage_cmux_stopped_title">Mac 在线 · cmux 未启动</string>
+    <string name="stage_cmux_stopped_body">网关连接正常，但 Mac 上的 cmux.app 尚未运行。无需离开此页面即可远程唤醒。</string>
+    <string name="stage_wake_cmux">唤醒 Mac 上的 cmux</string>
+    <string name="stage_wake_retry">重新唤醒</string>
+    <string name="stage_waking_cmux">正在拉起 cmux…</string>
+    <string name="stage_waiting_cmux">正在加载工作区…</string>
+    <string name="stage_wake_timeout">15 秒内未收到 cmux 响应。请确认 Mac 处于唤醒状态后重试。</string>
+    <string name="stage_wake_background_hint">将在后台启动，不会抢占 Mac 当前前台窗口。</string>
+    <string name="stage_wake_unavailable">当前网关版本不支持远程唤醒，请在 设置 → 连接 中升级 Mac 网关。</string>
+
+</resources>

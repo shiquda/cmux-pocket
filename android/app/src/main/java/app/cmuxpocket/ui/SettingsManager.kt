@@ -13,8 +13,8 @@ class SettingsManager(context: Context) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     init {
         migrateLegacyPreferences(context.applicationContext, prefs)
+        app.cmuxpocket.diagnostics.DiagnosticsManager.isEnabled = isDiagnosticsEnabled
     }
-
 
     var host: String
         get() = prefs.getString(KEY_HOST, "127.0.0.1")?.ifBlank { "127.0.0.1" } ?: "127.0.0.1"
@@ -42,6 +42,55 @@ class SettingsManager(context: Context) {
     var terminalBgTheme: String
         get() = prefs.getString(KEY_TERMINAL_BG, "#1E1E1E") ?: "#1E1E1E"
         set(value) = prefs.edit().putString(KEY_TERMINAL_BG, value).apply()
+
+    /** Haptic pulse when the session on screen finishes. On by default. */
+    var vibrateOnSessionComplete: Boolean
+        get() = prefs.getBoolean(KEY_VIBRATE_ON_SESSION_COMPLETE, true)
+        set(value) = prefs.edit().putBoolean(KEY_VIBRATE_ON_SESSION_COMPLETE, value).apply()
+
+    var isDiagnosticsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DIAGNOSTICS_ENABLED, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_DIAGNOSTICS_ENABLED, value).apply()
+            app.cmuxpocket.diagnostics.DiagnosticsManager.isEnabled = value
+        }
+
+    /**
+     * Dictionary used for every user-facing string. Defaults to [AppLanguage.SYSTEM], so a fresh
+     * install follows the device locale and picks the closest shipped dictionary.
+     */
+    var appLanguage: AppLanguage
+        get() = AppLanguage.fromTag(prefs.getString(KEY_APP_LANGUAGE, null))
+        set(value) {
+            prefs.edit().putString(KEY_APP_LANGUAGE, value.tag).apply()
+            AppLanguageStore.current = value
+        }
+
+    fun exportProfilesJson(includeCredentials: Boolean): String =
+        encodeProfilesBackup(profiles, includeCredentials)
+
+    fun importProfilesJson(jsonString: String): Int {
+        val parsedJson = Json { ignoreUnknownKeys = true }
+        val importedList = try {
+            parsedJson.decodeFromString<List<ConnectionProfile>>(jsonString)
+        } catch (_: Exception) {
+            try {
+                listOf(parsedJson.decodeFromString<ConnectionProfile>(jsonString))
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+        if (importedList.isEmpty()) return 0
+        val mergedList = mergeImportedProfiles(importedList, profiles)
+        var count = 0
+        mergedList.forEach { profile ->
+            if (profile.host.isNotBlank()) {
+                upsertProfile(profile)
+                count++
+            }
+        }
+        return count
+    }
 
     fun terminalDisplay(host: String, port: Int, surfaceId: String, defaultFontSizeSp: Float): TerminalDisplayPreference =
         decodeTerminalDisplay(
@@ -149,6 +198,9 @@ class SettingsManager(context: Context) {
         private const val KEY_TERMINAL_DISPLAY_PREFIX = "terminal_display:"
         private const val KEY_PROFILES = "connection_profiles"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
+        private const val KEY_DIAGNOSTICS_ENABLED = "diagnostics_enabled"
+        private const val KEY_VIBRATE_ON_SESSION_COMPLETE = "vibrate_on_session_complete"
+        private const val KEY_APP_LANGUAGE = "app_language"
     }
 
         private fun createEncryptedPreferences(context: Context): SharedPreferences {

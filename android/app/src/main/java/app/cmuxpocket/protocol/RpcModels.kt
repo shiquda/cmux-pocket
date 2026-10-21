@@ -45,6 +45,30 @@ data class JsonRpcError(
 )
 
 @Serializable
+data class CmuxAppStatus(
+    @SerialName("installed") val installed: Boolean = false,
+    @SerialName("running") val running: Boolean = false,
+    @SerialName("can_wake") val canWake: Boolean = false
+)
+
+@Serializable
+data class HostStatusResponse(
+    @SerialName("mac_display_name") val macDisplayName: String = "",
+    @SerialName("mac_app_version") val macAppVersion: String? = null,
+    @SerialName("gateway_version") val gatewayVersion: String? = null,
+    @SerialName("protocol_version") val protocolVersion: String? = null,
+    @SerialName("capabilities") val capabilities: List<String> = emptyList(),
+    @SerialName("cmux_status") val cmuxStatus: CmuxAppStatus? = null
+)
+
+@Serializable
+data class WakeCmuxResponse(
+    @SerialName("success") val success: Boolean = false,
+    @SerialName("status") val status: String? = null,
+    @SerialName("message") val message: String? = null
+)
+
+@Serializable
 data class WorkspaceListResponse(
     @SerialName("workspaces") val workspaces: List<WorkspaceInfo> = emptyList()
 )
@@ -114,5 +138,26 @@ data class SurfaceCreateResponse(
 data class SurfaceCloseResponse(
     @SerialName("status") val status: String? = "ok",
     @SerialName("surface_id") val surfaceId: String? = null,
+    @SerialName("mutation_id") val mutationId: String? = null
+)
+
+@Serializable
+data class WorkspaceRenameResponse(
+    @SerialName("workspace") val workspace: WorkspaceInfo? = null,
+    @SerialName("status") val status: String? = "ok",
+    @SerialName("mutation_id") val mutationId: String? = null
+)
+
+@Serializable
+data class WorkspaceCloseResponse(
+    @SerialName("status") val status: String? = "ok",
+    @SerialName("workspace_key") val workspaceKey: String? = null,
+    @SerialName("mutation_id") val mutationId: String? = null
+)
+
+@Serializable
+data class SurfaceRenameResponse(
+    @SerialName("surface") val surface: SurfaceInfo? = null,
+    @SerialName("status") val status: String? = "ok",
     @SerialName("mutation_id") val mutationId: String? = null
 )

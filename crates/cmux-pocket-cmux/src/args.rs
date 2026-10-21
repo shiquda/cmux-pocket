@@ -5,7 +5,7 @@
 
 use serde_json::json;
 
-use crate::backend::{TerminalInputKind, TerminalInputOptions};
+use crate::backend::{CmuxCapabilities, TerminalInputKind};
 
 /// Constructs arguments for `cmux ping`.
 pub fn ping_args() -> Vec<String> {
@@ -21,12 +21,45 @@ pub fn tree_args() -> Vec<String> {
     ]
 }
 
-/// Constructs arguments for `cmux new-workspace --name <name>`.
+/// Constructs arguments for `cmux new-workspace [--name <name>]`.
 pub fn new_workspace_args(name: &str) -> Vec<String> {
+    if name.is_empty() {
+        vec!["new-workspace".to_string()]
+    } else {
+        vec![
+            "new-workspace".to_string(),
+            "--name".to_string(),
+            name.to_string(),
+        ]
+    }
+}
+
+/// Constructs arguments for `cmux rename-workspace --workspace <workspace_key> <title>`.
+pub fn rename_workspace_args(workspace_key: &str, title: &str) -> Vec<String> {
     vec![
-        "new-workspace".to_string(),
-        "--name".to_string(),
-        name.to_string(),
+        "rename-workspace".to_string(),
+        "--workspace".to_string(),
+        workspace_key.to_string(),
+        title.to_string(),
+    ]
+}
+
+/// Constructs arguments for `cmux close-workspace --workspace <workspace_key>`.
+pub fn close_workspace_args(workspace_key: &str) -> Vec<String> {
+    vec![
+        "close-workspace".to_string(),
+        "--workspace".to_string(),
+        workspace_key.to_string(),
+    ]
+}
+
+/// Constructs arguments for `cmux rename-tab --surface <surface_id> <title>`.
+pub fn rename_surface_args(surface_id: &str, title: &str) -> Vec<String> {
+    vec![
+        "rename-tab".to_string(),
+        "--surface".to_string(),
+        surface_id.to_string(),
+        title.to_string(),
     ]
 }
 
@@ -68,8 +101,16 @@ pub fn close_surface_args(surface_id: &str, workspace_key: Option<&str>) -> Vec<
 
 /// Maps an intentional control key to `send-key`; all other input is literal
 /// text passed after `--` so it can never be parsed as a cmux option.
-pub fn send_input_args(surface_id: &str, text: &str, options: TerminalInputOptions) -> Vec<String> {
-    let key_name = match options.kind {
+///
+/// `--force` and `--paste` are only emitted when the installed cmux advertises
+/// them: older builds treat unknown flags as input text.
+pub fn send_input_args(
+    surface_id: &str,
+    text: &str,
+    kind: TerminalInputKind,
+    capabilities: CmuxCapabilities,
+) -> Vec<String> {
+    let key_name = match kind {
         TerminalInputKind::Text => None,
         TerminalInputKind::Key => match text {
             "\u{001b}" => Some("escape"),
@@ -92,7 +133,7 @@ pub fn send_input_args(surface_id: &str, text: &str, options: TerminalInputOptio
             "--surface".to_string(),
             surface_id.to_string(),
         ];
-        if options.force {
+        if capabilities.force {
             args.push("--force".to_string());
         }
         args.push(key.to_string());
@@ -104,10 +145,10 @@ pub fn send_input_args(surface_id: &str, text: &str, options: TerminalInputOptio
         "--surface".to_string(),
         surface_id.to_string(),
     ];
-    if options.force {
+    if capabilities.force {
         args.push("--force".to_string());
     }
-    if options.paste && text.chars().count() > 1 {
+    if capabilities.paste && text.chars().count() > 1 {
         args.push("--paste".to_string());
     }
     args.push("--".to_string());

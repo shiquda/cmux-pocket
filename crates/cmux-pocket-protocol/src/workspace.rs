@@ -183,6 +183,44 @@ impl WorkspaceTreeEvent {
             extra: Map::new(),
         }
     }
+
+    pub fn workspace_renamed(workspace: WorkspaceInfo, mutation_id: Option<String>) -> Self {
+        Self {
+            action: "workspace_renamed".to_string(),
+            workspace: Some(workspace),
+            surface: None,
+            surface_id: None,
+            workspaces: None,
+            mutation_id,
+            extra: Map::new(),
+        }
+    }
+
+    pub fn workspace_closed(workspace_key: impl Into<String>, mutation_id: Option<String>) -> Self {
+        let mut extra = Map::new();
+        extra.insert("workspace_key".to_string(), Value::String(workspace_key.into()));
+        Self {
+            action: "workspace_closed".to_string(),
+            workspace: None,
+            surface: None,
+            surface_id: None,
+            workspaces: None,
+            mutation_id,
+            extra,
+        }
+    }
+
+    pub fn surface_renamed(surface: SurfaceInfo, mutation_id: Option<String>) -> Self {
+        Self {
+            action: "surface_renamed".to_string(),
+            workspace: None,
+            surface: Some(surface),
+            surface_id: None,
+            workspaces: None,
+            mutation_id,
+            extra: Map::new(),
+        }
+    }
 }
 
 /// Computes a deterministic JSON signature for a workspace tree to detect changes.

@@ -1,9 +1,11 @@
 package app.cmuxpocket
 
 import app.cmuxpocket.protocol.SurfaceInfo
+import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.transport.ConnectionStatus
 import app.cmuxpocket.ui.*
 import android.content.res.Configuration
+import android.content.Context
 import android.os.Bundle
 import android.Manifest
 import android.content.Intent
@@ -13,6 +15,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
@@ -24,10 +28,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
@@ -36,6 +43,14 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
+
+    /**
+     * Applies the in-app dictionary choice to every resource lookup in this activity. The stored
+     * choice is read once in [CmuxPocketApp] so this never touches the keystore on the startup path.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withAppLanguage(AppLanguageStore.current))
+    }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,11 +64,24 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.CREATED) {
                 viewModel.agentSessionCompletions.collect { completion ->
-                    AgentCompletionNotifications.show(this@MainActivity, completion)
+                    // The foreground UI answers completions with a haptic pulse or an in-app
+                    // capsule; a system notification on top of that would double the alert.
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@collect
+                    AgentCompletionNotifications.show(
+                        this@MainActivity,
+                        completion,
+                        sessionNotificationLabel(completion, viewModel.workspaces.value)
+                    )
                 }
             }
         }
+        handleDeepLinkIntent(intent)
         handleNotificationIntent(intent)
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                viewModel.onAppForegrounded()
+            }
+        })
         setContent {
             CmuxAppRoot(viewModel = viewModel)
         }
@@ -62,6 +90,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleNotificationIntent(intent)
+        handleDeepLinkIntent(intent)
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -74,19 +103,43 @@ class MainActivity : ComponentActivity() {
 
     private fun handleNotificationIntent(intent: Intent?) {
         val surfaceId = intent?.getStringExtra(AgentCompletionNotifications.extraSurfaceId) ?: return
-        viewModel.navigateToSurface(
-            intent.getStringExtra(AgentCompletionNotifications.extraWorkspaceId),
-            surfaceId
-        )
+        val workspaceId = intent.getStringExtra(AgentCompletionNotifications.extraWorkspaceId)
+        android.util.Log.d("CmuxPocket", "Notification tap → workspace=$workspaceId surface=$surfaceId")
+        viewModel.navigateToSurface(workspaceId, surfaceId)
         intent.removeExtra(AgentCompletionNotifications.extraSurfaceId)
         intent.removeExtra(AgentCompletionNotifications.extraWorkspaceId)
+    }
+
+    private fun handleDeepLinkIntent(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme?.equals("cmux-pocket", ignoreCase = true) == true) {
+            viewModel.setPendingImportUri(uri.toString())
+            intent.data = null
+        }
     }
 }
 
 @Composable
 fun CmuxAppRoot(viewModel: TerminalViewModel) {
     val context = LocalContext.current
-    val settingsManager = remember { SettingsManager(context) }
+    val settingsManager = remember { CmuxPocketApp.settingsManager }
+    val pendingImportUri by viewModel.pendingImportUri.collectAsState()
+    var importPayload by remember { mutableStateOf<CmuxImportPayload?>(null) }
+    var importErrorMessage by remember { mutableStateOf<String?>(null) }
+    var showQrScanner by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pendingImportUri) {
+        val rawUri = pendingImportUri
+        if (rawUri != null) {
+            try {
+                importPayload = CmuxImportUri.parse(rawUri)
+                importErrorMessage = null
+            } catch (e: Exception) {
+                importPayload = null
+                importErrorMessage = e.message ?: context.getString(R.string.main_invalid_config_link)
+            }
+        }
+    }
 
     var themeMode by remember { mutableStateOf(settingsManager.themeMode) }
     var selectedThemeHex by remember { mutableStateOf(settingsManager.terminalBgTheme) }
@@ -94,7 +147,6 @@ fun CmuxAppRoot(viewModel: TerminalViewModel) {
     var portInput by remember { mutableStateOf(settingsManager.port.toString()) }
     var tokenInput by remember { mutableStateOf(settingsManager.token) }
     var fontSizeSp by remember { mutableStateOf(settingsManager.fontSizeSp) }
-
     CmuxAppTheme(themeMode = themeMode) {
         CmuxApp(
             viewModel = viewModel,
@@ -105,6 +157,7 @@ fun CmuxAppRoot(viewModel: TerminalViewModel) {
             fontSizeSp = fontSizeSp,
             selectedThemeHex = selectedThemeHex,
             themeMode = themeMode,
+            onScanQrClick = { showQrScanner = true },
 
             onHostChange = {
                 hostInput = it
@@ -131,6 +184,52 @@ fun CmuxAppRoot(viewModel: TerminalViewModel) {
                 settingsManager.themeMode = it
             },
         )
+
+        importPayload?.let { payload ->
+            ImportPreviewDialog(
+                payload = payload,
+                settingsManager = settingsManager,
+                onDismiss = {
+                    importPayload = null
+                    viewModel.clearPendingImportUri()
+                },
+                onImportConfirmed = { profile, connectImmediately ->
+                    settingsManager.upsertProfile(profile)
+                    settingsManager.activeProfileId = profile.id
+                    hostInput = profile.host
+                    portInput = profile.port.toString()
+                    tokenInput = profile.token
+                    settingsManager.host = profile.host
+                    settingsManager.port = profile.port
+                    settingsManager.token = profile.token
+                    importPayload = null
+                    viewModel.clearPendingImportUri()
+                    if (connectImmediately) {
+                        viewModel.connect(profile.host, profile.port, profile.token)
+                    }
+                }
+            )
+        }
+
+        importErrorMessage?.let { errMsg ->
+            ImportErrorDialog(
+                errorMessage = errMsg,
+                onDismiss = {
+                    importErrorMessage = null
+                    viewModel.clearPendingImportUri()
+                }
+            )
+        }
+
+        if (showQrScanner) {
+            QrScannerDialog(
+                onDismiss = { showQrScanner = false },
+                onQrCodeDetected = { qrText ->
+                    showQrScanner = false
+                    viewModel.setPendingImportUri(qrText)
+                }
+            )
+        }
     }
 }
 
@@ -152,19 +251,18 @@ fun CmuxApp(
     onFontSizeChange: (Float) -> Unit,
     onThemeHexChange: (String) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onScanQrClick: () -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
-    val activeScreenState by viewModel.activeScreenState.collectAsState()
     val status by viewModel.connectionStatus.collectAsState(initial = ConnectionStatus.DISCONNECTED)
     val statusMsg by viewModel.statusMessage.collectAsState()
+    val connectionReadiness by viewModel.connectionReadiness.collectAsState()
+    val wakeState by viewModel.wakeState.collectAsState()
+    val refreshingHostStatus by viewModel.hostStatusRefreshing.collectAsState()
     val workspaces by viewModel.workspaces.collectAsState()
     val activeWorkspace by viewModel.activeWorkspace.collectAsState()
     val activeSurfaces by viewModel.activeSurfaces.collectAsState()
     val selectedSurfaceId by viewModel.selectedSurfaceId.collectAsState()
-    val remoteTakeoverSurfaceId by viewModel.remoteTakeoverSurfaceId.collectAsState()
-    val hostInputProtectedSurfaceId by viewModel.hostInputProtectedSurfaceId.collectAsState()
-    val remoteTakeoverActive = remoteTakeoverSurfaceId == selectedSurfaceId && selectedSurfaceId != null
-    val hostInputProtected = hostInputProtectedSurfaceId == selectedSurfaceId && selectedSurfaceId != null
 
     val displaySurfaceId = selectedSurfaceId.orEmpty()
     val displayPort = portInput.toIntOrNull() ?: 8088
@@ -184,35 +282,52 @@ fun CmuxApp(
     }
     val changeTerminalDisplay: (TerminalDisplayPreference) -> Unit = { terminalDisplay = it.normalized() }
 
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     var isSidebarExpanded by remember { mutableStateOf(false) }
-    var showWorkspaceSheet by remember { mutableStateOf(false) }
-    var showNewWorkspaceDialog by remember { mutableStateOf(false) }
-    var showNewSurfaceDialog by remember { mutableStateOf(false) }
-    var showSettingsDialog by remember { mutableStateOf(false) }
+    var showSessionSurfaceDrawer by remember { mutableStateOf(false) }
+    var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
     var showKeyboardPanel by remember { mutableStateOf(false) }
-    var showRemoteTakeoverConfirm by remember { mutableStateOf(false) }
     var pendingCloseSurface by remember { mutableStateOf<SurfaceInfo?>(null) }
+    var pendingCloseWorkspace by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var renamingWorkspace by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var renamingSurface by remember { mutableStateOf<SurfaceInfo?>(null) }
 
     fun requestCloseSurface(surfaceId: String) {
         val surface = activeSurfaces.firstOrNull { it.id == surfaceId } ?: return
-        if (surface.requiresCloseConfirmation()) {
+        val isActive = surface.id == selectedSurfaceId
+        val isRunning = surface.agentState == "working" || surface.agentState == "needs_input"
+        if (isActive || isRunning) {
             pendingCloseSurface = surface
         } else {
             viewModel.closeSurface(surfaceId)
         }
     }
+
+    fun requestCloseWorkspace(workspaceKey: String) {
+        val ws = workspaces.firstOrNull { it.stableKey == workspaceKey } ?: return
+        val isActive = ws.stableKey == activeWorkspace?.stableKey
+        if (isActive) {
+            pendingCloseWorkspace = ws
+        } else {
+            viewModel.closeWorkspace(workspaceKey)
+        }
+    }
     var terminalInputView by remember { mutableStateOf<TerminalInputView?>(null) }
     val context = LocalContext.current
+
+    // Completion feedback for the foreground: a pulse for the session on screen, a capsule for
+    // every other one. While the app is backgrounded MainActivity posts a system notification
+    // instead, so the two paths never alert the same event twice.
+    var completionQueue by remember { mutableStateOf<List<SessionCompletionNotice>>(emptyList()) }
+    val activeCompletion = completionQueue.firstOrNull()
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    // IME text is bound to the tab that opened the keyboard: drop the target when the
+    // user switches tabs or backgrounds the app so a late commit cannot land elsewhere.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 terminalInputView?.clearInputTarget()
-                viewModel.clearRemoteTakeover()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -222,6 +337,55 @@ fun CmuxApp(
     LaunchedEffect(selectedSurfaceId) {
         terminalInputView?.clearInputTarget()
     }
+    val currentSurfaces by rememberUpdatedState(activeSurfaces)
+    val currentWorkspaces by rememberUpdatedState(workspaces)
+    val currentSelectedSurfaceId by rememberUpdatedState(selectedSurfaceId)
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.agentSessionCompletions.collect { completion ->
+                if (isCurrentSession(completion, currentSelectedSurfaceId, currentSurfaces)) {
+                    if (settingsManager.vibrateOnSessionComplete) {
+                        SessionCompletionFeedback.vibrate(context)
+                    }
+                } else {
+                    val notice = sessionCompletionNotice(completion, currentWorkspaces)
+                    completionQueue = completionQueue.filterNot { it.surfaceId == notice.surfaceId } + notice
+                }
+            }
+        }
+    }
+    val activeCompletionKey = activeCompletion?.key
+    LaunchedEffect(activeCompletionKey) {
+        if (activeCompletionKey == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(6000)
+        completionQueue = completionQueue.drop(1)
+    }
+    val openCompletion: (SessionCompletionNotice) -> Unit = { notice ->
+        viewModel.navigateToSurface(notice.workspaceId, notice.surfaceId)
+        completionQueue = completionQueue.filterNot { it.key == notice.key }
+    }
+
+    // Stable callbacks for the accessory bar: it sits inside the scope that recomposes on every
+    // rendered terminal frame, so lambdas allocated per composition would drag all 14 keys
+    // through recomposition on each frame.
+    val accessorySendKey: (String) -> Unit = remember { { key ->
+        viewModel.sendInput(key, TerminalInputKind.KEY)
+    } }
+    val accessoryOpenKeyboardPanel: () -> Unit = remember { { showKeyboardPanel = true } }
+    val accessoryOpenSettings: () -> Unit = remember { { showSettingsDialog = true } }
+    val settingsOnDismiss: () -> Unit = remember { { showSettingsDialog = false } }
+    val settingsOnClearScrollback: () -> Unit = remember { { viewModel.clearScrollback() } }
+    val settingsOnConnect: () -> Unit = remember(hostInput, portInput, tokenInput) {
+        { viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput) }
+    }
+    val currentOnFontSizeChange by rememberUpdatedState(onFontSizeChange)
+    val currentTerminalDisplay by rememberUpdatedState(terminalDisplay)
+    val settingsOnFontSizeChange: (Float) -> Unit = remember {
+        { size ->
+            currentOnFontSizeChange(size)
+            changeTerminalDisplay(currentTerminalDisplay.copy(fontSizeSp = size, fitWidth = false, panX = 0f, panY = null))
+        }
+    }
 
     // Auto connect on launch with saved configuration
     LaunchedEffect(Unit) {
@@ -230,11 +394,15 @@ fun CmuxApp(
 
     LaunchedEffect(status) {
         if (status == ConnectionStatus.ERROR) {
-            Toast.makeText(context, "Connection Error: Check IP or start Gateway", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.main_connection_error), Toast.LENGTH_SHORT).show()
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Orientation is derived from the real window size rather than LocalConfiguration: the
+    // activity handles configuration changes itself, so a rotation must not depend on the
+    // configuration CompositionLocal being refreshed.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isLandscape = maxWidth > maxHeight
         if (isLandscape) {
             // LANDSCAPE LAYOUT: Collapsible Left Sidebar + Full Height Terminal Stage
             Row(
@@ -253,79 +421,81 @@ fun CmuxApp(
                     onSelectWorkspace = { key -> viewModel.selectWorkspace(key) },
                     onSelectSurface = { id -> viewModel.selectSurface(id) },
                     onCloseSurface = { id -> requestCloseSurface(id) },
-                    onNewWorkspace = { showNewWorkspaceDialog = true },
-                    onNewSurface = { showNewSurfaceDialog = true },
+                    onNewWorkspace = { viewModel.createWorkspace() },
+                    onNewSurface = { viewModel.createSurface(activeWorkspace?.stableKey) },
+                    onRenameWorkspace = { ws -> renamingWorkspace = ws },
+                    onCloseWorkspace = { key -> requestCloseWorkspace(key) },
+                    onRenameSurface = { surf -> renamingSurface = surf },
                     onSettingsClick = { showSettingsDialog = true }
                 )
-
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    ConnectionReadinessNotice(
+                        readiness = connectionReadiness,
+                        onOpenSettings = { showSettingsDialog = true },
+                        modifier = Modifier.statusBarsPadding()
+                    )
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         TerminalStage(
                             surfaces = activeSurfaces,
-                            activeScreenState = activeScreenState,
+                            screenStateFlow = viewModel.activeScreenState,
                             connectionStatus = status,
+                            connectionReadiness = connectionReadiness,
+                            wakeState = wakeState,
+                            onWakeCmux = viewModel::wakeCmux,
                             displayPreference = terminalDisplay,
                             onDisplayPreferenceChange = changeTerminalDisplay,
                             themeHex = selectedThemeHex,
                             onTapCanvas = {
-                                terminalInputView?.requestKeyboard(selectedSurfaceId)
+                                terminalInputView?.requestKeyboard(viewModel.selectedSurfaceId.value)
                             },
                             onTerminalScroll = viewModel::scrollTerminal,
-                            onNewSurfaceClick = { showNewSurfaceDialog = true }
+                            onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
+                            onSendKey = { key -> viewModel.sendInput(key, TerminalInputKind.KEY) },
+                            onClearScreen = { viewModel.clearScrollback() },
+                            renderEnabled = !showSettingsDialog
+                        )
+
+                        // D2 breadcrumb pill: same entry point in landscape
+                        FloatingIslandPill(
+                            connectionStatus = status,
+                            activeWorkspace = activeWorkspace,
+                            activeSurface = activeSurfaces.firstOrNull { it.id == selectedSurfaceId } ?: activeSurfaces.firstOrNull(),
+                            surfaceCount = activeSurfaces.size,
+                            onClick = { showSessionSurfaceDrawer = true },
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .statusBarsPadding()
+                                .padding(top = 8.dp)
+                        )
+
+                        SessionCompletionBannerHost(
+                            notice = activeCompletion,
+                            extraCount = (completionQueue.size - 1).coerceAtLeast(0),
+                            onOpen = openCompletion,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .statusBarsPadding()
+                                .padding(top = 52.dp)
                         )
                     }
 
-                    if (hostInputProtected) {
-                        HostInputProtectedBanner()
-                    }
                     AccessoryKeyboardBar(
-                        onSendKey = { key -> viewModel.sendInput(key) },
-                        onOpenKeyboardPanel = { showKeyboardPanel = true },
-                        remoteTakeoverActive = remoteTakeoverActive,
-                        onEnableRemoteTakeover = { showRemoteTakeoverConfirm = true },
-                        onDisableRemoteTakeover = viewModel::clearRemoteTakeover,
+                        onSendKey = accessorySendKey,
+                        onOpenKeyboardPanel = accessoryOpenKeyboardPanel,
+                        onSettingsClick = accessoryOpenSettings
                     )
                 }
             }
         } else {
-            // PORTRAIT LAYOUT: Standard TopBar + Horizontal Tab Strip + Bottom Accessory Bar
+            // PORTRAIT LAYOUT: Proposal C (Terminal Pure · 极致沉浸悬浮岛)
+            // 0dp fixed top bar consumption: terminal canvas 直接贴顶
             Scaffold(
-                topBar = {
-                    Column {
-                        WorkspaceTopBar(
-                            workspace = activeWorkspace,
-                            connectionStatus = status,
-                            statusMessage = statusMsg,
-                            onWorkspaceClick = { showWorkspaceSheet = true },
-                            onNewSurfaceClick = { showNewSurfaceDialog = true },
-                            onConnectSettingsClick = { showSettingsDialog = true },
-                            onReconnectClick = {
-                                viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
-                            }
-                        )
-
-                        SurfaceTabBar(
-                            surfaces = activeSurfaces,
-                            selectedSurfaceId = selectedSurfaceId,
-                            onSelectSurface = { surfaceId -> viewModel.selectSurface(surfaceId) },
-                            onCloseSurface = { surfaceId -> requestCloseSurface(surfaceId) },
-                            onNewSurface = { showNewSurfaceDialog = true }
-                        )
-                    }
-                },
                 bottomBar = {
-                    Column {
-                        if (hostInputProtected) {
-                            HostInputProtectedBanner()
-                        }
                         AccessoryKeyboardBar(
-                            onSendKey = { key -> viewModel.sendInput(key) },
-                            onOpenKeyboardPanel = { showKeyboardPanel = true },
-                            remoteTakeoverActive = remoteTakeoverActive,
-                            onEnableRemoteTakeover = { showRemoteTakeoverConfirm = true },
-                            onDisableRemoteTakeover = viewModel::clearRemoteTakeover,
+                            onSendKey = accessorySendKey,
+                            onOpenKeyboardPanel = accessoryOpenKeyboardPanel,
+                            onSettingsClick = accessoryOpenSettings
                         )
-                    }
                 },
                 containerColor = theme.background
             ) { paddingValues ->
@@ -334,18 +504,48 @@ fun CmuxApp(
                         .fillMaxSize()
                         .padding(paddingValues)
                 ) {
+                    // Full Viewport Terminal Stage
                     TerminalStage(
                         surfaces = activeSurfaces,
-                        activeScreenState = activeScreenState,
+                        screenStateFlow = viewModel.activeScreenState,
                         connectionStatus = status,
+                        connectionReadiness = connectionReadiness,
+                        wakeState = wakeState,
+                        onWakeCmux = viewModel::wakeCmux,
                         displayPreference = terminalDisplay,
                         onDisplayPreferenceChange = changeTerminalDisplay,
                         themeHex = selectedThemeHex,
                         onTapCanvas = {
-                            terminalInputView?.requestKeyboard(selectedSurfaceId)
+                            terminalInputView?.requestKeyboard(viewModel.selectedSurfaceId.value)
                         },
                         onTerminalScroll = viewModel::scrollTerminal,
-                        onNewSurfaceClick = { showNewSurfaceDialog = true }
+                        onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
+                        onSendKey = { key -> viewModel.sendInput(key, TerminalInputKind.KEY) },
+                        onClearScreen = { viewModel.clearScrollback() },
+                        renderEnabled = !showSettingsDialog
+                    )
+
+                    // Minimalist frosted Floating Island Pill overlaid at top center
+                    FloatingIslandPill(
+                        connectionStatus = status,
+                        activeWorkspace = activeWorkspace,
+                        activeSurface = activeSurfaces.firstOrNull { it.id == selectedSurfaceId } ?: activeSurfaces.firstOrNull(),
+                        surfaceCount = activeSurfaces.size,
+                        onClick = { showSessionSurfaceDrawer = true },
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 8.dp)
+                    )
+
+                    SessionCompletionBannerHost(
+                        notice = activeCompletion,
+                        extraCount = (completionQueue.size - 1).coerceAtLeast(0),
+                        onOpen = openCompletion,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 52.dp)
                     )
                 }
             }
@@ -354,142 +554,165 @@ fun CmuxApp(
         // Single, stable root-level TerminalImeBridge instance
         TerminalImeBridge(
             onSendText = { surfaceId, text ->
-                viewModel.sendInput(text, TerminalInputKind.TEXT, surfaceId)
+                viewModel.sendInputToSurface(surfaceId, text, TerminalInputKind.TEXT)
             },
             onDelete = { surfaceId ->
-                viewModel.sendInput("\u007f", TerminalInputKind.KEY, surfaceId)
+                viewModel.sendInputToSurface(surfaceId, "\u007f", TerminalInputKind.KEY)
             },
             onEnter = { surfaceId ->
-                viewModel.sendInput("\n", TerminalInputKind.KEY, surfaceId)
+                viewModel.sendInputToSurface(surfaceId, "\n", TerminalInputKind.KEY)
             },
             onViewReady = { terminalInputView = it },
             modifier = Modifier.size(1.dp)
         )
-    }
 
-    // Shared Sheets & Dialogs
-    if (showKeyboardPanel) {
-        ComputerKeyboardPanel(
-            onSendKey = { key -> viewModel.sendInput(key) },
-            onDismissRequest = { showKeyboardPanel = false }
-        )
-    }
+        // Shared Sheets & Dialogs
+        if (showKeyboardPanel) {
+            ComputerKeyboardPanel(
+                onSendKey = { key -> viewModel.sendInput(key, TerminalInputKind.KEY) },
+                onDismissRequest = { showKeyboardPanel = false },
+                isLandscape = isLandscape
+            )
+        }
 
-    if (showRemoteTakeoverConfirm) {
-        AlertDialog(
-            onDismissRequest = { showRemoteTakeoverConfirm = false },
-            title = { Text("Enable Remote takeover?") },
-            text = {
-                Text(
-                    "Pocket will send input despite host drafts and permission dialogs for this tab. " +
-                        "It turns off when you leave the tab, disconnect, or background the app."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showRemoteTakeoverConfirm = false
-                        viewModel.enableRemoteTakeover()
+        if (showSessionSurfaceDrawer) {
+            SessionSurfaceDrawer(
+                workspaces = workspaces,
+                activeWorkspace = activeWorkspace,
+                surfaces = activeSurfaces,
+                selectedSurfaceId = selectedSurfaceId,
+                hostLabel = hostInput,
+                onSelectSurface = { surfaceId -> viewModel.selectSurface(surfaceId) },
+                onCloseSurface = { surfaceId -> requestCloseSurface(surfaceId) },
+                onNewSurfaceClick = { viewModel.createSurface(activeWorkspace?.stableKey) },
+                onSelectWorkspace = { key -> viewModel.selectWorkspace(key) },
+                onNewWorkspaceClick = { viewModel.createWorkspace() },
+                onRenameSurface = { surf -> renamingSurface = surf },
+                onRenameWorkspace = { ws -> renamingWorkspace = ws },
+                onCloseWorkspace = { key -> requestCloseWorkspace(key) },
+                onSettingsClick = { showSettingsDialog = true },
+                onDismissRequest = { showSessionSurfaceDrawer = false }
+            )
+        }
+
+
+
+        pendingCloseSurface?.let { surface ->
+            val running = surface.agentState == "working" || surface.agentState == "needs_input"
+            AlertDialog(
+                onDismissRequest = { pendingCloseSurface = null },
+                title = { Text(stringResource(R.string.main_close_tab_title)) },
+                text = {
+                    Text(
+                        if (running) {
+                            stringResource(R.string.main_close_tab_running, surface.displayTitle)
+                        } else {
+                            stringResource(R.string.main_close_active_tab_desc, surface.displayTitle)
+                        }
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val id = surface.id
+                            pendingCloseSurface = null
+                            viewModel.closeSurface(id)
+                        }
+                    ) {
+                        Text(stringResource(R.string.main_close))
                     }
-                ) { Text("Enable") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRemoteTakeoverConfirm = false }) { Text("Cancel") }
-            }
-        )
-    }
-
-    if (showWorkspaceSheet) {
-        WorkspaceBottomSheet(
-            workspaces = workspaces,
-            selectedWorkspaceKey = activeWorkspace?.stableKey,
-            onSelectWorkspace = { key -> viewModel.selectWorkspace(key) },
-            onNewWorkspaceClick = { showNewWorkspaceDialog = true },
-            onDismissRequest = { showWorkspaceSheet = false }
-        )
-    }
-
-    if (showNewWorkspaceDialog) {
-        NewWorkspaceDialog(
-            onDismissRequest = { showNewWorkspaceDialog = false },
-            onConfirm = { name, initialTerminal ->
-                showNewWorkspaceDialog = false
-                viewModel.createWorkspace(name, initialTerminal)
-            }
-        )
-    }
-
-    if (showNewSurfaceDialog) {
-        NewSurfaceDialog(
-            workspaceName = activeWorkspace?.name ?: "Current Workspace",
-            onDismissRequest = { showNewSurfaceDialog = false },
-            onConfirm = { title ->
-                showNewSurfaceDialog = false
-                viewModel.createSurface(activeWorkspace?.stableKey, title)
-            }
-        )
-    }
-
-    pendingCloseSurface?.let { surface ->
-        val running = surface.agentState == "working" || surface.agentState == "needs_input"
-        AlertDialog(
-            onDismissRequest = { pendingCloseSurface = null },
-            title = { Text("Close tab?") },
-            text = {
-                Text(
-                    if (running) {
-                        "${surface.displayTitle} has a running process. Close it anyway?"
-                    } else {
-                        "${surface.displayTitle} is still running. Close it anyway?"
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingCloseSurface = null }) {
+                        Text(stringResource(R.string.main_cancel))
                     }
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val id = surface.id
-                        pendingCloseSurface = null
-                        viewModel.closeSurface(id)
-                    }
-                ) {
-                    Text("Close")
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingCloseSurface = null }) {
-                    Text("Cancel")
+            )
+        }
+
+        pendingCloseWorkspace?.let { ws ->
+            AlertDialog(
+                onDismissRequest = { pendingCloseWorkspace = null },
+                title = { Text(stringResource(R.string.main_close_active_workspace_title)) },
+                text = {
+                    Text(
+                        stringResource(
+                            R.string.main_close_active_workspace_desc,
+                            ws.name,
+                            ws.surfaces.size
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val key = ws.stableKey
+                            pendingCloseWorkspace = null
+                            viewModel.closeWorkspace(key)
+                        }
+                    ) {
+                        Text(stringResource(R.string.main_delete))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingCloseWorkspace = null }) {
+                        Text(stringResource(R.string.main_cancel))
+                    }
                 }
-            }
-        )
+            )
+        }
+
+        renamingWorkspace?.let { ws ->
+            RenameWorkspaceDialog(
+                initialName = ws.name,
+                onDismissRequest = { renamingWorkspace = null },
+                onConfirm = { newName ->
+                    renamingWorkspace = null
+                    viewModel.renameWorkspace(ws.stableKey, newName)
+                }
+            )
+        }
+
+        renamingSurface?.let { surf ->
+            RenameSurfaceDialog(
+                initialTitle = surf.displayTitle,
+                onDismissRequest = { renamingSurface = null },
+                onConfirm = { newTitle ->
+                    renamingSurface = null
+                    viewModel.renameSurface(surf.id, newTitle)
+                }
+            )
+        }
+
+        // Full-screen settings page (never a floating overlay over the terminal).
+        if (showSettingsDialog) {
+            BackHandler(onBack = settingsOnDismiss)
+            SettingsScreen(
+                hostInput = hostInput,
+                portInput = portInput,
+                tokenInput = tokenInput,
+                fontSizeSp = terminalDisplay.fontSizeSp,
+                selectedThemeHex = selectedThemeHex,
+                themeMode = themeMode,
+                connectionStatus = status,
+                connectionReadiness = connectionReadiness,
+                settingsManager = settingsManager,
+
+
+                onHostChange = onHostChange,
+                onPortChange = onPortChange,
+                onTokenChange = onTokenChange,
+                onFontSizeChange = settingsOnFontSizeChange,
+                onThemeChange = onThemeHexChange,
+                onThemeModeChange = onThemeModeChange,
+                onConnectClick = settingsOnConnect,
+                onScanQrClick = onScanQrClick,
+                onClearScrollback = settingsOnClearScrollback,
+                onRecheckGatewayVersion = viewModel::refreshHostStatus,
+                isRefreshingGatewayVersion = refreshingHostStatus,
+                onDismissRequest = settingsOnDismiss
+            )
+        }
     }
 
-    // Dedicated Settings Dialog
-    if (showSettingsDialog) {
-        SettingsDialog(
-            hostInput = hostInput,
-            portInput = portInput,
-            tokenInput = tokenInput,
-            fontSizeSp = terminalDisplay.fontSizeSp,
-            selectedThemeHex = selectedThemeHex,
-            themeMode = themeMode,
-            connectionStatus = status,
-            isLandscape = isLandscape,
-            settingsManager = settingsManager,
-
-
-            onHostChange = onHostChange,
-            onPortChange = onPortChange,
-            onTokenChange = onTokenChange,
-            onFontSizeChange = {
-                onFontSizeChange(it)
-                changeTerminalDisplay(terminalDisplay.copy(fontSizeSp = it, fitWidth = false, panX = 0f, panY = null))
-            },
-            onThemeChange = onThemeHexChange,
-            onThemeModeChange = onThemeModeChange,
-            onConnectClick = {
-                viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
-            },
-            onDismissRequest = { showSettingsDialog = false }
-        )
-    }
 }

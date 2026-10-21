@@ -87,7 +87,77 @@ pbcopy < "$(cmux-pocket token path)"
 
 `cmux-pocket service uninstall` removes only the CLI-owned LaunchAgent. Homebrew installation and upgrades do not create tokens, start services, or mutate user configuration.
 
+### Remote wake and Gateway version checks
+
+The Gateway runs as a login agent, but the cmux desktop app may not be running after a reboot or a manual quit. When the phone is connected and the Gateway reports `cmux_status.running: false`, the terminal replaces its empty state with a **Wake cmux on Mac** card:
+
+1. The phone sends `mobile.host.wake_cmux`; the Gateway verifies it is an authenticated session.
+2. The Gateway runs `/usr/bin/open -g -b com.cmuxterm.app`. `-g` launches in the background, so the Mac's current window keeps focus, and repeated requests are absorbed for 10 seconds.
+3. The Gateway probes `cmux ping` every 500 ms for up to 15 seconds. When the socket answers, it broadcasts a full `workspace.tree` sync and the phone switches to the live terminal.
+
+Remote wake only covers a Mac that is powered on and awake with the Gateway online. A sleeping or offline Mac is a network reachability problem, not a wake problem.
+
+`mobile.host.status` reports `gateway_version`, `protocol_version`, `capabilities`, and `cmux_status` (`installed`, `running`, `can_wake`). Android compares this against its own version in **Settings → Connection → Host & connection**:
+
+| State | Meaning | Action offered |
+| --- | --- | --- |
+| Match | Same feature level and the wake capability is present | None |
+| Gateway outdated | Missing `mobile.host.wake_cmux.v1` or older than the app | Copy `brew update && brew upgrade cmux-pocket && cmux-pocket setup`, then recheck |
+| Incompatible | Different protocol major version | Upgrade the Mac Gateway |
+| Client outdated | Gateway is newer than the app | Download the latest APK from GitHub Releases |
+
+The version card reads live state, so **Recheck version** refreshes it without reconnecting.
+
 ## 2. Choose a secure boundary
+
+### Tailscale connection assistant
+
+Install Tailscale on the Mac and Android phone. Connect both to the same tailnet, enable MagicDNS and HTTPS certificates in Tailscale, and make the `tailscale` CLI available on the Mac. Keep the Mac awake with cmux running.
+
+Run:
+
+```bash
+cmux-pocket setup --tailscale
+```
+
+This command performs the existing Gateway setup and an authenticated workspace query. It reuses a healthy running Gateway, including one running in a cmux terminal. Otherwise it attempts to start the login service. Once workspace access succeeds, it checks Tailscale and configures background HTTPS Serve on port `443`, forwarding to the configured loopback Gateway address and port. It verifies the resulting Serve configuration before printing a `wss://` phone endpoint. It does not start another listener if a healthy Gateway already exists, rotate your token, overwrite an existing conflicting root route, or enable public Funnel.
+
+If Tailscale asks you to enable Serve for the tailnet, run `tailscale serve` with your local Gateway port once and follow its HTTPS setup link. Then rerun `cmux-pocket setup --tailscale`. Commands have a bounded wait; an incomplete setup reports a failure with recovery instructions.
+
+If Gateway workspace verification fails, follow [cmux socket access](#cmux-socket-access). The default cmux process restriction may require a foreground Gateway:
+
+```bash
+# In a dedicated cmux terminal:
+cmux-pocket service stop
+cmux-pocket gateway run
+
+# In another terminal while the first stays open:
+cmux-pocket setup --tailscale
+```
+
+On Android, open **Settings → Connection & Host**, enter the printed phone endpoint (port `443`) and the Gateway token from the path reported by setup, then tap **Check connection**. Existing profiles remain encrypted on the phone. The assistant checks the entered values by reconnecting the active session. It never sends terminal input or changes Mac-side terminal focus as part of the check.
+
+The checklist shows where the handshake stopped:
+
+| Step | What success proves | Recovery if it fails |
+| --- | --- | --- |
+| Reach Gateway | The phone opened a WebSocket to the configured endpoint | Check host/port, Mac awake state, Tailscale on both devices, and Serve configuration |
+| Accept token | The Gateway accepted the phone credential | Copy the existing Gateway token again; it is separate from a cmux automation password |
+| Verify Gateway response | The endpoint responds to the Pocket status RPC | Check reverse-proxy forwarding and `cmux-pocket gateway probe` |
+| Subscribe to workspace updates | The session subscribed before fetching its workspace baseline | Reconnect; if it persists, update the Gateway and run its probe |
+| Read cmux workspaces | The Gateway process can query cmux | Open cmux and check socket access permissions; run the Gateway from a cmux terminal if required |
+
+An empty but valid workspace list passes the handshake and shows zero workspaces/terminals. Authentication with a failed workspace query does **not** show Ready. Failures remain visible on the terminal screen and in Settings, with step-specific guidance. A network failure alone cannot prove whether the phone VPN, host VPN, or Gateway is stopped, so Pocket presents these as checks instead of guessing a cause. **Open Tailscale** is available when the Android Tailscale app is installed; VPN connection and sign-in remain controlled by Tailscale.
+
+Use these Mac commands to inspect the setup later:
+
+```bash
+cmux-pocket gateway probe
+tailscale status
+tailscale serve status
+```
+
+Tailscale Serve keeps its background configuration, but the Mac, cmux, VPN, and Gateway must remain running. QR pairing (`cmux-pocket qr`) transfers the Gateway endpoint, TLS state, and token in one scan; see §3.
 
 ### LAN with a TLS reverse proxy
 
@@ -215,13 +285,87 @@ If Serve is not enabled for the tailnet, follow the account enablement link prin
 
 [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve) handles TLS and forwards WebSocket connections to the loopback Gateway within the tailnet. It does not replace the Gateway process or grant it permission to access cmux's socket.
 
-## 3. Configure the Android app
+
+## 3. QR code pairing and one-tap import (`cmux-pocket://`)
+
+cmux Pocket provides automatic pairing to transfer your Gateway endpoint, port, TLS settings, and authentication token to your Android phone without manually retyping credentials.
+
+### Generating a QR code on the Mac
+
+Run the `qr` command in any terminal:
+
+```bash
+cmux-pocket qr
+```
+
+Or display a QR code automatically after setup:
+
+```bash
+cmux-pocket setup --tailscale --qr
+```
+
+The CLI renders an ANSI QR code block directly in the terminal, accompanied by the `cmux-pocket://` import URI.
+
+### Endpoint configuration and precedence
+
+The CLI resolves the phone connection endpoint using strict precedence:
+
+1. **Explicit CLI argument (`--endpoint <URL>`)**:
+   Takes top priority. Use this for a single-use connection or testing without modifying your configuration:
+   ```bash
+   cmux-pocket qr --endpoint wss://custom.proxy.example.com:8443 --name "Workstation"
+   ```
+
+2. **User locally saved endpoint (`config.endpoint`)**:
+   Persists your preferred remote URL (e.g. your private domain, reverse proxy, or secure ingress) across sessions:
+   ```bash
+   cmux-pocket config set endpoint wss://custom.proxy.example.com:8443
+   cmux-pocket config get endpoint
+   cmux-pocket qr
+   ```
+
+3. **Tailscale automatic discovery (`.ts.net`)**:
+   If no custom endpoint is configured and Tailscale is running with a valid tailnet domain, cmux-pocket automatically uses `wss://<node>.ts.net` with port `443`.
+
+**Loopback safety:**
+cmux-pocket never automatically assumes a local loopback address (`127.0.0.1`) can be reached by a remote phone over Wi-Fi or cellular. If no remote endpoint is found, the CLI will output actionable setup instructions rather than generating a misleading QR code. If you intentionally want to test loopback over ADB reverse, you can pass `--endpoint ws://127.0.0.1:8088` explicitly.
+
+### Android scanning and deep link import
+
+Two import paths are supported:
+
+1. **In-app QR scanner**:
+   In cmux Pocket, open **Settings → Connection & Host** and tap **Scan QR**.
+   - Camera permission is requested on first use.
+   - If denied, the app provides guidance on enabling camera access in Settings, or continuing with manual entry.
+   - Scanning can be canceled at any time, returning safely to the previous screen without altering existing settings.
+
+2. **External QR scanners and deep links**:
+   Scanning with an external barcode scanner or tapping a `cmux-pocket://` link will launch cmux Pocket on both cold start and when running in the background.
+   - **Compatibility notice:** External scanner behavior depends on the scanner tool and Android vendor ROM. While dedicated barcode scanners (such as ZXing Barcode Scanner) and supported browser links handle custom schemes, some stock camera apps only support `http://` and `https://` URLs. If your stock camera does not recognize the custom scheme, use the in-app scanner (**Settings → Scan QR**).
+
+### Import preview and confirmation
+
+Both in-app scanning and external deep links always open the **Import Gateway Profile** preview dialog:
+
+- **No silent overwrite:** If an existing profile matches the endpoint or name, the dialog flags the match and gives you an explicit choice: **Update Existing** or **Save as New**.
+- **No automatic connection on link open:** Opening a link or scanning a code will never initiate a connection automatically. The user must explicitly tap **Import & Connect** or confirm the action.
+- **Token masking:** The secret bearer token is masked in the preview (`0123••••cdef`) and can be revealed with the **Show** toggle before saving.
+- **Cancellation:** Tapping **Cancel** dismisses the dialog without modifying any saved profiles or changing the active connection.
+
+### Security and credential considerations
+
+> ⚠️ **Bearer Token Security:** The QR code and `cmux-pocket://` URI contain your active Gateway authentication token. Anyone who scans this QR code or opens this link can connect to your Gateway and view active cmux workspaces.
+> - Do NOT screenshot the QR code or post it in public chat groups, bug reports, or repositories.
+> - Non-loopback endpoints must use TLS (`wss://` or `https://`). The app and CLI strictly reject cleartext non-loopback connections.
+> - External deep link payloads are untrusted inputs: the app strictly validates the protocol scheme, version (`v=1`), host, port, and token before displaying the preview dialog.
+## 4. Manual configuration in the Android app
 
 1. Open **Settings**.
 2. Tap **Add Host** and create a named profile.
 3. Set **Host or URL** to your secure endpoint, for example `wss://gateway.example.test`.
 4. Use port `443` for a bare hostname, or omit the separate port when the full URL contains its own port.
-5. Paste the Gateway token and tap **Apply & Save**.
+5. Paste the Gateway token and tap **Reconnect**. Edits are saved as you type; there is no separate apply step.
 
 The app stores profiles and tokens in encrypted Android preferences. A token is never needed in the hostname or URL.
 
@@ -261,7 +405,7 @@ adb devices
 adb reverse tcp:8088 tcp:8088
 ```
 
-In the app, select **USB**, use `127.0.0.1:8088`, enter the token, and tap **Apply & Save**. Re-run `adb reverse` after reconnecting or rebooting the device.
+In the app, select **USB**, use `127.0.0.1:8088`, enter the token, and tap **Reconnect**. Re-run `adb reverse` after reconnecting or rebooting the device.
 
 ADB reverse is intentionally not the normal LAN/remote setup. It depends on USB debugging and does not provide a user-managed network boundary.
 

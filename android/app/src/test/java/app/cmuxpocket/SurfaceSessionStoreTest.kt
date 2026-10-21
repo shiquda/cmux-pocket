@@ -91,4 +91,30 @@ class SurfaceSessionStoreTest {
         store.removeSession("surf-3")
         assertNull(store.getSession("surf-3"))
     }
+
+    @Test
+    fun testClearScrollbackOnStore() {
+        val store = SurfaceSessionStore()
+        val frameA = MobileTerminalRenderGridFrame(
+            surfaceId = "surf-A",
+            stateSeq = 1,
+            renderEpoch = "epoch-A",
+            columns = 40,
+            rows = 10,
+            full = true,
+            scrollbackRows = 2,
+            scrollbackSpans = listOf(
+                RowSpan(row = 0, column = 0, styleId = 0, text = "history line")
+            ),
+            cursor = Cursor(row = 0, column = 0, visible = true),
+            rowSpans = listOf(RowSpan(row = 0, column = 0, styleId = 0, text = "Hello"))
+        )
+        store.routeFrame(frameA)
+        val session = store.getSession("surf-A")!!
+        assertEquals(2, session.engine.screenState.value.scrollback.size)
+
+        // Clear scrollback on surface A
+        store.clearScrollback("surf-A")
+        assertEquals(0, session.engine.screenState.value.scrollback.size)
+    }
 }

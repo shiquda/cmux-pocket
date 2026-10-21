@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  English base dictionary. This file is the default for every locale, so a fresh install is English
+  regardless of the device language. Simplified Chinese lives in values-zh-rCN/strings.xml.
+-->
+<resources>
+
+    <string name="app_name">cmux Pocket</string>
+
+    <!-- Main shell -->
+    <string name="main_connection_error">Connection error — check the IP or start the Gateway</string>
+    <string name="main_invalid_config_link">Invalid cmux-pocket configuration link</string>
+    <string name="main_workspace_fallback">Current Workspace</string>
+    <string name="main_close_tab_title">Close tab?</string>
+    <string name="main_close_tab_running">%1$s has a running process. Close it anyway?</string>
+    <string name="main_close_tab_still_running">%1$s is still running. Close it anyway?</string>
+    <string name="main_close_active_tab_title">Close active tab?</string>
+    <string name="main_close_active_tab_desc">\"%1$s\" is currently active. Close it anyway?</string>
+    <string name="main_close_active_workspace_title">Delete active workspace?</string>
+    <string name="main_close_active_workspace_desc">Workspace \"%1$s\" is currently active. Deleting it will close all %2$d tab(s) inside. Delete anyway?</string>
+    <string name="main_delete">Delete</string>
+    <string name="main_close">Close</string>
+    <string name="main_cancel">Cancel</string>
+
+    <!-- Floating island pill -->
+    <string name="island_connecting">Connecting...</string>
+    <string name="island_disconnected">Disconnected</string>
+
+    <!-- Accessory keyboard bar -->
+    <string name="kb_open_panel">Open keyboard panel</string>
+    <string name="kb_settings">Settings</string>
+
+    <!-- Contextual action bubble -->
+    <string name="bubble_copy_selection">Copy selection</string>
+    <string name="bubble_copy_screen">Copy screen</string>
+    <string name="bubble_paste">Paste at cursor</string>
+    <string name="bubble_interrupt">Send interrupt (Ctrl+C)</string>
+    <string name="bubble_clear">Clear screen (Clear)</string>
+
+    <!-- Terminal canvas -->
+    <string name="canvas_ready">cmux Pocket Ready</string>
+    <string name="canvas_connecting">Connecting to session...</string>
+    <string name="canvas_selection_start_handle">Selection start handle</string>
+    <string name="canvas_selection_end_handle">Selection end handle</string>
+    <string name="canvas_copied_selection">Copied terminal selection</string>
+    <string name="canvas_pasted">Pasted clipboard content</string>
+    <string name="canvas_interrupt_sent">Sent interrupt (Ctrl+C)</string>
+    <string name="canvas_cleared">Terminal screen cleared</string>
+    <string name="canvas_decrease_text_size">Decrease terminal text size</string>
+    <string name="canvas_increase_text_size">Increase terminal text size</string>
+    <string name="canvas_fit_width">Fit Width</string>
+    <string name="canvas_readable">Readable</string>
+
+    <!-- Terminal stage -->
+    <string name="stage_no_tabs">No active terminal tabs</string>
+    <string name="stage_no_tabs_hint">Create a new tab to start running commands</string>
+    <string name="stage_add_tab">Add terminal tab</string>
+    <string name="stage_syncing">Syncing with cmux host…</string>
+
+    <!-- Notifications and foreground service -->
+    <string name="notif_channel_name">Agent completions</string>
+    <string name="notif_channel_desc">Completed agent turns from cmux</string>
+    <string name="notif_agent_fallback">Agent</string>
+    <string name="notif_task_complete">%1$s task complete</string>
+    <string name="notif_tap_to_open">Tap to open the completed tab in cmux Pocket.</string>
+    <string name="completion_banner_done">Done</string>
+    <string name="completion_banner_more">+%1$d</string>
+    <string name="completion_banner_open">Open the session that just finished</string>
+    <string name="keepalive_channel_name">Connection</string>
+    <string name="keepalive_channel_desc">Keeps the cmux Pocket Gateway connection active in the background.</string>
+    <string name="keepalive_title">cmux Pocket connected</string>
+    <string name="keepalive_text">Gateway connection stays active while the app is in the background.</string>
+
+    <!-- Settings page shell -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_back">Back</string>
+    <string name="settings_close">Close settings</string>
+    <string name="settings_group_appearance">Appearance</string>
+    <string name="settings_group_support">Support</string>
+    <string name="settings_group_data">Data</string>
+    <string name="settings_row_profiles">%1$d profiles</string>
+    <string name="settings_row_diagnostics_on">On</string>
+    <string name="settings_row_diagnostics_off">Off</string>
+    <string name="settings_section_connection">Connection</string>
+    <string name="settings_section_display">Display</string>
+    <string name="settings_section_language">Language</string>
+    <string name="settings_section_updates">Updates</string>
+    <string name="settings_section_opensource">Open Source</string>
+    <string name="settings_section_diagnostics">Diagnostics</string>
+    <string name="settings_section_storage">Storage</string>
+    <string name="settings_section_notifications">Notifications</string>
+
+    <!-- Settings · Notifications -->
+    <string name="settings_notif_vibrate">Vibrate when the session on screen finishes</string>
+    <string name="settings_notif_vibrate_desc">Only while cmux Pocket is open. Other sessions finishing show a capsule at the top instead.</string>
+    <string name="settings_notif_on">On</string>
+    <string name="settings_notif_off">Off</string>
+
+    <!-- Settings · General -->
+    <string name="settings_theme_mode_title">App theme mode</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_brand_badge">Open Source</string>
+    <string name="settings_brand_tagline">cmux companion • multi-surface terminal client • v%1$s</string>
+    <string name="settings_footer_version">cmux Pocket • v%1$s</string>
+    <string name="settings_footer_license">AGPL-3.0 • No warranty • Source &amp; license</string>
+    <string name="settings_footer_copyright" translatable="false">© 2026 cmux pocket contributors. All rights reserved.</string>
+
+    <!-- Settings · Language -->
+    <string name="settings_language_title">App language</string>
+    <string name="settings_language_desc">Dictionary used for the whole interface.</string>
+    <string name="settings_language_system">System default</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_chinese">简体中文</string>
+
+    <!-- Settings · Connection -->
+    <string name="settings_profiles_title">Profiles</string>
+    <string name="settings_profile_delete">Delete %1$s</string>
+    <string name="settings_add_host">Add host</string>
+    <string name="settings_scan_qr">Scan QR</string>
+    <string name="settings_scan_qr_desc">Scan QR code</string>
+    <string name="settings_host_or_url">Host or URL</string>
+    <string name="settings_host_placeholder">IP or https://tunnel.example.com</string>
+    <string name="settings_host_placeholder_short">host.example or https://tunnel.example</string>
+    <string name="settings_port">Port</string>
+    <string name="settings_auth_token">Auth token</string>
+    <string name="settings_toggle_token">Toggle token visibility</string>
+    <string name="settings_scan_none_found">No open hosts found on this network</string>
+    <string name="settings_scan_found">Found %1$s</string>
+    <string name="settings_scan_host_one">1 host</string>
+    <string name="settings_scan_host_many">%1$d hosts</string>
+    <string name="settings_scanning">Scanning…</string>
+    <string name="settings_scan_wifi">Scan Wi-Fi</string>
+    <string name="settings_reconnect">Reconnect</string>
+    <string name="settings_latency">%1$s • %2$d ms</string>
+    <string name="settings_use">Use</string>
+    <string name="settings_name">Name</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_cancel">Cancel</string>
+
+    <!-- Settings · Display -->
+    <string name="settings_font_size_title">Font size · this terminal</string>
+    <string name="font_size_sp_value">%1$s sp</string>
+    <string name="settings_font_builtin">Maple Mono NF (built-in)</string>
+    <string name="settings_font_builtin_desc">Nerd Font v3 icons + CJK monospace</string>
+    <string name="settings_terminal_palette">Terminal canvas palette</string>
+    <string name="settings_theme_option_dark">Default Dark</string>
+    <string name="settings_theme_option_oled">OLED Black</string>
+    <string name="settings_theme_option_tokyo">Tokyo Night</string>
+    <string name="settings_theme_option_dracula">Dracula Dark</string>
+
+    <!-- Settings · Updates -->
+    <string name="settings_check_update">Check for updates</string>
+    <string name="settings_current_version">Current version v%1$s</string>
+    <string name="settings_up_to_date">Already up to date (v%1$s)</string>
+    <string name="settings_update_failed">Update check failed: %1$s</string>
+    <string name="settings_update_available_badge">New</string>
+    <string name="settings_check">Check</string>
+    <string name="settings_update_dialog_title">Version %1$s available</string>
+    <string name="settings_update_dialog_body">Version v%1$s is ready on GitHub Releases. Tap to download the APK.</string>
+    <string name="settings_update_download">Download APK</string>
+    <string name="settings_update_later">Later</string>
+
+    <!-- Settings · Open source -->
+    <string name="settings_repo">GitHub repository</string>
+    <string name="settings_repo_value">shiquda/cmux-pocket</string>
+    <string name="settings_star">★ Star</string>
+    <string name="settings_feedback">Report an issue or request a feature</string>
+    <string name="settings_feedback_desc">Open a GitHub Issue</string>
+    <string name="settings_licenses">Licenses &amp; third-party notices</string>
+    <string name="settings_licenses_desc">GNU AGPL-3.0 and bundled libraries</string>
+
+    <!-- Settings · Diagnostics -->
+    <string name="settings_diag_toggle">Live gateway connection log</string>
+    <string name="settings_diag_enabled_desc">Inspect WebSocket &amp; RPC diagnostic frames</string>
+    <string name="settings_diag_disabled_desc">Logging is off (tap to inspect)</string>
+    <string name="settings_diag_export">Export diagnostic bundle</string>
+    <string name="settings_diag_export_desc">Redacted config plus the last 500 network log lines (JSON)</string>
+    <string name="settings_diag_copied">Redacted diagnostic bundle copied to clipboard</string>
+
+    <!-- Settings · Storage -->
+    <string name="settings_export_profiles">Export host profiles</string>
+    <string name="settings_export_profiles_desc">Choose whether the clipboard JSON carries access keys (all %1$d profiles)</string>
+    <string name="settings_export_dialog_title">Export host profiles</string>
+    <string name="settings_export_dialog_body">%1$d profiles are written to the clipboard as JSON. Gateway access keys are included only when you choose to carry them; otherwise fill a key in after importing.</string>
+    <string name="settings_export_without_credentials">Copy without keys</string>
+    <string name="settings_export_with_credentials">Copy with keys</string>
+    <string name="settings_export_dialog_cancel">Cancel</string>
+    <string name="settings_exported_with_credentials_toast">Exported %1$d host profiles including access keys to clipboard</string>
+    <string name="settings_import_profiles">Import profiles from clipboard</string>
+    <string name="settings_import_profiles_desc">Read JSON from the clipboard and merge it into your profiles</string>
+    <string name="settings_clear_scrollback">Clear terminal scrollback</string>
+    <string name="settings_clear_scrollback_desc">Reset the scrollback buffer and free memory</string>
+    <string name="settings_exported_toast">Exported %1$d host profiles to clipboard</string>
+    <string name="settings_imported_toast">Imported and merged %1$d host profiles</string>
+    <string name="settings_import_empty_toast">No valid host profiles JSON on the clipboard</string>
+    <string name="settings_scrollback_cleared_toast">Terminal scrollback cleared and memory released</string>
+    <string name="settings_json_label">JSON</string>
+
+    <!-- Remote wake of the cmux desktop app -->
+    <string name="stage_cmux_stopped_title">Mac online · cmux not running</string>
+    <string name="stage_cmux_stopped_body">The Gateway is connected, but cmux.app is not running on your Mac. Wake it remotely without leaving this screen.</string>
+    <string name="stage_wake_cmux">Wake cmux on Mac</string>
+    <string name="stage_wake_retry">Retry wake</string>
+    <string name="stage_waking_cmux">Launching cmux…</string>
+    <string name="stage_waiting_cmux">Loading workspaces…</string>
+    <string name="stage_wake_timeout">cmux did not respond within 15 seconds. Confirm the Mac is awake, then retry.</string>
+    <string name="stage_wake_background_hint">Starts in the background and keeps your Mac\'s current window in front.</string>
+    <string name="stage_wake_unavailable">This Gateway version cannot wake cmux. Upgrade the Mac Gateway from Settings → Connection.</string>
+
+</resources>

@@ -754,4 +754,36 @@ class RenderGridStateEngineTest {
         assertEquals(0f, resetAcc, 0.001f)
     }
 
+    @Test
+    fun testClearScrollback() {
+        val engine = RenderGridStateEngine()
+        val fullFrame = MobileTerminalRenderGridFrame(
+            surfaceId = "term-1",
+            stateSeq = 1,
+            renderEpoch = "epoch-1",
+            columns = 10,
+            rows = 3,
+            full = true,
+            scrollbackRows = 2,
+            scrollbackSpans = listOf(
+                RowSpan(row = 0, column = 0, styleId = 0, text = "hist-0"),
+                RowSpan(row = 1, column = 0, styleId = 0, text = "hist-1")
+            ),
+            cursor = Cursor(row = 0, column = 0, visible = true),
+            styles = emptyList(),
+            rowSpans = listOf(
+                RowSpan(row = 0, column = 0, styleId = 0, text = "line 1"),
+                RowSpan(row = 1, column = 0, styleId = 0, text = "line 2"),
+                RowSpan(row = 2, column = 0, styleId = 0, text = "line 3")
+            )
+        )
+        engine.applyFrame(fullFrame)
+        assertEquals(2, engine.screenState.value.scrollback.size)
+
+        engine.clearScrollback()
+        assertEquals(0, engine.screenState.value.scrollback.size)
+        assertEquals(3, engine.screenState.value.rows)
+        assertEquals("term-1", engine.screenState.value.surfaceId)
+    }
+
 }

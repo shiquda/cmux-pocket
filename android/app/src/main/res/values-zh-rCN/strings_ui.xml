@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Import Gateway Dialog -->
+    <string name="dlg_import_title">导入连接配置</string>
+    <string name="dlg_import_cancel">取消</string>
+    <string name="dlg_import_existing_found">发现已存在的配置文件</string>
+    <string name="dlg_import_existing_desc">已保存的配置文件 \'%1$s\' 已在使用此端点（%2$s:%3$d）。</string>
+    <string name="dlg_import_update_profile">更新 \'%1$s\'</string>
+    <string name="dlg_import_save_as_new">另存为新配置</string>
+    <string name="dlg_import_profile_name">配置文件名称</string>
+    <string name="dlg_import_connection_details">连接详情</string>
+    <string name="dlg_import_host_address">Host / 地址</string>
+    <string name="dlg_import_port">Port</string>
+    <string name="dlg_import_protocol_security">协议与安全</string>
+    <string name="dlg_import_protocol_wss">WSS (TLS 加密)</string>
+    <string name="dlg_import_protocol_ws">WS (Loopback 明文)</string>
+    <string name="dlg_import_usb_local">USB / 本地</string>
+    <string name="dlg_import_gateway_auth_token">认证 Token</string>
+    <string name="dlg_import_token_hide">隐藏</string>
+    <string name="dlg_import_token_show">显示</string>
+    <string name="dlg_import_security_reminder">保存此连接配置至 Pocket。</string>
+    <string name="dlg_import_confirm">导入并连接</string>
+    <string name="dlg_import_error_title">无效的导入配置</string>
+    <string name="dlg_import_error_ok">确定</string>
+
+    <!-- New Workspace and New Terminal Surface Dialogs -->
+    <string name="dlg_new_workspace_title">新建工作区</string>
+    <string name="dlg_new_workspace_name_label">工作区名称</string>
+    <string name="dlg_new_workspace_name_placeholder">e.g. backend-api, my-feature</string>
+    <string name="dlg_new_workspace_create_initial_tab">创建初始终端标签页</string>
+    <string name="dlg_new_workspace_default_name">新建工作区</string>
+    <string name="dlg_new_workspace_create">创建</string>
+    <string name="dlg_new_workspace_cancel">取消</string>
+    <string name="dlg_new_surface_title">新建终端标签页</string>
+    <string name="dlg_new_surface_desc">在 \'%1$s\' 中添加新的终端会话</string>
+    <string name="dlg_new_surface_title_label">标签页标题 (可选)</string>
+    <string name="dlg_new_surface_title_placeholder">e.g. zsh, logs, tests</string>
+    <string name="dlg_new_surface_add">添加标签页</string>
+    <string name="dlg_new_surface_cancel">取消</string>
+
+    <!-- Rename Workspace and Surface Dialogs -->
+    <string name="dlg_rename_workspace_title">重命名工作区</string>
+    <string name="dlg_rename_workspace_label">工作区名称</string>
+    <string name="dlg_rename_workspace_placeholder">例如 backend-api, my-feature</string>
+    <string name="dlg_rename_workspace_confirm">重命名</string>
+    <string name="dlg_rename_surface_title">重命名终端标签页</string>
+    <string name="dlg_rename_surface_label">标签页标题</string>
+    <string name="dlg_rename_surface_placeholder">例如 zsh, logs, tests</string>
+    <string name="dlg_rename_surface_confirm">重命名</string>
+    <string name="dlg_rename_cancel">取消</string>
+    <string name="menu_rename">重命名</string>
+    <string name="menu_delete">删除</string>
+    <string name="menu_close">关闭</string>
+
+    <!-- Computer Keyboard Panel -->
+    <string name="panel_tab_qwerty">QWERTY</string>
+    <string name="panel_tab_special">特殊键</string>
+    <string name="panel_close_keyboard">关闭键盘</string>
+    <string name="panel_combo">组合</string>
+    <string name="panel_combination_mode">组合模式</string>
+
+    <!-- QR Code Scanner -->
+    <string name="scan_title">扫描连接二维码</string>
+    <string name="scan_torch_toggle_cd">开关手电筒</string>
+    <string name="scan_close_cd">取消扫描</string>
+    <string name="scan_hint_point_camera">将摄像头对准电脑上的二维码</string>
+    <string name="scan_hint_focus">画面模糊时轻触对焦</string>
+    <string name="scan_hint_terminal">在电脑终端运行以下命令生成二维码：</string>
+    <string name="scan_cancel">取消</string>
+    <string name="scan_permission_denied_title">需要相机权限</string>
+    <string name="scan_permission_denied_desc">扫描连接二维码需要相机权限。请在系统设置中开启，或手动输入连接信息。</string>
+    <string name="scan_app_settings">应用设置</string>
+    <string name="scan_permission_request_title">扫描连接二维码</string>
+    <string name="scan_permission_request_desc">允许使用相机，以便扫描并导入电脑终端上的连接配置。</string>
+    <string name="scan_permission_allow">允许</string>
+
+    <!-- Connection Assistant -->
+    <string name="conn_check_title">连接检查</string>
+    <string name="conn_step_item">"%1$s  %2$s"</string>
+    <string name="conn_step_network">连接 Gateway</string>
+    <string name="conn_step_auth">验证 Token</string>
+    <string name="conn_step_gateway">检查网关响应</string>
+    <string name="conn_step_sync">订阅工作区更新</string>
+    <string name="conn_step_workspaces">加载工作区</string>
+    <string name="conn_step_ready">已连接</string>
+    <string name="conn_summary_untested">尚未检查连接</string>
+    <string name="conn_summary_ready">已就绪 · %1$d 个工作区 · %2$d 个终端</string>
+    <string name="conn_help_network">无法连接主机。请检查 IP 与端口，并确认电脑端已启动 Tailscale 或 Gateway。</string>
+    <string name="conn_help_auth">Token 无效。可在电脑运行 cmux-pocket token 查看当前 Token。</string>
+    <string name="conn_help_gateway">网关未响应。可在电脑运行 cmux-pocket gateway probe 排查。</string>
+    <string name="conn_help_workspaces">无法读取工作区。请确认电脑端已打开 cmux。</string>
+    <string name="conn_help_sync">工作区同步失败。请点击检查连接重试。</string>
+    <string name="conn_btn_check">检查连接</string>
+    <string name="conn_btn_host_setup">Host 设置</string>
+    <string name="conn_btn_open_tailscale">打开 Tailscale</string>
+    <string name="conn_host_setup_instructions">确保双端处于同一 Tailscale 网络，然后在电脑终端运行：</string>
+    <string name="conn_btn_copy_setup_cmd">复制设置命令</string>
+    <string name="conn_notice_check_in_settings">在设置中检查连接</string>
+    <!-- Gateway version and upgrade guidance -->
+    <string name="conn_versions_title">宿主与连接版本</string>
+    <string name="conn_version_client">Android 客户端</string>
+    <string name="conn_version_gateway">Pocket 网关</string>
+    <string name="conn_version_protocol">cmux 协议</string>
+    <string name="conn_version_wake">远程唤醒</string>
+    <string name="conn_version_match">匹配</string>
+    <string name="conn_version_outdated_badge">过旧</string>
+    <string name="conn_version_update_badge">待更新</string>
+    <string name="conn_version_incompatible_badge">不兼容</string>
+    <string name="conn_version_unknown">未上报</string>
+    <string name="conn_version_wake_ready">已就绪</string>
+    <string name="conn_version_wake_unavailable">不可用</string>
+    <string name="conn_version_gateway_outdated_body">当前网关缺少远程唤醒能力，升级 Mac 网关后即可使用。</string>
+    <string name="conn_version_incompatible_body">网关协议 v%1$s 与本应用不兼容（需要 v%2$d.x）。</string>
+    <string name="conn_version_client_outdated_body">网关版本高于当前应用，更新应用即可使用最新能力。</string>
+    <string name="conn_btn_recheck_version">重新检测版本</string>
+    <string name="conn_btn_upgrade_guide">升级方案</string>
+    <string name="conn_btn_download_client">下载新版 APK</string>
+    <string name="conn_upgrade_title">升级 Mac 网关</string>
+    <string name="conn_upgrade_body">在 Mac 的终端中运行以下命令，然后回到这里重新检测。已保存的配置与 Token 不受影响。</string>
+    <string name="conn_upgrade_copied">已复制升级命令</string>
+    <string name="conn_btn_copy_upgrade_cmd">复制命令</string>
+
+    <!-- Connection Error and Status Messages for i18n -->
+    <string name="conn_summary_cmux_stopped">Mac 在线 · cmux 未运行</string>
+    <string name="conn_help_cmux_stopped">Gateway 已在线，但 cmux 未运行。点击「唤醒 cmux」可远程启动。</string>
+    <string name="conn_err_auth_rejected">Gateway 拒绝了认证 Token</string>
+    <string name="conn_err_auth_timeout">Gateway 认证响应超时</string>
+    <string name="conn_err_tls">无法建立受信任的 HTTPS 连接</string>
+    <string name="conn_err_dns">无法解析 Gateway 主机名</string>
+    <string name="conn_err_unreachable">无法连接到 Gateway</string>
+    <string name="conn_err_disconnected">Gateway 连接已断开</string>
+    <string name="conn_err_workspaces_unavailable">Gateway 已连接，但 cmux 工作区不可用</string>
+    <string name="conn_err_handshake_incomplete">Gateway 未完成握手</string>
+    <string name="conn_err_sync_failed">工作区同步失败</string>
+
+</resources>

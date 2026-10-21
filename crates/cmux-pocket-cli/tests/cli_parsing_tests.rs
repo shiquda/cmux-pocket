@@ -1,7 +1,8 @@
 use clap::Parser;
 use cmux_pocket_cli::cli::{
     Cli, Commands, ConfigArgs, ConfigSubcommand, DoctorArgs, GatewayArgs, GatewaySubcommand,
-    LogsArgs, ServiceArgs, ServiceSubcommand, SetupArgs, StatusArgs, TokenArgs, TokenSubcommand,
+    LogsArgs, QrArgs, ServiceArgs, ServiceSubcommand, SetupArgs, StatusArgs, TokenArgs,
+    TokenSubcommand,
 };
 use std::path::PathBuf;
 
@@ -32,6 +33,11 @@ fn test_parse_setup() {
         Commands::Setup(SetupArgs {
             port: None,
             no_start: false,
+            tailscale: false,
+            qr: false,
+            endpoint: None,
+            no_invert: false,
+            invert: false,
         })
     );
 
@@ -43,6 +49,110 @@ fn test_parse_setup() {
         Commands::Setup(SetupArgs {
             port: Some(9090),
             no_start: true,
+            tailscale: false,
+            qr: false,
+            endpoint: None,
+            no_invert: false,
+            invert: false,
+        })
+    );
+}
+
+#[test]
+fn test_tailscale_setup_requires_gateway_verification() {
+    let cli = Cli::try_parse_from(["cmux-pocket", "setup", "--tailscale"]).unwrap();
+    assert!(matches!(
+        cli.command,
+        Commands::Setup(SetupArgs {
+            tailscale: true,
+            ..
+        })
+    ));
+    assert!(Cli::try_parse_from(["cmux-pocket", "setup", "--tailscale", "--no-start"]).is_err());
+}
+
+#[test]
+fn test_parse_qr() {
+    // Default qr
+    let cli = Cli::try_parse_from(["cmux-pocket", "qr"]).unwrap();
+    assert_eq!(
+        cli.command,
+        Commands::Qr(QrArgs {
+            endpoint: None,
+            url_only: false,
+            name: None,
+            no_invert: false,
+            invert: false,
+        })
+    );
+
+    // Alias qrcode
+    let cli = Cli::try_parse_from(["cmux-pocket", "qrcode"]).unwrap();
+    assert_eq!(
+        cli.command,
+        Commands::Qr(QrArgs {
+            endpoint: None,
+            url_only: false,
+            name: None,
+            no_invert: false,
+            invert: false,
+        })
+    );
+
+    // Full qr options
+    let cli = Cli::try_parse_from([
+        "cmux-pocket",
+        "qr",
+        "--endpoint",
+        "wss://my.tailnet.ts.net",
+        "--url-only",
+        "--name",
+        "My Workstation",
+    ])
+    .unwrap();
+    assert_eq!(
+        cli.command,
+        Commands::Qr(QrArgs {
+            endpoint: Some("wss://my.tailnet.ts.net".to_string()),
+            url_only: true,
+            name: Some("My Workstation".to_string()),
+            no_invert: false,
+            invert: false,
+        })
+    );
+
+    // Setup with --qr and --endpoint
+    let cli = Cli::try_parse_from([
+        "cmux-pocket",
+        "setup",
+        "--qr",
+        "--endpoint",
+        "wss://custom.net",
+    ])
+    .unwrap();
+    assert_eq!(
+        cli.command,
+        Commands::Setup(SetupArgs {
+            port: None,
+            no_start: false,
+            tailscale: false,
+            qr: true,
+            endpoint: Some("wss://custom.net".to_string()),
+            no_invert: false,
+            invert: false,
+        })
+    );
+
+    // QR with --no-invert
+    let cli = Cli::try_parse_from(["cmux-pocket", "qr", "--no-invert"]).unwrap();
+    assert_eq!(
+        cli.command,
+        Commands::Qr(QrArgs {
+            endpoint: None,
+            url_only: false,
+            name: None,
+            no_invert: true,
+            invert: false,
         })
     );
 }

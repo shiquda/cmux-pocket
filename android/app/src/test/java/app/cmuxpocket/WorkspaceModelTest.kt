@@ -1,8 +1,11 @@
 package app.cmuxpocket
 
 import app.cmuxpocket.protocol.SurfaceInfo
+import app.cmuxpocket.protocol.SurfaceRenameResponse
+import app.cmuxpocket.protocol.WorkspaceCloseResponse
 import app.cmuxpocket.protocol.WorkspaceInfo
 import app.cmuxpocket.protocol.WorkspaceListResponse
+import app.cmuxpocket.protocol.WorkspaceRenameResponse
 import app.cmuxpocket.protocol.WorkspaceSelection
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -165,5 +168,84 @@ class WorkspaceModelTest {
         val (wsKey, surfId) = WorkspaceSelection.reconcile(listOf(wsWithTab), "ws-key-1", null)
         assertEquals("ws-key-1", wsKey)
         assertEquals("surf-new-from-mac", surfId)
+    }
+
+    @Test
+    fun testRenameAndCloseResponsesDeserialization() {
+        val renameWsJson = """{"status":"ok","workspace":{"id":"ws-1","name":"renamed-ws"}}"""
+        val renameWsResp = json.decodeFromString(WorkspaceRenameResponse.serializer(), renameWsJson)
+        assertEquals("ok", renameWsResp.status)
+        assertEquals("renamed-ws", renameWsResp.workspace?.name)
+
+        val closeWsJson = """{"status":"ok","workspace_key":"ws-1"}"""
+        val closeWsResp = json.decodeFromString(WorkspaceCloseResponse.serializer(), closeWsJson)
+        assertEquals("ok", closeWsResp.status)
+        assertEquals("ws-1", closeWsResp.workspaceKey)
+
+        val renameSurfJson = """{"status":"ok","surface":{"id":"surf-1","title":"renamed-tab"}}"""
+        val renameSurfResp = json.decodeFromString(SurfaceRenameResponse.serializer(), renameSurfJson)
+        assertEquals("ok", renameSurfResp.status)
+        assertEquals("renamed-tab", renameSurfResp.surface?.displayTitle)
+    }
+
+    @Test
+    fun testActiveTabAndWorkspaceConfirmationPredicates() {
+        val activeWsKey = "ws-1"
+        val selectedSurfId = "surf-active"
+
+        fun requiresWsDeleteConfirmation(targetKey: String) = targetKey == activeWsKey
+        assertTrue(requiresWsDeleteConfirmation("ws-1"))
+        assertFalse(requiresWsDeleteConfirmation("ws-other"))
+
+        fun requiresSurfDeleteConfirmation(surf: SurfaceInfo) =
+            surf.id == selectedSurfId || surf.agentState == "working" || surf.agentState == "needs_input"
+
+        val activeSurf = SurfaceInfo(id = "surf-active", title = "zsh")
+        val inactiveWorkingSurf = SurfaceInfo(id = "surf-worker", title = "build", agentState = "working")
+        val inactiveNeedsInputSurf = SurfaceInfo(id = "surf-input", title = "cli", agentState = "needs_input")
+        val inactiveIdleSurf = SurfaceInfo(id = "surf-idle", title = "idle")
+
+        assertTrue(requiresSurfDeleteConfirmation(activeSurf))
+        assertTrue(requiresSurfDeleteConfirmation(inactiveWorkingSurf))
+        assertTrue(requiresSurfDeleteConfirmation(inactiveNeedsInputSurf))
+        assertFalse(requiresSurfDeleteConfirmation(inactiveIdleSurf))
+    }
+
+    @Test
+    fun testLocateSurfacePrefersTheMatchingWorkspace() {
+        val workspaces = listOf(
+            WorkspaceInfo(
+                id = "ws-1",
+                key = "ws-key-1",
+                name = "cmux-main",
+                surfaces = listOf(SurfaceInfo(id = "surf-1"), SurfaceInfo(id = "surf-2"))
+            ),
+            WorkspaceInfo(
+                id = "ws-2",
+                name = "android-dev",
+                surfaces = listOf(SurfaceInfo(id = "surf-3"))
+            ),
+        )
+
+        assertEquals("ws-key-1", WorkspaceSelection.locateSurface(workspaces, "ws-1", "surf-2")?.stableKey)
+        assertEquals("ws-2", WorkspaceSelection.locateSurface(workspaces, "ws-2", "surf-3")?.stableKey)
+        assertEquals("ws-key-1", WorkspaceSelection.locateSurface(workspaces, null, "surf-1")?.stableKey)
+    }
+
+    @Test
+    fun testLocateSurfaceFallsBackWhenTheWorkspaceIdIsStale() {
+        val workspaces = listOf(
+            WorkspaceInfo(
+                id = "ws-android-1",
+                key = "cmux-window-a",
+                name = "android-dev",
+                surfaces = listOf(SurfaceInfo(id = "surf-9"))
+            )
+        )
+
+        // A cmux window id that never reached the mobile tree must not swallow the tap.
+        assertEquals("cmux-window-a", WorkspaceSelection.locateSurface(workspaces, "cmux-window-a", "surf-9")?.stableKey)
+        assertEquals("cmux-window-a", WorkspaceSelection.locateSurface(workspaces, "window-unknown", "surf-9")?.stableKey)
+        assertNull(WorkspaceSelection.locateSurface(workspaces, "ws-android-1", "surf-missing"))
     }
 }

@@ -266,11 +266,15 @@ impl JsonRpcError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RpcMethod {
     HostStatus,
+    HostWakeCmux,
     WorkspaceList,
     WorkspaceCreate,
     WorkspaceSelect,
+    WorkspaceRename,
+    WorkspaceClose,
     SurfaceCreate,
     SurfaceClose,
+    SurfaceRename,
     SurfaceFocus,
     EventsSubscribe,
     TerminalInput,
@@ -284,11 +288,15 @@ impl RpcMethod {
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "mobile.host.status" => Some(Self::HostStatus),
+            "mobile.host.wake_cmux" => Some(Self::HostWakeCmux),
             "mobile.workspace.list" | "workspace.list" => Some(Self::WorkspaceList),
             "mobile.workspace.create" => Some(Self::WorkspaceCreate),
             "mobile.workspace.select" => Some(Self::WorkspaceSelect),
+            "mobile.workspace.rename" => Some(Self::WorkspaceRename),
+            "mobile.workspace.close" => Some(Self::WorkspaceClose),
             "mobile.surface.create" => Some(Self::SurfaceCreate),
             "mobile.surface.close" => Some(Self::SurfaceClose),
+            "mobile.surface.rename" => Some(Self::SurfaceRename),
             "mobile.surface.focus" => Some(Self::SurfaceFocus),
             "mobile.events.subscribe" => Some(Self::EventsSubscribe),
             "mobile.terminal.input" | "terminal.input" => Some(Self::TerminalInput),
@@ -303,11 +311,15 @@ impl RpcMethod {
     pub const fn canonical_name(&self) -> &'static str {
         match self {
             Self::HostStatus => "mobile.host.status",
+            Self::HostWakeCmux => "mobile.host.wake_cmux",
             Self::WorkspaceList => "mobile.workspace.list",
             Self::WorkspaceCreate => "mobile.workspace.create",
             Self::WorkspaceSelect => "mobile.workspace.select",
+            Self::WorkspaceRename => "mobile.workspace.rename",
+            Self::WorkspaceClose => "mobile.workspace.close",
             Self::SurfaceCreate => "mobile.surface.create",
             Self::SurfaceClose => "mobile.surface.close",
+            Self::SurfaceRename => "mobile.surface.rename",
             Self::SurfaceFocus => "mobile.surface.focus",
             Self::EventsSubscribe => "mobile.events.subscribe",
             Self::TerminalInput => "mobile.terminal.input",

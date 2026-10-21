@@ -1,6 +1,20 @@
 package app.cmuxpocket.ui
 
+import app.cmuxpocket.R
+import app.cmuxpocket.BuildConfig
+import app.cmuxpocket.protocol.GatewayCompatibility
+import app.cmuxpocket.protocol.GatewayVersions
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.foundation.shape.CircleShape
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.platform.LocalContext
+import app.cmuxpocket.diagnostics.DiagnosticsManager
 import app.cmuxpocket.transport.ConnectionStatus
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,6 +23,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import android.app.Activity
+import androidx.annotation.StringRes
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,36 +36,40 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 
 
 data class ThemeOption(
     val id: String,
-    val name: String,
+    @StringRes val nameRes: Int,
     val hexColor: String
 )
 
 val AVAILABLE_THEMES = listOf(
-    ThemeOption("dark", "Default Dark", "#1E1E1E"),
-    ThemeOption("oled", "OLED Black", "#000000"),
-    ThemeOption("tokyo", "Tokyo Night", "#1A1B26"),
-    ThemeOption("dracula", "Dracula Dark", "#282A36")
+    ThemeOption("dark", R.string.settings_theme_option_dark, "#1E1E1E"),
+    ThemeOption("oled", R.string.settings_theme_option_oled, "#000000"),
+    ThemeOption("tokyo", R.string.settings_theme_option_tokyo, "#1A1B26"),
+    ThemeOption("dracula", R.string.settings_theme_option_dracula, "#282A36")
 )
 
 private const val SOURCE_URL = "https://github.com/shiquda/cmux-pocket"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsDialog(
+fun SettingsScreen(
     hostInput: String,
     portInput: String,
     tokenInput: String,
@@ -54,7 +77,7 @@ fun SettingsDialog(
     selectedThemeHex: String,
     themeMode: ThemeMode,
     connectionStatus: ConnectionStatus,
-    isLandscape: Boolean,
+    connectionReadiness: ConnectionReadiness,
     settingsManager: SettingsManager,
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
@@ -63,37 +86,66 @@ fun SettingsDialog(
     onThemeChange: (String) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
     onConnectClick: () -> Unit,
+    onScanQrClick: () -> Unit = {},
+    onClearScrollback: () -> Unit = {},
+    onRecheckGatewayVersion: () -> Unit = {},
+    isRefreshingGatewayVersion: Boolean = false,
     onDismissRequest: () -> Unit
 ) {
     val theme = CmuxTheme.colors
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    Dialog(
-        onDismissRequest = onDismissRequest,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        val dialogWidth = if (isLandscape) 0.88f else 0.94f
-        val dialogHeight = if (isLandscape) 0.92f else 0.88f
+    val currentVersion = BuildConfig.VERSION_NAME
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var updateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var showLicensesDialog by remember { mutableStateOf(false) }
+    var showDiagnosticsDialog by remember { mutableStateOf(false) }
+    var showExportProfilesDialog by remember { mutableStateOf(false) }
+    var isDiagnosticsEnabled by remember { mutableStateOf(settingsManager.isDiagnosticsEnabled) }
+    var vibrateOnSessionComplete by remember { mutableStateOf(settingsManager.vibrateOnSessionComplete) }
+    // Ordinal rather than the enum itself so the page survives the activity recreation that a
+    // language switch triggers; [ROOT_MENU] means the root list is showing.
+    var openSectionOrdinal by rememberSaveable { mutableStateOf(ROOT_MENU) }
+    val openSection = SettingsSection.entries.getOrNull(openSectionOrdinal)
+    var appLanguage by remember { mutableStateOf(settingsManager.appLanguage) }
 
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(dialogWidth)
-                .fillMaxHeight(dialogHeight)
-                .clip(RoundedCornerShape(18.dp)),
-            color = theme.surface,
-            tonalElevation = 6.dp
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Header Bar with >=48dp close button
+    fun copyProfilesToClipboard(includeCredentials: Boolean) {
+        val count = settingsManager.profiles.size
+        val json = settingsManager.exportProfilesJson(includeCredentials)
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("cmux pocket host profiles", json))
+        Toast.makeText(
+            context,
+            context.getString(
+                if (includeCredentials) R.string.settings_exported_with_credentials_toast
+                else R.string.settings_exported_toast,
+                count
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    BackHandler(enabled = openSection != null) { openSectionOrdinal = ROOT_MENU }
+
+    Surface(modifier = Modifier.fillMaxSize(), color = theme.background) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(theme.surfaceVariant)
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(theme.surfaceVariant)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (openSection == null) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = null,
@@ -101,119 +153,164 @@ fun SettingsDialog(
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Preferences & Connection",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = theme.onSurface
-                        )
+                    } else {
+                        IconButton(
+                            onClick = { openSectionOrdinal = ROOT_MENU },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.settings_back),
+                                tint = theme.onSurface,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = openSection?.let { stringResource(it.labelRes) }
+                            ?: stringResource(R.string.settings_title),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.onSurface
+                    )
+                }
+
+                IconButton(onClick = onDismissRequest, modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.settings_close),
+                        tint = theme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            HorizontalDivider(color = theme.divider)
+
+            if (openSection == null) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .navigationBarsPadding(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    item { BrandHeroCard() }
+
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_section_connection)) {
+                            SettingsNavRow(
+                                section = SettingsSection.CONNECTION,
+                                summary = "$hostInput:$portInput",
+                                onClick = { openSectionOrdinal = SettingsSection.CONNECTION.ordinal }
+                            )
+                        }
                     }
 
-                    IconButton(
-                        onClick = onDismissRequest,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = theme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_group_appearance)) {
+                            SettingsNavRow(
+                                section = SettingsSection.DISPLAY,
+                                summary = stringResource(themeModeLabelRes(themeMode)),
+                                onClick = { openSectionOrdinal = SettingsSection.DISPLAY.ordinal }
+                            )
+                            SettingsRowDivider()
+                            SettingsNavRow(
+                                section = SettingsSection.LANGUAGE,
+                                summary = stringResource(appLanguage.labelRes),
+                                onClick = { openSectionOrdinal = SettingsSection.LANGUAGE.ordinal }
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_section_notifications)) {
+                            SettingsNavRow(
+                                section = SettingsSection.NOTIFICATIONS,
+                                summary = stringResource(
+                                    if (vibrateOnSessionComplete) R.string.settings_notif_on
+                                    else R.string.settings_notif_off
+                                ),
+                                onClick = { openSectionOrdinal = SettingsSection.NOTIFICATIONS.ordinal }
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_group_support)) {
+                            SettingsNavRow(
+                                section = SettingsSection.UPDATES,
+                                summary = "v$currentVersion",
+                                onClick = { openSectionOrdinal = SettingsSection.UPDATES.ordinal }
+                            )
+                            SettingsRowDivider()
+                            SettingsNavRow(
+                                section = SettingsSection.OPENSOURCE,
+                                onClick = { openSectionOrdinal = SettingsSection.OPENSOURCE.ordinal }
+                            )
+                            SettingsRowDivider()
+                            SettingsNavRow(
+                                section = SettingsSection.DIAGNOSTICS,
+                                summary = stringResource(
+                                    if (isDiagnosticsEnabled) R.string.settings_row_diagnostics_on
+                                    else R.string.settings_row_diagnostics_off
+                                ),
+                                onClick = { openSectionOrdinal = SettingsSection.DIAGNOSTICS.ordinal }
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_group_data)) {
+                            SettingsNavRow(
+                                section = SettingsSection.STORAGE,
+                                summary = stringResource(
+                                    R.string.settings_row_profiles,
+                                    settingsManager.profiles.size
+                                ),
+                                onClick = { openSectionOrdinal = SettingsSection.STORAGE.ordinal }
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingsListFooter(
+                            currentVersion = currentVersion,
+                            onOpenSourceClick = { uriHandler.openUri(SOURCE_URL) }
                         )
                     }
                 }
-
-                HorizontalDivider(color = theme.divider)
-
-                // Body: 2-Column in Landscape, 1-Column in Portrait
-                if (isLandscape) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // Left Column: Connection & Gateway
-                        LazyColumn(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            item {
-                                SectionHeader(title = "CONNECTION & HOST", icon = Icons.Default.Cast, color = theme.primary)
-                            }
-                            item {
-                                ConnectionSection(
-                                    hostInput = hostInput,
-                                    portInput = portInput,
-                                    tokenInput = tokenInput,
-                                    connectionStatus = connectionStatus,
-                                    settingsManager = settingsManager,
-
-                                    onHostChange = onHostChange,
-                                    onPortChange = onPortChange,
-                                    onTokenChange = onTokenChange,
-                                    onConnectClick = onConnectClick
-                                )
-                            }
-                        }
-
-                        // Right Column: Display, Fonts, Columns & Themes
-                        LazyColumn(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            item {
-                                SectionHeader(title = "DISPLAY & TERMINAL", icon = Icons.Default.TextFields, color = theme.primary)
-                            }
-                            item {
-                                DisplaySection(
-                                    fontSizeSp = fontSizeSp,
-                                    selectedThemeHex = selectedThemeHex,
-                                    themeMode = themeMode,
-                                    onFontSizeChange = onFontSizeChange,
-                                    onThemeChange = onThemeChange,
-                                    onThemeModeChange = onThemeModeChange,
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    // Portrait: Vertical Scrollable List
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        item {
-                            SectionHeader(title = "CONNECTION & HOST", icon = Icons.Default.Cast, color = theme.primary)
-                            Spacer(modifier = Modifier.height(6.dp))
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .navigationBarsPadding(),
+                    contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    when (openSection) {
+                        SettingsSection.CONNECTION -> item {
                             ConnectionSection(
                                 hostInput = hostInput,
                                 portInput = portInput,
                                 tokenInput = tokenInput,
                                 connectionStatus = connectionStatus,
+                                connectionReadiness = connectionReadiness,
                                 settingsManager = settingsManager,
-
                                 onHostChange = onHostChange,
                                 onPortChange = onPortChange,
                                 onTokenChange = onTokenChange,
-                                onConnectClick = onConnectClick
+                                onConnectClick = onConnectClick,
+                                onScanQrClick = onScanQrClick,
+                                onRecheckGatewayVersion = onRecheckGatewayVersion,
+                                isRefreshingGatewayVersion = isRefreshingGatewayVersion,
                             )
                         }
 
-                        item {
-                            HorizontalDivider(color = theme.divider, modifier = Modifier.padding(vertical = 4.dp))
-                        }
-
-                        item {
-                            SectionHeader(title = "DISPLAY & TERMINAL", icon = Icons.Default.TextFields, color = theme.primary)
-                            Spacer(modifier = Modifier.height(6.dp))
+                        SettingsSection.DISPLAY -> item {
                             DisplaySection(
                                 fontSizeSp = fontSizeSp,
                                 selectedThemeHex = selectedThemeHex,
@@ -223,85 +320,434 @@ fun SettingsDialog(
                                 onThemeModeChange = onThemeModeChange,
                             )
                         }
-                    }
-                }
 
-                HorizontalDivider(color = theme.divider)
-
-                // Footer actions and AGPL-required source/license notice.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(theme.surfaceVariant)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(
-                        onClick = { uriHandler.openUri(SOURCE_URL) },
-                        modifier = Modifier.heightIn(min = 48.dp)
-                    ) {
-                        Column {
-                            Text(
-                                text = "cmux Pocket • v2.0",
-                                fontSize = 11.sp,
-                                color = theme.onSurfaceVariant
+                        SettingsSection.LANGUAGE -> item {
+                            LanguageSection(
+                                language = appLanguage,
+                                onLanguageChange = { language ->
+                                    appLanguage = language
+                                    settingsManager.appLanguage = language
+                                    (context as? Activity)?.recreate()
+                                }
                             )
-                            Text(
-                                text = "AGPL-3.0 • No warranty • Source & license",
-                                fontSize = 9.sp,
-                                color = theme.onSurfaceVariant
+                        }
+
+                        SettingsSection.UPDATES -> item {
+                            ReleaseSection(
+                                currentVersion = currentVersion,
+                                isChecking = isCheckingUpdate,
+                                updateResult = updateResult,
+                                onCheckClick = {
+                                    isCheckingUpdate = true
+                                    scope.launch {
+                                        val res = ReleaseUpdateChecker.check(currentVersion)
+                                        isCheckingUpdate = false
+                                        updateResult = res
+                                        when (res) {
+                                            is UpdateCheckResult.UpdateAvailable -> {
+                                                showUpdateDialog = true
+                                            }
+                                            is UpdateCheckResult.UpToDate -> {
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.settings_up_to_date, currentVersion),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                            is UpdateCheckResult.Error -> {
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.settings_update_failed, res.message),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        }
+
+                        SettingsSection.OPENSOURCE -> item {
+                            OpenSourceSection(
+                                onOpenRepo = { uriHandler.openUri(SOURCE_URL) },
+                                onOpenIssues = { uriHandler.openUri("$SOURCE_URL/issues") },
+                                onOpenLicenses = { showLicensesDialog = true }
+                            )
+                        }
+
+                        SettingsSection.NOTIFICATIONS -> item {
+                            NotificationsSection(
+                                isVibrateEnabled = vibrateOnSessionComplete,
+                                onToggleVibrate = {
+                                    vibrateOnSessionComplete = it
+                                    settingsManager.vibrateOnSessionComplete = it
+                                }
+                            )
+                        }
+
+                        SettingsSection.DIAGNOSTICS -> item {
+                            DiagnosticsSection(
+                                isEnabled = isDiagnosticsEnabled,
+                                onToggleEnabled = {
+                                    isDiagnosticsEnabled = it
+                                    settingsManager.isDiagnosticsEnabled = it
+                                },
+                                onViewLogs = { showDiagnosticsDialog = true },
+                                onExportBundle = {
+                                    val bundle = DiagnosticsManager.exportDiagnosticsBundle(
+                                        context,
+                                        settingsManager,
+                                        connectionStatus
+                                    )
+                                    val clipboard =
+                                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(
+                                        ClipData.newPlainText("cmux pocket diagnostics", bundle)
+                                    )
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.settings_diag_copied),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            )
+                        }
+
+                        SettingsSection.STORAGE -> item {
+                            StorageSection(
+                                profileCount = settingsManager.profiles.size,
+                                onExportProfiles = {
+                                    showExportProfilesDialog = true
+                                },
+                                onImportProfiles = {
+                                    val clipboard =
+                                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = clipboard.primaryClip
+                                    val text = if (clip != null && clip.itemCount > 0) {
+                                        clip.getItemAt(0).text?.toString().orEmpty()
+                                    } else {
+                                        ""
+                                    }
+                                    val count = settingsManager.importProfilesJson(text)
+                                    val message = if (count > 0) {
+                                        context.getString(R.string.settings_imported_toast, count)
+                                    } else {
+                                        context.getString(R.string.settings_import_empty_toast)
+                                    }
+                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                },
+                                onClearScrollback = {
+                                    onClearScrollback()
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.settings_scrollback_cleared_toast),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
                             )
                         }
                     }
+                }
+            }
+        }
+    }
 
-                    Button(
-                        onClick = {
-                            onConnectClick()
-                            onDismissRequest()
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = theme.primary,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Apply & Save", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    }
+    if (showLicensesDialog) {
+        OpenSourceLicensesDialog(
+            onDismissRequest = { showLicensesDialog = false }
+        )
+    }
+
+    if (showDiagnosticsDialog) {
+        DiagnosticsViewerDialog(
+            settingsManager = settingsManager,
+            connectionStatus = connectionStatus,
+            onDismissRequest = { showDiagnosticsDialog = false }
+        )
+    }
+
+    if (showExportProfilesDialog) {
+        ExportProfilesDialog(
+            profileCount = settingsManager.profiles.size,
+            onDismiss = { showExportProfilesDialog = false },
+            onExportWithoutCredentials = {
+                showExportProfilesDialog = false
+                copyProfilesToClipboard(includeCredentials = false)
+            },
+            onExportWithCredentials = {
+                showExportProfilesDialog = false
+                copyProfilesToClipboard(includeCredentials = true)
+            }
+        )
+    }
+
+    if (showUpdateDialog && updateResult is UpdateCheckResult.UpdateAvailable) {
+        val info = updateResult as UpdateCheckResult.UpdateAvailable
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.settings_update_dialog_title, info.latestVersion),
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(stringResource(R.string.settings_update_dialog_body, info.currentVersion))
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUpdateDialog = false
+                        uriHandler.openUri(info.downloadUrl)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = theme.primary)
+                ) {
+                    Text(stringResource(R.string.settings_update_download))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUpdateDialog = false }) {
+                    Text(stringResource(R.string.settings_update_later))
+                }
+            },
+            containerColor = theme.containerBg,
+            titleContentColor = theme.onContainer,
+            textContentColor = theme.onContainer
+        )
+    }
+}
+
+/** Ordinal stored when the root menu is showing instead of a section page. */
+private const val ROOT_MENU = -1
+
+/** Sections reachable from the settings root menu. */
+enum class SettingsSection(@StringRes val labelRes: Int, val icon: ImageVector) {
+    CONNECTION(R.string.settings_section_connection, Icons.Default.Cast),
+    DISPLAY(R.string.settings_section_display, Icons.Default.TextFields),
+    LANGUAGE(R.string.settings_section_language, Icons.Default.Translate),
+    UPDATES(R.string.settings_section_updates, Icons.Default.CloudDownload),
+    OPENSOURCE(R.string.settings_section_opensource, Icons.Default.Code),
+    DIAGNOSTICS(R.string.settings_section_diagnostics, Icons.Default.BugReport),
+    STORAGE(R.string.settings_section_storage, Icons.Default.Save),
+    NOTIFICATIONS(R.string.settings_section_notifications, Icons.Default.Notifications)
+}
+
+@StringRes
+private fun themeModeLabelRes(mode: ThemeMode): Int = when (mode) {
+    ThemeMode.SYSTEM -> R.string.settings_theme_system
+    ThemeMode.DARK -> R.string.settings_theme_dark
+    ThemeMode.LIGHT -> R.string.settings_theme_light
+}
+
+/** A titled group of rows on the settings root menu. */
+@Composable
+private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    val theme = CmuxTheme.colors
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title.uppercase(),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+            color = theme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = theme.cardBg)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth(), content = content)
+        }
+    }
+}
+
+@Composable
+private fun SettingsRowDivider() {
+    HorizontalDivider(
+        color = CmuxTheme.colors.cardBorder,
+        modifier = Modifier.padding(start = 56.dp)
+    )
+}
+
+/** One entry on the settings root menu: icon, name, current value and a chevron. */
+@Composable
+private fun SettingsNavRow(
+    section: SettingsSection,
+    onClick: () -> Unit,
+    summary: String? = null
+) {
+    val theme = CmuxTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SettingsIconTile(icon = section.icon)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(section.labelRes),
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = theme.onContainer
+            )
+            if (!summary.isNullOrBlank()) {
+                Text(
+                    text = summary,
+                    fontSize = 11.5.sp,
+                    color = theme.onContainerMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
+    }
+}
+
+/**
+ * Scroll-away metadata at the end of the settings root list.
+ *
+ * Settings persist as they change, so there is no pinned action bar. The AGPL-3.0 source and
+ * license notice still has to be reachable, which a list footer does without claiming screen
+ * space from every section.
+ */
+@Composable
+private fun SettingsListFooter(
+    currentVersion: String,
+    onOpenSourceClick: () -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp, bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_footer_version, currentVersion),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = theme.onSurfaceVariant
+        )
+        TextButton(
+            onClick = onOpenSourceClick,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.heightIn(min = 40.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.settings_footer_license),
+                fontSize = 11.sp,
+                color = theme.primary
+            )
+        }
+        Text(
+            text = stringResource(R.string.settings_footer_copyright),
+            fontSize = 10.sp,
+            color = theme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * Rounded tile behind a settings row glyph.
+ *
+ * [container]/[tint] default to the primary accent: DESIGN.md reserves the semantic accents for
+ * state, so a tile only takes one of them when the row itself is stateful (destructive, warning).
+ */
+@Composable
+fun SettingsIconTile(
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    container: Color = CmuxTheme.colors.primary.copy(alpha = 0.14f),
+    tint: Color = CmuxTheme.colors.primary
+) {
+    Box(
+        modifier = modifier
+            .size(30.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(container),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(17.dp)
+        )
+    }
+}
+
+@Composable
+fun LanguageSection(
+    language: AppLanguage,
+    onLanguageChange: (AppLanguage) -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Translate,
+                    contentDescription = null,
+                    tint = theme.onContainerMuted,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = stringResource(R.string.settings_language_title),
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = theme.onContainer
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_language_desc),
+                        fontSize = 11.5.sp,
+                        color = theme.onContainerMuted
+                    )
+                }
+            }
+
+            AppLanguage.entries.forEach { option ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onLanguageChange(option) }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(option.labelRes),
+                        fontSize = 14.sp,
+                        color = theme.onContainer
+                    )
+                    RadioButton(
+                        selected = option == language,
+                        onClick = { onLanguageChange(option) },
+                        colors = RadioButtonDefaults.colors(selectedColor = theme.primary)
+                    )
                 }
             }
         }
     }
 }
 
-@Composable
-fun SectionHeader(title: String, icon: ImageVector, color: Color) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 4.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = title,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -310,14 +756,19 @@ fun ConnectionSection(
     portInput: String,
     tokenInput: String,
     connectionStatus: ConnectionStatus,
+    connectionReadiness: ConnectionReadiness,
     settingsManager: SettingsManager,
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onTokenChange: (String) -> Unit,
-    onConnectClick: () -> Unit
+    onConnectClick: () -> Unit,
+    onScanQrClick: () -> Unit = {},
+    onRecheckGatewayVersion: () -> Unit = {},
+    isRefreshingGatewayVersion: Boolean = false,
 ) {
     val theme = CmuxTheme.colors
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var isTokenVisible by remember { mutableStateOf(false) }
     var profiles by remember { mutableStateOf(settingsManager.profiles) }
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -343,9 +794,9 @@ fun ConnectionSection(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Profiles", fontSize = 11.sp, color = theme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.settings_profiles_title), fontSize = 11.sp, color = theme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
             Text(
-                text = if (connectionStatus == ConnectionStatus.CONNECTED) "Connected" else connectionStatus.name.lowercase().replaceFirstChar { it.uppercase() },
+                text = if (connectionStatus == ConnectionStatus.CONNECTED) connectionReadiness.summary else connectionStatus.name.lowercase().replaceFirstChar { it.uppercase() },
                 fontSize = 11.sp,
                 color = theme.onSurfaceVariant
             )
@@ -371,7 +822,7 @@ fun ConnectionSection(
                             {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Delete ${profile.name}",
+                                    contentDescription = stringResource(R.string.settings_profile_delete, profile.name),
                                     modifier = Modifier
                                         .size(16.dp)
                                         .clickable {
@@ -387,9 +838,16 @@ fun ConnectionSection(
                         profileName = ""
                         showSaveDialog = true
                     },
-                    label = { Text("Add Host", fontSize = 11.sp) },
+                    label = { Text(stringResource(R.string.settings_add_host), fontSize = 11.sp) },
                     leadingIcon = {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
+                )
+                AssistChip(
+                    onClick = onScanQrClick,
+                    label = { Text(stringResource(R.string.settings_scan_qr), fontSize = 11.sp) },
+                    leadingIcon = {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = stringResource(R.string.settings_scan_qr_desc), modifier = Modifier.size(16.dp))
                     }
                 )
             }
@@ -398,8 +856,8 @@ fun ConnectionSection(
                 value = hostInput,
                 onValueChange = onHostChange,
                 enabled = activeProfileId != ConnectionProfile.USB_ID,
-                label = { Text("Host or URL", fontSize = 12.sp) },
-                placeholder = { Text("IP or https://tunnel.example.com", fontSize = 12.sp, color = Color.Gray) },
+                label = { Text(stringResource(R.string.settings_host_or_url), fontSize = 12.sp) },
+                placeholder = { Text(stringResource(R.string.settings_host_placeholder), fontSize = 12.sp, color = theme.onSurfaceVariant) },
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = theme.onSurface,
@@ -415,7 +873,7 @@ fun ConnectionSection(
                     value = portInput,
                     onValueChange = onPortChange,
                     enabled = activeProfileId != ConnectionProfile.USB_ID,
-                    label = { Text("Port", fontSize = 12.sp) },
+                    label = { Text(stringResource(R.string.settings_port), fontSize = 12.sp) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = theme.onSurface,
@@ -429,14 +887,14 @@ fun ConnectionSection(
                 OutlinedTextField(
                     value = tokenInput,
                     onValueChange = onTokenChange,
-                    label = { Text("Auth Token", fontSize = 12.sp) },
+                    label = { Text(stringResource(R.string.settings_auth_token), fontSize = 12.sp) },
                     singleLine = true,
                     visualTransformation = if (isTokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { isTokenVisible = !isTokenVisible }, modifier = Modifier.size(36.dp)) {
                             Icon(
                                 imageVector = if (isTokenVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                contentDescription = "Toggle Token Visibility",
+                                contentDescription = stringResource(R.string.settings_toggle_token),
                                 tint = theme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -452,6 +910,18 @@ fun ConnectionSection(
                 )
             }
 
+            ConnectionAssistant(
+                readiness = connectionReadiness,
+                onCheckConnection = onConnectClick,
+            )
+
+            GatewayVersionCard(
+                readiness = connectionReadiness,
+                canRecheck = connectionStatus == ConnectionStatus.CONNECTED,
+                isRefreshing = isRefreshingGatewayVersion,
+                onRecheck = onRecheckGatewayVersion,
+            )
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = {
@@ -463,9 +933,14 @@ fun ConnectionSection(
                             scanResults = found
                             isScanning = false
                             scanMessage = if (found.isEmpty()) {
-                                "No open gateway ports found on this subnet"
+                                context.getString(R.string.settings_scan_none_found)
                             } else {
-                                "Found ${found.size} host${if (found.size == 1) "" else "s"}"
+                                val hostCountStr = if (found.size == 1) {
+                                    context.getString(R.string.settings_scan_host_one)
+                                } else {
+                                    context.getString(R.string.settings_scan_host_many, found.size)
+                                }
+                                context.getString(R.string.settings_scan_found, hostCountStr)
                             }
                         }
                     },
@@ -478,19 +953,19 @@ fun ConnectionSection(
                     if (isScanning) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Scanning…", fontSize = 13.sp)
+                        Text(stringResource(R.string.settings_scanning), fontSize = 13.sp)
                     } else {
                         Icon(Icons.Default.WifiFind, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Scan Wi-Fi", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.settings_scan_wifi), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
 
                 Button(
                     onClick = onConnectClick,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (theme.isDark) Color(0xFF00FF7F) else Color(0xFF007AFF),
-                        contentColor = Color.Black
+                        containerColor = theme.primary,
+                        contentColor = theme.onPrimary
                     ),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
@@ -503,7 +978,7 @@ fun ConnectionSection(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Reconnect", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_reconnect), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -537,9 +1012,9 @@ fun ConnectionSection(
                         ) {
                             Column {
                                 Text(result.endpointLabel(), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = theme.onSurface)
-                                Text("${result.source} • ${result.latencyMs} ms", fontSize = 11.sp, color = theme.onSurfaceVariant)
+                                Text(stringResource(R.string.settings_latency, result.source, result.latencyMs), fontSize = 11.sp, color = theme.onSurfaceVariant)
                             }
-                            Text("Use", fontSize = 12.sp, color = theme.primary, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.settings_use), fontSize = 12.sp, color = theme.primary, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -553,32 +1028,32 @@ fun ConnectionSection(
         var newToken by remember { mutableStateOf(tokenInput) }
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
-            title = { Text("Add Host") },
+            title = { Text(stringResource(R.string.settings_add_host)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = profileName,
                         onValueChange = { profileName = it },
-                        label = { Text("Name") },
+                        label = { Text(stringResource(R.string.settings_name)) },
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = newHost,
                         onValueChange = { newHost = it },
-                        label = { Text("Host or URL") },
-                        placeholder = { Text("host.example or https://tunnel.example") },
+                        label = { Text(stringResource(R.string.settings_host_or_url)) },
+                        placeholder = { Text(stringResource(R.string.settings_host_placeholder_short)) },
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = newPort,
                         onValueChange = { newPort = it },
-                        label = { Text("Port") },
+                        label = { Text(stringResource(R.string.settings_port)) },
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = newToken,
                         onValueChange = { newToken = it },
-                        label = { Text("Auth Token") },
+                        label = { Text(stringResource(R.string.settings_auth_token)) },
                         singleLine = true
                     )
                 }
@@ -603,12 +1078,12 @@ fun ConnectionSection(
                         showSaveDialog = false
                     }
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.settings_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSaveDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.settings_cancel))
                 }
             }
         )
@@ -639,22 +1114,22 @@ fun DisplaySection(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Theme Mode Selection (System / Dark / Light)
-            Text("App Theme Mode", fontSize = 12.sp, color = theme.onSurface, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.settings_theme_mode_title), fontSize = 12.sp, color = theme.onSurface, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(
                     selected = themeMode == ThemeMode.SYSTEM,
                     onClick = { onThemeModeChange(ThemeMode.SYSTEM) },
-                    label = { Text("System", fontSize = 11.sp) }
+                    label = { Text(stringResource(R.string.settings_theme_system), fontSize = 11.sp) }
                 )
                 FilterChip(
                     selected = themeMode == ThemeMode.DARK,
                     onClick = { onThemeModeChange(ThemeMode.DARK) },
-                    label = { Text("Dark", fontSize = 11.sp) }
+                    label = { Text(stringResource(R.string.settings_theme_dark), fontSize = 11.sp) }
                 )
                 FilterChip(
                     selected = themeMode == ThemeMode.LIGHT,
                     onClick = { onThemeModeChange(ThemeMode.LIGHT) },
-                    label = { Text("Light", fontSize = 11.sp) }
+                    label = { Text(stringResource(R.string.settings_theme_light), fontSize = 11.sp) }
                 )
             }
 
@@ -664,8 +1139,8 @@ fun DisplaySection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Font Size · This Terminal", fontSize = 13.sp, color = theme.onSurface)
-                Text("${fontSizeSp.toInt()} sp", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.primary)
+                Text(stringResource(R.string.settings_font_size_title), fontSize = 13.sp, color = theme.onSurface)
+                Text(stringResource(R.string.font_size_sp_value, fontSizeSp.toInt()), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.primary)
             }
 
             Slider(
@@ -697,40 +1172,758 @@ fun DisplaySection(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
-                    Text("Maple Mono NF (Built-in)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.onSurface)
-                    Text("Nerd Font v3 Icons + CJK Monospace", fontSize = 10.sp, color = theme.onSurfaceVariant)
+                    Text(stringResource(R.string.settings_font_builtin), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.onSurface)
+                    Text(stringResource(R.string.settings_font_builtin_desc), fontSize = 10.sp, color = theme.onSurfaceVariant)
                 }
             }
 
             // Terminal Background Theme Options
-            Text("Terminal Canvas Palette", fontSize = 12.sp, color = theme.onSurface, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.settings_terminal_palette), fontSize = 12.sp, color = theme.onSurface, fontWeight = FontWeight.SemiBold)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 AVAILABLE_THEMES.forEach { opt ->
                     val isSelected = opt.hexColor == selectedThemeHex
-                    val borderColor = if (isSelected) theme.primary else Color.Transparent
+                    val swatchColor = Color(android.graphics.Color.parseColor(opt.hexColor))
+                    val borderColor = if (isSelected) theme.primary else theme.controlBorder
+                    // The swatch fill is chosen at runtime (user's terminal palette), so the label
+                    // ink must follow that fill's luminance rather than the app theme.
+                    val labelColor = if (swatchColor.luminance() > 0.45f) {
+                        theme.inkOnLightFill
+                    } else {
+                        theme.inkOnDarkFill
+                    }
 
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(android.graphics.Color.parseColor(opt.hexColor)))
-                            .border(2.dp, borderColor, RoundedCornerShape(6.dp))
+                            .background(swatchColor)
+                            .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(6.dp))
                             .clickable { onThemeChange(opt.hexColor) },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = opt.name.take(6),
+                            text = stringResource(opt.nameRes),
                             fontSize = 11.sp,
-                            color = Color.White,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            color = labelColor,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun BrandHeroCard() {
+    val theme = CmuxTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(60.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(theme.primary.copy(alpha = 0.12f))
+                .border(1.dp, theme.cardBorder, RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Terminal,
+                contentDescription = null,
+                tint = theme.primary,
+                modifier = Modifier.size(34.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = stringResource(R.string.app_name),
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                color = theme.onContainer
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(theme.primary.copy(alpha = 0.15f))
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_brand_badge),
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = theme.primary
+                )
+            }
+        }
+
+        Text(
+            text = stringResource(R.string.settings_brand_tagline, "0.2.0"),
+            fontSize = 12.sp,
+            color = theme.onContainerMuted,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
+fun ReleaseSection(
+    currentVersion: String,
+    isChecking: Boolean,
+    updateResult: UpdateCheckResult?,
+    onCheckClick: () -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !isChecking, onClick = onCheckClick)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(theme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            tint = theme.onPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = stringResource(R.string.settings_check_update),
+                            fontSize = 14.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = theme.onContainer
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_current_version, currentVersion),
+                            fontSize = 11.5.sp,
+                            color = theme.onContainerMuted
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isChecking) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = theme.primary
+                        )
+                    } else if (updateResult is UpdateCheckResult.UpdateAvailable) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(theme.accentOrange.copy(alpha = 0.2f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.settings_update_available_badge),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = theme.accentOrangeInk
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = stringResource(R.string.settings_check),
+                            fontSize = 12.sp,
+                            color = theme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = "›", fontSize = 16.sp, color = theme.onContainerMuted)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun OpenSourceSection(
+    onOpenRepo: () -> Unit,
+    onOpenIssues: () -> Unit,
+    onOpenLicenses: () -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenRepo)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(theme.brandGithub),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Code,
+                            contentDescription = null,
+                            tint = theme.onBrandGithub,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(stringResource(R.string.settings_repo), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_repo_value), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.settings_star), fontSize = 12.sp, color = theme.primary, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
+                }
+            }
+
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 56.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenIssues)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    SettingsIconTile(icon = Icons.Default.BugReport)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(stringResource(R.string.settings_feedback), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_feedback_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                    }
+                }
+                Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
+            }
+
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 56.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenLicenses)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    SettingsIconTile(icon = Icons.Default.Description)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(stringResource(R.string.settings_licenses), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_licenses_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                    }
+                }
+                Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
+            }
+        }
+    }
+}
+
+@Composable
+fun DiagnosticsSection(
+    isEnabled: Boolean,
+    onToggleEnabled: (Boolean) -> Unit,
+    onViewLogs: () -> Unit,
+    onExportBundle: () -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onViewLogs)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    SettingsIconTile(icon = Icons.Default.Terminal)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(stringResource(R.string.settings_diag_toggle), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(if (isEnabled) R.string.settings_diag_enabled_desc else R.string.settings_diag_disabled_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                    }
+                }
+
+                Switch(
+                    checked = isEnabled,
+                    onCheckedChange = onToggleEnabled,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = theme.onPrimary,
+                        checkedTrackColor = theme.accentGreen,
+                        uncheckedThumbColor = theme.onSurfaceVariant,
+                        uncheckedTrackColor = theme.surfaceVariant
+                    )
+                )
+            }
+
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 56.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onExportBundle)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    SettingsIconTile(icon = Icons.Default.Share)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(stringResource(R.string.settings_diag_export), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_diag_export_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.settings_json_label), fontSize = 12.sp, color = theme.onContainerMuted)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun NotificationsSection(
+    isVibrateEnabled: Boolean,
+    onToggleVibrate: (Boolean) -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f, fill = false)
+            ) {
+                SettingsIconTile(icon = Icons.Default.Vibration)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(stringResource(R.string.settings_notif_vibrate), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                    Text(stringResource(R.string.settings_notif_vibrate_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Switch(
+                checked = isVibrateEnabled,
+                onCheckedChange = onToggleVibrate,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = theme.onPrimary,
+                    checkedTrackColor = theme.accentGreen,
+                    uncheckedThumbColor = theme.onSurfaceVariant,
+                    uncheckedTrackColor = theme.surfaceVariant
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun StorageSection(
+    profileCount: Int,
+    onExportProfiles: () -> Unit,
+    onImportProfiles: () -> Unit,
+    onClearScrollback: () -> Unit
+) {
+    val theme = CmuxTheme.colors
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.cardBg)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onExportProfiles)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    SettingsIconTile(icon = Icons.Default.FileDownload)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(stringResource(R.string.settings_export_profiles), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_export_profiles_desc, profileCount), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                    }
+                }
+                Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
+            }
+
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 56.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onImportProfiles)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    SettingsIconTile(icon = Icons.Default.FileUpload)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(stringResource(R.string.settings_import_profiles), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_import_profiles_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                    }
+                }
+                Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
+            }
+
+            HorizontalDivider(color = theme.cardBorder, modifier = Modifier.padding(start = 56.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onClearScrollback)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    SettingsIconTile(
+                        icon = Icons.Default.CleaningServices,
+                        container = theme.accentRed.copy(alpha = 0.16f),
+                        tint = theme.accentRedInk
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(stringResource(R.string.settings_clear_scrollback), fontSize = 14.5.sp, fontWeight = FontWeight.Medium, color = theme.onContainer)
+                        Text(stringResource(R.string.settings_clear_scrollback_desc), fontSize = 11.5.sp, color = theme.onContainerMuted)
+                    }
+                }
+                Text("›", fontSize = 16.sp, color = theme.onContainerMuted)
+            }
+        }
+    }
+}
+
+
+private const val MAC_GATEWAY_UPGRADE_COMMAND =
+    "brew update && brew upgrade cmux-pocket && cmux-pocket setup"
+private const val LATEST_RELEASE_URL = "https://github.com/shiquda/cmux-pocket/releases/latest"
+
+/** Version transparency for the connected host plus the one-tap upgrade paths. */
+@Composable
+fun GatewayVersionCard(
+    readiness: ConnectionReadiness,
+    canRecheck: Boolean,
+    isRefreshing: Boolean,
+    onRecheck: () -> Unit,
+) {
+    val theme = CmuxTheme.colors
+    val host = readiness.hostStatus
+    val compatibility = readiness.compatibility
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    var showUpgradeGuide by remember { mutableStateOf(false) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = theme.surfaceVariant),
+        shape = RoundedCornerShape(10.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.conn_versions_title),
+                    fontSize = 11.sp,
+                    color = theme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                CompatibilityBadge(compatibility)
+            }
+
+            GatewayVersionRow(
+                label = stringResource(R.string.conn_version_client),
+                value = "v${BuildConfig.VERSION_NAME}",
+            )
+            GatewayVersionRow(
+                label = stringResource(R.string.conn_version_gateway),
+                value = host?.gatewayVersion?.let { "v$it" }
+                    ?: stringResource(R.string.conn_version_unknown),
+            )
+            GatewayVersionRow(
+                label = stringResource(R.string.conn_version_protocol),
+                value = host?.protocolVersion?.let { "v$it" }
+                    ?: stringResource(R.string.conn_version_unknown),
+            )
+            GatewayVersionRow(
+                label = stringResource(R.string.conn_version_wake),
+                value = when {
+                    host == null -> stringResource(R.string.conn_version_unknown)
+                    host.supportsWake -> stringResource(R.string.conn_version_wake_ready)
+                    else -> stringResource(R.string.conn_version_wake_unavailable)
+                },
+                valueColor = when {
+                    host == null -> theme.onSurfaceVariant
+                    host.supportsWake -> theme.accentGreenInk
+                    else -> theme.accentOrangeInk
+                },
+            )
+
+            when (compatibility) {
+                GatewayCompatibility.GATEWAY_OUTDATED -> Text(
+                    stringResource(R.string.conn_version_gateway_outdated_body),
+                    fontSize = 11.sp,
+                    color = theme.accentOrangeInk,
+                )
+                GatewayCompatibility.INCOMPATIBLE -> Text(
+                    stringResource(
+                        R.string.conn_version_incompatible_body,
+                        host?.protocolVersion ?: "—",
+                        GatewayVersions.EXPECTED_PROTOCOL_MAJOR,
+                    ),
+                    fontSize = 11.sp,
+                    color = theme.accentRedInk,
+                )
+                GatewayCompatibility.CLIENT_OUTDATED -> Text(
+                    stringResource(R.string.conn_version_client_outdated_body),
+                    fontSize = 11.sp,
+                    color = theme.accentBlueInk,
+                )
+                else -> Unit
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(
+                    onClick = onRecheck,
+                    enabled = canRecheck && !isRefreshing,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.heightIn(min = 44.dp),
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Text(stringResource(R.string.conn_btn_recheck_version), fontSize = 12.sp)
+                }
+                if (compatibility == GatewayCompatibility.GATEWAY_OUTDATED ||
+                    compatibility == GatewayCompatibility.INCOMPATIBLE
+                ) {
+                    TextButton(onClick = { showUpgradeGuide = true }) {
+                        Text(stringResource(R.string.conn_btn_upgrade_guide), fontSize = 12.sp)
+                    }
+                }
+                if (compatibility == GatewayCompatibility.CLIENT_OUTDATED) {
+                    TextButton(onClick = { uriHandler.openUri(LATEST_RELEASE_URL) }) {
+                        Text(stringResource(R.string.conn_btn_download_client), fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    if (showUpgradeGuide) {
+        AlertDialog(
+            onDismissRequest = { showUpgradeGuide = false },
+            title = { Text(stringResource(R.string.conn_upgrade_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        stringResource(R.string.conn_upgrade_body),
+                        color = theme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                    Surface(
+                        color = theme.cardBg,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, theme.cardBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                text = MAC_GATEWAY_UPGRADE_COMMAND,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                color = theme.onSurface,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(MAC_GATEWAY_UPGRADE_COMMAND))
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.conn_upgrade_copied),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                ) {
+                    Text(stringResource(R.string.conn_btn_copy_upgrade_cmd))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showUpgradeGuide = false
+                        onRecheck()
+                    }
+                ) {
+                    Text(stringResource(R.string.conn_btn_recheck_version))
+                }
+            },
+            containerColor = theme.containerBg,
+            titleContentColor = theme.onContainer,
+            textContentColor = theme.onContainer,
+        )
+    }
+}
+
+@Composable
+private fun GatewayVersionRow(
+    label: String,
+    value: String,
+    valueColor: Color = CmuxTheme.colors.onSurface,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, fontSize = 12.sp, color = CmuxTheme.colors.onSurfaceVariant)
+        Text(value, fontSize = 12.sp, color = valueColor, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun CompatibilityBadge(compatibility: GatewayCompatibility) {
+    val theme = CmuxTheme.colors
+    val (label, color, ink) = when (compatibility) {
+        GatewayCompatibility.MATCHED ->
+            Triple(stringResource(R.string.conn_version_match), theme.accentGreen, theme.accentGreenInk)
+        GatewayCompatibility.GATEWAY_OUTDATED ->
+            Triple(stringResource(R.string.conn_version_outdated_badge), theme.accentOrange, theme.accentOrangeInk)
+        GatewayCompatibility.CLIENT_OUTDATED ->
+            Triple(stringResource(R.string.conn_version_update_badge), theme.accentBlue, theme.accentBlueInk)
+        GatewayCompatibility.INCOMPATIBLE ->
+            Triple(stringResource(R.string.conn_version_incompatible_badge), theme.accentRed, theme.accentRedInk)
+        GatewayCompatibility.UNKNOWN ->
+            Triple(stringResource(R.string.conn_version_unknown), theme.onSurfaceVariant, theme.onSurfaceVariant)
+    }
+    Surface(
+        color = color.copy(alpha = 0.16f),
+        contentColor = ink,
+        shape = RoundedCornerShape(6.dp),
+    ) {
+        Text(
+            label,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
     }
 }

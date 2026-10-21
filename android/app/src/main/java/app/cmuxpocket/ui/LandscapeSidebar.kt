@@ -18,6 +18,9 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +29,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import app.cmuxpocket.R
 
 @Composable
 fun LandscapeSidebar(
@@ -41,6 +46,9 @@ fun LandscapeSidebar(
     onCloseSurface: (String) -> Unit,
     onNewWorkspace: () -> Unit,
     onNewSurface: () -> Unit,
+    onRenameWorkspace: ((WorkspaceInfo) -> Unit)? = null,
+    onCloseWorkspace: ((String) -> Unit)? = null,
+    onRenameSurface: ((SurfaceInfo) -> Unit)? = null,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -92,14 +100,14 @@ fun LandscapeSidebar(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ChevronLeft,
-                                    contentDescription = "Collapse Sidebar",
+                                    contentDescription = stringResource(R.string.sidebar_collapse),
                                     tint = theme.primary,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "cmux Pocket",
+                                text = stringResource(R.string.sidebar_brand),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = theme.onSurface
@@ -107,10 +115,10 @@ fun LandscapeSidebar(
                         }
 
                         val statusColor = when (connectionStatus) {
-                            ConnectionStatus.CONNECTED -> Color(0xFF4CAF50)
-                            ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Color(0xFFFF9800)
-                            ConnectionStatus.ERROR -> Color(0xFFF44336)
-                            ConnectionStatus.DISCONNECTED -> Color.Gray
+                            ConnectionStatus.CONNECTED -> theme.accentGreen
+                            ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> theme.accentOrange
+                            ConnectionStatus.ERROR -> theme.accentRed
+                            ConnectionStatus.DISCONNECTED -> theme.accentRed
                         }
                         Box(
                             modifier = Modifier
@@ -127,7 +135,7 @@ fun LandscapeSidebar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Menu,
-                            contentDescription = "Expand Sidebar",
+                            contentDescription = stringResource(R.string.sidebar_expand),
                             tint = theme.onSurface,
                             modifier = Modifier.size(26.dp)
                         )
@@ -158,9 +166,9 @@ fun LandscapeSidebar(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("WORKSPACES", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.onSurfaceVariant)
+                                    Text(stringResource(R.string.sidebar_workspaces_header), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.onSurfaceVariant)
                                     IconButton(onClick = onNewWorkspace, modifier = Modifier.size(32.dp)) {
-                                        Icon(Icons.Default.Add, contentDescription = "New Workspace", tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.sidebar_new_workspace), tint = theme.accentGreen, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -200,6 +208,50 @@ fun LandscapeSidebar(
                                             color = theme.onSurfaceVariant
                                         )
                                     }
+                                    var menuExpanded by remember { mutableStateOf(false) }
+                                    Box {
+                                        IconButton(
+                                            onClick = { menuExpanded = true },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = stringResource(R.string.menu_rename),
+                                                tint = theme.onSurfaceVariant,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = menuExpanded,
+                                            onDismissRequest = { menuExpanded = false },
+                                            modifier = Modifier.background(theme.containerBg)
+                                        ) {
+                                            if (onRenameWorkspace != null) {
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.menu_rename), color = theme.onContainer) },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.Edit, contentDescription = null, tint = theme.onContainer, modifier = Modifier.size(16.dp))
+                                                    },
+                                                    onClick = {
+                                                        menuExpanded = false
+                                                        onRenameWorkspace(ws)
+                                                    }
+                                                )
+                                            }
+                                            if (onCloseWorkspace != null) {
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.menu_delete), color = theme.accentRed) },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.Delete, contentDescription = null, tint = theme.accentRed, modifier = Modifier.size(16.dp))
+                                                    },
+                                                    onClick = {
+                                                        menuExpanded = false
+                                                        onCloseWorkspace(ws.stableKey)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -212,9 +264,9 @@ fun LandscapeSidebar(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("TABS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.onSurfaceVariant)
+                                    Text(stringResource(R.string.sidebar_tabs_header), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.onSurfaceVariant)
                                     IconButton(onClick = onNewSurface, modifier = Modifier.size(32.dp)) {
-                                        Icon(Icons.Default.Add, contentDescription = "New Tab", tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.sidebar_new_tab), tint = theme.accentGreen, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -235,7 +287,7 @@ fun LandscapeSidebar(
                                     Icon(
                                         imageVector = Icons.Default.Terminal,
                                         contentDescription = null,
-                                        tint = if (isSurfSelected) (if (theme.isDark) Color(0xFF00FF7F) else Color(0xFF007AFF)) else theme.onSurfaceVariant,
+                                        tint = if (isSurfSelected) theme.primary else theme.onSurfaceVariant,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -252,10 +304,10 @@ fun LandscapeSidebar(
                                     // Agent Attention / Activity Dot
                                     if (surf.attention || surf.agentState != null) {
                                         val dotColor = when (surf.agentState) {
-                                            "working" -> Color(0xFF2196F3)
-                                            "needs_input" -> Color(0xFFFF9800)
-                                            "done" -> Color(0xFF4CAF50)
-                                            else -> Color(0xFFFF5722)
+                                            "working" -> theme.accentOrange
+                                            "needs_input" -> theme.accentOrange
+                                            "done" -> theme.accentGreen
+                                            else -> theme.accentRed
                                         }
                                         Box(
                                             modifier = Modifier
@@ -265,16 +317,45 @@ fun LandscapeSidebar(
                                         )
                                     }
 
-                                    if (activeSurfaces.size > 1) {
+                                    var menuExpanded by remember { mutableStateOf(false) }
+                                    Box {
                                         IconButton(
-                                            onClick = { onCloseSurface(surf.id) },
+                                            onClick = { menuExpanded = true },
                                             modifier = Modifier.size(24.dp)
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Close",
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = stringResource(R.string.menu_rename),
                                                 tint = theme.onSurfaceVariant,
-                                                modifier = Modifier.size(14.dp)
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = menuExpanded,
+                                            onDismissRequest = { menuExpanded = false },
+                                            modifier = Modifier.background(theme.containerBg)
+                                        ) {
+                                            if (onRenameSurface != null) {
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.menu_rename), color = theme.onContainer) },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.Edit, contentDescription = null, tint = theme.onContainer, modifier = Modifier.size(16.dp))
+                                                    },
+                                                    onClick = {
+                                                        menuExpanded = false
+                                                        onRenameSurface(surf)
+                                                    }
+                                                )
+                                            }
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.menu_close), color = theme.accentRed) },
+                                                leadingIcon = {
+                                                    Icon(Icons.Default.Close, contentDescription = null, tint = theme.accentRed, modifier = Modifier.size(16.dp))
+                                                },
+                                                onClick = {
+                                                    menuExpanded = false
+                                                    onCloseSurface(surf.id)
+                                                }
                                             )
                                         }
                                     }
@@ -303,16 +384,16 @@ fun LandscapeSidebar(
                                     Icon(
                                         imageVector = Icons.Default.Terminal,
                                         contentDescription = surf.displayTitle,
-                                        tint = if (isSurfSelected) (if (theme.isDark) Color(0xFF00FF7F) else Color(0xFF007AFF)) else theme.onSurfaceVariant,
+                                        tint = if (isSurfSelected) theme.primary else theme.onSurfaceVariant,
                                         modifier = Modifier.size(22.dp)
                                     )
 
                                     if (surf.attention || surf.agentState != null) {
                                         val dotColor = when (surf.agentState) {
-                                            "working" -> Color(0xFF2196F3)
-                                            "needs_input" -> Color(0xFFFF9800)
-                                            "done" -> Color(0xFF4CAF50)
-                                            else -> Color(0xFFFF5722)
+                                            "working" -> theme.accentOrange
+                                            "needs_input" -> theme.accentOrange
+                                            "done" -> theme.accentGreen
+                                            else -> theme.accentRed
                                         }
                                         Box(
                                             modifier = Modifier
@@ -332,8 +413,8 @@ fun LandscapeSidebar(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Add,
-                                        contentDescription = "Add Tab",
-                                        tint = if (theme.isDark) Color(0xFF81C784) else Color(0xFF2E7D32),
+                                        contentDescription = stringResource(R.string.sidebar_add_tab),
+                                        tint = theme.accentGreen,
                                         modifier = Modifier.size(22.dp)
                                     )
                                 }
@@ -352,11 +433,49 @@ fun LandscapeSidebar(
             ) {
                 Icon(
                     imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
+                    contentDescription = stringResource(R.string.sidebar_settings),
                     tint = theme.onSurfaceVariant,
                     modifier = Modifier.size(22.dp)
                 )
             }
+        }
+    }
+}
+
+/** Compact "N tabs · path" line shown under a workspace name in the rail. */
+@Composable
+private fun WorkspaceMetaLine(
+    tabCount: Int,
+    path: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = if (tabCount == 1) {
+                stringResource(R.string.sidebar_tab_count_one)
+            } else {
+                stringResource(R.string.sidebar_tab_count_many, tabCount)
+            },
+            fontSize = 10.sp,
+            color = color,
+            maxLines = 1
+        )
+        if (path.isNotBlank()) {
+            Text(
+                text = path,
+                fontSize = 10.sp,
+                color = color,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .weight(1f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.End
+            )
         }
     }
 }

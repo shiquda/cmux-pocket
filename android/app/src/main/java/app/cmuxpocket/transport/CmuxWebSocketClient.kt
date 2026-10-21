@@ -2,6 +2,7 @@ package app.cmuxpocket.transport
 
 import app.cmuxpocket.engine.NumericTraceHelper
 import app.cmuxpocket.protocol.*
+import app.cmuxpocket.diagnostics.DiagnosticsManager
 import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -26,6 +27,14 @@ enum class ConnectionStatus {
     ERROR
 }
 
+enum class ConnectionFailure {
+    NETWORK,
+    AUTHENTICATION,
+    AUTHENTICATION_TIMEOUT,
+    TLS,
+    DNS,
+}
+
 class CmuxWebSocketClient(
     private val scope: CoroutineScope,
     private val json: Json = Json {
@@ -46,6 +55,8 @@ class CmuxWebSocketClient(
 
     private val _statusFlow = MutableStateFlow<ConnectionStatus>(ConnectionStatus.DISCONNECTED)
     val statusFlow: StateFlow<ConnectionStatus> = _statusFlow.asStateFlow()
+    var connectionFailure: ConnectionFailure? = null
+        private set
 
     private val _renderGridEvents = MutableSharedFlow<RenderFrameEnvelope>(extraBufferCapacity = 128)
     val renderGridEvents: SharedFlow<RenderFrameEnvelope> = _renderGridEvents.asSharedFlow()
@@ -56,6 +67,7 @@ class CmuxWebSocketClient(
     val agentCompletionEvents: SharedFlow<JsonObject> = _agentCompletionEvents.asSharedFlow()
 
     private data class InboundMessage(
+        val socket: WebSocket,
         val text: String,
         val receivedNanos: Long
     )
@@ -66,6 +78,7 @@ class CmuxWebSocketClient(
     init {
         scope.launch(Dispatchers.Default) {
             for (msg in inboundChannel) {
+                if (msg.socket !== webSocket) continue
                 processInboundMessage(msg.text, msg.receivedNanos)
             }
         }
@@ -73,24 +86,59 @@ class CmuxWebSocketClient(
 
     private var authToken: String = ""
     private var isAuthCompleted = false
+    private var connectionTimeoutJob: Job? = null
 
     fun connect(url: String, token: String) {
         // Validate before publishing CONNECTING so rejected URLs remain disconnected.
         val request = Request.Builder().url(url).build()
         this.authToken = token
         this.isAuthCompleted = false
+        connectionFailure = null
         _statusFlow.value = ConnectionStatus.CONNECTING
         Log.i(tag, "Connecting to gateway...")
+        DiagnosticsManager.log("WS", "Connecting to $url", listOf(token))
 
         webSocket = okHttpClient.newWebSocket(request, this)
+        connectionTimeoutJob?.cancel()
+        connectionTimeoutJob = scope.launch {
+            delay(10_000)
+            if (!isAuthCompleted) {
+                val stage = if (_statusFlow.value == ConnectionStatus.AUTHENTICATING) {
+                    ConnectionFailure.AUTHENTICATION_TIMEOUT
+                } else {
+                    ConnectionFailure.NETWORK
+                }
+                webSocket?.cancel()
+                webSocket = null
+                connectionFailure = stage
+                _statusFlow.value = ConnectionStatus.ERROR
+            }
+        }
     }
 
     fun disconnect() {
         Log.i(tag, "Disconnecting...")
+        DiagnosticsManager.log("WS", "Disconnecting...")
         webSocket?.close(1000, "Normal Closure")
+        releaseSocket()
+        _statusFlow.value = ConnectionStatus.DISCONNECTED
+    }
+
+    /**
+     * Drops the current socket without publishing a status change. Used when the caller is
+     * about to publish CONNECTING itself, so the UI never flashes a disconnection it did not
+     * experience.
+     */
+    fun discardSocket() {
+        webSocket?.cancel()
+        releaseSocket()
+    }
+
+    /** Clears per-connection bookkeeping; the caller decides whether the socket is closed or cancelled. */
+    private fun releaseSocket() {
+        connectionTimeoutJob?.cancel()
         webSocket = null
         isAuthCompleted = false
-        _statusFlow.value = ConnectionStatus.DISCONNECTED
         pendingRequests.forEach { (_, deferred) ->
             deferred.completeExceptionally(Exception("WebSocket disconnected"))
         }
@@ -104,13 +152,14 @@ class CmuxWebSocketClient(
         val authReq = AuthRequest(type = "auth", token = authToken, clientId = "android-${UUID.randomUUID()}")
         val authJson = json.encodeToString(AuthRequest.serializer(), authReq)
         webSocket.send(authJson)
+        DiagnosticsManager.log("WS", "WebSocket onOpen: sent auth frame", listOf(authToken))
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
         if (this.webSocket !== webSocket) return
         val receivedNanos = System.nanoTime()
         runBlocking {
-            inboundChannel.send(InboundMessage(text, receivedNanos))
+            inboundChannel.send(InboundMessage(webSocket, text, receivedNanos))
         }
     }
 
@@ -124,13 +173,19 @@ class CmuxWebSocketClient(
                 val msgType = jsonObject["type"]?.jsonPrimitive?.content
                 if (msgType == "auth_ok") {
                     isAuthCompleted = true
+                    connectionTimeoutJob?.cancel()
                     Log.i(tag, "Auth success! Changing status to CONNECTED")
                     _statusFlow.value = ConnectionStatus.CONNECTED
+                    DiagnosticsManager.log("AUTH", "Authentication success (CONNECTED)")
                     return
                 } else if (msgType == "auth_error") {
                     Log.e(tag, "Auth error received from server")
+                    connectionTimeoutJob?.cancel()
+                    webSocket?.close(1008, "Authentication failed")
+                    webSocket = null
+                    connectionFailure = ConnectionFailure.AUTHENTICATION
                     _statusFlow.value = ConnectionStatus.ERROR
-                    disconnect()
+                    DiagnosticsManager.log("AUTH", "Authentication failed (auth_error)")
                     return
                 }
             }
@@ -192,6 +247,13 @@ class CmuxWebSocketClient(
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
         if (this.webSocket !== webSocket) return
         Log.e(tag, "onFailure: WebSocket error", t)
+        connectionTimeoutJob?.cancel()
+        connectionFailure = when (t) {
+            is javax.net.ssl.SSLException -> ConnectionFailure.TLS
+            is java.net.UnknownHostException -> ConnectionFailure.DNS
+            else -> ConnectionFailure.NETWORK
+        }
+        DiagnosticsManager.log("WS", "WebSocket error: ${t.message}")
         _statusFlow.value = ConnectionStatus.ERROR
         pendingRequests.forEach { (_, deferred) ->
             deferred.completeExceptionally(t)
@@ -202,6 +264,17 @@ class CmuxWebSocketClient(
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
         if (this.webSocket !== webSocket) return
         Log.i(tag, "onClosed: code=$code, reason=$reason")
+        connectionTimeoutJob?.cancel()
+        pendingRequests.forEach { (_, deferred) ->
+            deferred.completeExceptionally(Exception("Gateway disconnected"))
+        }
+        pendingRequests.clear()
+        if (!isAuthCompleted && code == 1008) {
+            connectionFailure = ConnectionFailure.AUTHENTICATION
+            _statusFlow.value = ConnectionStatus.ERROR
+            return
+        }
+        DiagnosticsManager.log("WS", "WebSocket onClosed code=$code reason=$reason")
         _statusFlow.value = ConnectionStatus.DISCONNECTED
     }
 
@@ -213,30 +286,34 @@ class CmuxWebSocketClient(
 
         val jsonStr = json.encodeToString(JsonRpcRequest.serializer(), rpcReq)
         Log.d(tag, "callRpc [$method] id=$reqId")
+        DiagnosticsManager.log("RPC", "callRpc [$method] id=$reqId")
         val sent = webSocket?.send(jsonStr) ?: false
         if (!sent) {
             pendingRequests.remove(reqId)
             throw Exception("Failed to send RPC request: WebSocket not connected")
         }
 
-        return withTimeout(5000) {
-            deferred.await()
+        return try {
+            withTimeoutOrNull(5000) { deferred.await() }
+                ?: throw java.io.IOException("Gateway request timed out")
+        } finally {
+            pendingRequests.remove(reqId)
         }
     }
 
-    suspend fun sendTerminalInput(
-        surfaceId: String,
-        text: String,
-        inputKind: String,
-        remoteTakeover: Boolean,
-        paste: Boolean,
-    ) {
+    suspend fun wakeCmux(background: Boolean = true): WakeCmuxResponse {
+        val params = buildJsonObject {
+            put("background", background)
+        }
+        val result = callRpc("mobile.host.wake_cmux", params)
+        return json.decodeFromJsonElement(WakeCmuxResponse.serializer(), result)
+    }
+
+    suspend fun sendTerminalInput(surfaceId: String, text: String, inputKind: String = "text") {
         val params = buildJsonObject {
             put("surface_id", surfaceId)
             put("text", text)
             put("input_kind", inputKind)
-            put("remote_takeover", remoteTakeover)
-            put("paste", paste)
             put("client_id", "android-client")
         }
         callRpc("mobile.terminal.input", params)
@@ -264,12 +341,14 @@ class CmuxWebSocketClient(
     }
 
     suspend fun createWorkspace(
-        name: String,
+        name: String? = null,
         initialTerminal: Boolean = true,
         mutationId: String = UUID.randomUUID().toString()
     ): WorkspaceCreateResponse {
         val params = buildJsonObject {
-            put("name", name)
+            if (!name.isNullOrBlank()) {
+                put("name", name)
+            }
             if (initialTerminal) {
                 put("initial_surface", buildJsonObject {
                     put("type", "terminal")
@@ -279,6 +358,35 @@ class CmuxWebSocketClient(
         }
         val result = callRpc("mobile.workspace.create", params)
         return json.decodeFromJsonElement(WorkspaceCreateResponse.serializer(), result)
+    }
+
+    suspend fun renameWorkspace(
+        workspaceKey: String,
+        name: String,
+        mutationId: String = UUID.randomUUID().toString()
+    ): WorkspaceRenameResponse {
+        val params = buildJsonObject {
+            put("workspace_key", workspaceKey)
+            put("workspace_id", workspaceKey)
+            put("name", name)
+            put("title", name)
+            put("mutation_id", mutationId)
+        }
+        val result = callRpc("mobile.workspace.rename", params)
+        return json.decodeFromJsonElement(WorkspaceRenameResponse.serializer(), result)
+    }
+
+    suspend fun closeWorkspace(
+        workspaceKey: String,
+        mutationId: String = UUID.randomUUID().toString()
+    ): WorkspaceCloseResponse {
+        val params = buildJsonObject {
+            put("workspace_key", workspaceKey)
+            put("workspace_id", workspaceKey)
+            put("mutation_id", mutationId)
+        }
+        val result = callRpc("mobile.workspace.close", params)
+        return json.decodeFromJsonElement(WorkspaceCloseResponse.serializer(), result)
     }
 
     suspend fun selectWorkspace(workspaceKey: String) {
@@ -317,6 +425,22 @@ class CmuxWebSocketClient(
         }
         val result = callRpc("mobile.surface.close", params)
         return json.decodeFromJsonElement(SurfaceCloseResponse.serializer(), result)
+    }
+
+    suspend fun renameSurface(
+        surfaceId: String,
+        title: String,
+        workspaceKey: String? = null,
+        mutationId: String = UUID.randomUUID().toString()
+    ): SurfaceRenameResponse {
+        val params = buildJsonObject {
+            put("surface_id", surfaceId)
+            put("title", title)
+            if (workspaceKey != null) put("workspace_key", workspaceKey)
+            put("mutation_id", mutationId)
+        }
+        val result = callRpc("mobile.surface.rename", params)
+        return json.decodeFromJsonElement(SurfaceRenameResponse.serializer(), result)
     }
 
     suspend fun focusSurface(surfaceId: String?) {

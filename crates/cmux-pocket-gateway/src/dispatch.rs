@@ -2,12 +2,14 @@ use async_trait::async_trait;
 use cmux_pocket_cmux::CmuxBackend;
 use cmux_pocket_protocol::auth::ALL_CAPABILITIES;
 use cmux_pocket_protocol::rpc::{CODE_BACKEND_UNAVAILABLE, CODE_METHOD_NOT_FOUND};
+use cmux_pocket_protocol::{CAP_HOST_WAKE, PROTOCOL_SERVER_VERSION};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 use tracing::warn;
 
 use crate::error::GatewayError;
 use crate::health::HealthTracker;
+use crate::host::SharedHostController;
 use crate::session::ClientSession;
 use crate::surface_locks::SurfaceLockManager;
 
@@ -15,6 +17,8 @@ use crate::surface_locks::SurfaceLockManager;
 pub trait GatewayCallbacks: Send + Sync {
     async fn broadcast(&self, event: &str, data: Value);
     fn request_priority_refresh(&self, surface_id: String);
+    /// Starts a bounded fast poll for cmux readiness after a remote wake request.
+    fn request_wake_watch(&self);
 }
 
 pub struct DispatchContext<'a> {
@@ -22,6 +26,7 @@ pub struct DispatchContext<'a> {
     pub backend: &'a Arc<dyn CmuxBackend>,
     pub health: &'a HealthTracker,
     pub surface_locks: &'a SurfaceLockManager,
+    pub host: &'a SharedHostController,
     pub callbacks: &'a (dyn GatewayCallbacks + 'a),
 }
 
@@ -36,16 +41,80 @@ pub async fn dispatch_rpc<'a>(
 
     match method {
         "mobile.host.status" => {
-            let capabilities = ALL_CAPABILITIES;
+            let running = ctx.backend.ping().await.is_ok();
+            let host = ctx.host.status().await;
+            let capabilities: Vec<&str> = ALL_CAPABILITIES
+                .iter()
+                .copied()
+                .filter(|capability| host.can_wake || *capability != CAP_HOST_WAKE)
+                .collect();
             let res = json!({
                 "id": id_val,
                 "result": {
                     "mac_display_name": "cmux Host",
-                    "mac_app_version": "2.0.0",
+                    "mac_app_version": env!("CARGO_PKG_VERSION"),
+                    "gateway_version": env!("CARGO_PKG_VERSION"),
+                    "protocol_version": PROTOCOL_SERVER_VERSION,
                     "capabilities": capabilities,
+                    "cmux_status": {
+                        "installed": host.installed,
+                        "running": running,
+                        "can_wake": host.can_wake,
+                    },
                 }
             });
             ctx.session.send_json(res).await?;
+        }
+
+        "mobile.host.wake_cmux" => {
+            let host = ctx.host.status().await;
+            if !host.can_wake {
+                let err_res = json!({
+                    "id": id_val,
+                    "error": {
+                        "code": CODE_BACKEND_UNAVAILABLE,
+                        "message": "Remote cmux wake is not available on this Gateway",
+                    }
+                });
+                ctx.session.send_json(err_res).await?;
+            } else if ctx.backend.ping().await.is_ok() {
+                let res = json!({
+                    "id": id_val,
+                    "result": {
+                        "success": true,
+                        "status": "running",
+                        "message": "cmux is already running",
+                    }
+                });
+                ctx.session.send_json(res).await?;
+                ctx.callbacks.request_wake_watch();
+            } else {
+                match ctx.host.wake_cmux().await {
+                    Ok(()) => {
+                        let res = json!({
+                            "id": id_val,
+                            "result": {
+                                "success": true,
+                                "status": "launching",
+                                "message": "cmux launch initiated",
+                            }
+                        });
+                        ctx.session.send_json(res).await?;
+                        ctx.callbacks.request_wake_watch();
+                    }
+                    Err(error) => {
+                        warn!("wake_cmux failed: {}", error);
+                        let err_res = json!({
+                            "id": id_val,
+                            "error": {
+                                "code": CODE_BACKEND_UNAVAILABLE,
+                                "message": "Unable to launch cmux on the host",
+                            }
+                        });
+                        ctx.session.send_json(err_res).await?;
+                    }
+                }
+            }
         }
 
         "mobile.workspace.list" | "workspace.list" => {
@@ -97,7 +166,7 @@ pub async fn dispatch_rpc<'a>(
             let name = params
                 .get("name")
                 .and_then(|v| v.as_str())
-                .unwrap_or("New Workspace");
+                .unwrap_or("");
             let mutation_id = params.get("mutation_id").cloned();
 
             match ctx.backend.create_workspace(name).await {
@@ -168,6 +237,121 @@ pub async fn dispatch_rpc<'a>(
                 "result": Value::Object(res_map),
             });
             ctx.session.send_json(res).await?;
+        }
+        "mobile.workspace.rename" => {
+            let mutation_id = params.get("mutation_id").cloned();
+            let ws_key = params
+                .get("workspace_key")
+                .or_else(|| params.get("workspace_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let title = params
+                .get("title")
+                .or_else(|| params.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            match ctx.backend.rename_workspace(ws_key, title).await {
+                Ok(renamed_ws) => {
+                    ctx.health.mark_healthy();
+                    let mut res_map = Map::new();
+                    res_map.insert("status".to_string(), Value::String("ok".to_string()));
+                    res_map.insert("workspace".to_string(), serde_json::to_value(&renamed_ws)?);
+                    if let Some(m_id) = &mutation_id {
+                        res_map.insert("mutation_id".to_string(), m_id.clone());
+                    }
+
+                    let res = json!({
+                        "id": id_val,
+                        "result": Value::Object(res_map),
+                    });
+                    ctx.session.send_json(res).await?;
+
+                    // Broadcast workspace.tree event
+                    let mut b_map = Map::new();
+                    b_map.insert(
+                        "action".to_string(),
+                        Value::String("workspace_renamed".to_string()),
+                    );
+                    b_map.insert("workspace".to_string(), serde_json::to_value(&renamed_ws)?);
+                    if let Some(m_id) = mutation_id {
+                        b_map.insert("mutation_id".to_string(), m_id);
+                    }
+
+                    ctx.callbacks
+                        .broadcast("workspace.tree", Value::Object(b_map))
+                        .await;
+                }
+                Err(e) => {
+                    warn!("rename_workspace failed: {}", e);
+                    ctx.health.mark_unhealthy(e.to_string());
+                    let err_res = json!({
+                        "id": id_val,
+                        "error": {
+                            "code": CODE_BACKEND_UNAVAILABLE,
+                            "message": format!("Workspace rename failed: {}", e),
+                        }
+                    });
+                    ctx.session.send_json(err_res).await?;
+                }
+            }
+        }
+
+        "mobile.workspace.close" => {
+            let mutation_id = params.get("mutation_id").cloned();
+            let ws_key = params
+                .get("workspace_key")
+                .or_else(|| params.get("workspace_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            match ctx.backend.close_workspace(ws_key).await {
+                Ok(success) => {
+                    ctx.health.mark_healthy();
+                    let mut res_map = Map::new();
+                    res_map.insert(
+                        "status".to_string(),
+                        Value::String(if success { "ok" } else { "error" }.to_string()),
+                    );
+                    res_map.insert("workspace_key".to_string(), Value::String(ws_key.to_string()));
+                    if let Some(m_id) = &mutation_id {
+                        res_map.insert("mutation_id".to_string(), m_id.clone());
+                    }
+
+                    let res = json!({
+                        "id": id_val,
+                        "result": Value::Object(res_map),
+                    });
+                    ctx.session.send_json(res).await?;
+
+                    // Broadcast workspace.tree event
+                    let mut b_map = Map::new();
+                    b_map.insert(
+                        "action".to_string(),
+                        Value::String("workspace_closed".to_string()),
+                    );
+                    b_map.insert("workspace_key".to_string(), Value::String(ws_key.to_string()));
+                    if let Some(m_id) = mutation_id {
+                        b_map.insert("mutation_id".to_string(), m_id);
+                    }
+
+                    ctx.callbacks
+                        .broadcast("workspace.tree", Value::Object(b_map))
+                        .await;
+                }
+                Err(e) => {
+                    warn!("close_workspace failed: {}", e);
+                    ctx.health.mark_unhealthy(e.to_string());
+                    let err_res = json!({
+                        "id": id_val,
+                        "error": {
+                            "code": CODE_BACKEND_UNAVAILABLE,
+                            "message": format!("Workspace close failed: {}", e),
+                        }
+                    });
+                    ctx.session.send_json(err_res).await?;
+                }
+            }
         }
 
         "mobile.surface.create" => {
@@ -293,6 +477,64 @@ pub async fn dispatch_rpc<'a>(
                 }
             }
         }
+        "mobile.surface.rename" => {
+            let mutation_id = params.get("mutation_id").cloned();
+            let surf_id = params
+                .get("surface_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let title = params
+                .get("title")
+                .or_else(|| params.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let ws_key = params.get("workspace_key").and_then(|v| v.as_str());
+
+            match ctx.backend.rename_surface(surf_id, title, ws_key).await {
+                Ok(renamed_surf) => {
+                    ctx.health.mark_healthy();
+                    let mut res_map = Map::new();
+                    res_map.insert("status".to_string(), Value::String("ok".to_string()));
+                    res_map.insert("surface".to_string(), serde_json::to_value(&renamed_surf)?);
+                    if let Some(m_id) = &mutation_id {
+                        res_map.insert("mutation_id".to_string(), m_id.clone());
+                    }
+
+                    let res = json!({
+                        "id": id_val,
+                        "result": Value::Object(res_map),
+                    });
+                    ctx.session.send_json(res).await?;
+
+                    // Broadcast workspace.tree event
+                    let mut b_map = Map::new();
+                    b_map.insert(
+                        "action".to_string(),
+                        Value::String("surface_renamed".to_string()),
+                    );
+                    b_map.insert("surface".to_string(), serde_json::to_value(&renamed_surf)?);
+                    if let Some(m_id) = mutation_id {
+                        b_map.insert("mutation_id".to_string(), m_id);
+                    }
+
+                    ctx.callbacks
+                        .broadcast("workspace.tree", Value::Object(b_map))
+                        .await;
+                }
+                Err(e) => {
+                    warn!("rename_surface failed: {}", e);
+                    ctx.health.mark_unhealthy(e.to_string());
+                    let err_res = json!({
+                        "id": id_val,
+                        "error": {
+                            "code": CODE_BACKEND_UNAVAILABLE,
+                            "message": format!("Surface rename failed: {}", e),
+                        }
+                    });
+                    ctx.session.send_json(err_res).await?;
+                }
+            }
+        }
 
         "mobile.surface.focus" => {
             let mutation_id = params.get("mutation_id").cloned();
@@ -376,24 +618,10 @@ pub async fn dispatch_rpc<'a>(
                 Some("key") => cmux_pocket_cmux::TerminalInputKind::Key,
                 _ => cmux_pocket_cmux::TerminalInputKind::Text,
             };
-            let force = params
-                .get("remote_takeover")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let paste = input_kind == cmux_pocket_cmux::TerminalInputKind::Text
-                && params
-                    .get("paste")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-            let input_options = cmux_pocket_cmux::TerminalInputOptions {
-                kind: input_kind,
-                force,
-                paste,
-            };
 
             match ctx
                 .backend
-                .send_input_with_options(&surf_id, text, input_options)
+                .send_input_with_kind(&surf_id, text, input_kind)
                 .await
             {
                 Ok(()) => {

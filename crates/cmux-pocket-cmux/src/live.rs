@@ -19,17 +19,23 @@ use tokio::time::timeout;
 use tracing::{debug, warn};
 
 use crate::args::{
-    close_surface_args, list_notifications_args, new_surface_args, new_workspace_args, ping_args,
-    read_screen_args, rpc_replay_args, rpc_scroll_args, select_workspace_args, send_input_args,
-    tree_args,
+    close_surface_args, close_workspace_args, list_notifications_args, new_surface_args,
+    new_workspace_args, ping_args, read_screen_args, rename_surface_args, rename_workspace_args,
+    rpc_replay_args, rpc_scroll_args, select_workspace_args, send_input_args, tree_args,
 };
-use crate::backend::{CmuxBackend, TerminalInputOptions};
+use crate::backend::{CmuxBackend, CmuxCapabilities, TerminalInputKind};
 use crate::error::CmuxError;
 use crate::events::CmuxEventStream;
 use crate::tree_parser::{extract_surface_id, parse_workspace_tree};
 
 /// Default timeout for short cmux CLI commands (e.g. ping, tree, send).
 pub const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// How long probed CLI capabilities stay trusted before another probe runs.
+///
+/// cmux upgrades replace the CLI in place while the Gateway keeps running, so
+/// a positive cache must expire instead of assuming the startup state forever.
+const CAPABILITY_TTL: Duration = Duration::from_secs(300);
 
 /// Connects to a real live cmux instance via CLI subprocess invocations.
 #[derive(Debug, Clone)]
@@ -39,6 +45,7 @@ pub struct LiveCmuxBackend {
     state_seqs: Arc<Mutex<HashMap<String, u64>>>,
     render_epochs: Arc<Mutex<HashMap<String, String>>>,
     epoch_counter: Arc<AtomicU64>,
+    capabilities: Arc<tokio::sync::Mutex<Option<(std::time::Instant, CmuxCapabilities)>>>,
 }
 
 impl Default for LiveCmuxBackend {
@@ -56,6 +63,7 @@ impl LiveCmuxBackend {
             state_seqs: Arc::new(Mutex::new(HashMap::new())),
             render_epochs: Arc::new(Mutex::new(HashMap::new())),
             epoch_counter: Arc::new(AtomicU64::new(1)),
+            capabilities: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 
@@ -67,6 +75,7 @@ impl LiveCmuxBackend {
             state_seqs: Arc::new(Mutex::new(HashMap::new())),
             render_epochs: Arc::new(Mutex::new(HashMap::new())),
             epoch_counter: Arc::new(AtomicU64::new(1)),
+            capabilities: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 
@@ -78,12 +87,36 @@ impl LiveCmuxBackend {
             state_seqs: Arc::new(Mutex::new(HashMap::new())),
             render_epochs: Arc::new(Mutex::new(HashMap::new())),
             epoch_counter: Arc::new(AtomicU64::new(1)),
+            capabilities: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 
     /// Returns the configured cmux binary path.
     pub fn cmux_path(&self) -> &Path {
         &self.cmux_path
+    }
+
+    /// Returns the input flags supported by the installed cmux binary.
+    ///
+    /// Probes `cmux send --help` and `cmux send-key --help` (no side effects)
+    /// and caches the result for [`CAPABILITY_TTL`]. A failed probe yields the
+    /// legacy flagless profile, which is always safe to send.
+    pub async fn capabilities(&self) -> CmuxCapabilities {
+        let mut cached = self.capabilities.lock().await;
+        if let Some((probed_at, caps)) = *cached {
+            if probed_at.elapsed() < CAPABILITY_TTL {
+                return caps;
+            }
+        }
+        let send_help = self.run_cmux(&["send", "--help"]).await.unwrap_or_default();
+        let send_key_help = self
+            .run_cmux(&["send-key", "--help"])
+            .await
+            .unwrap_or_default();
+        let caps = CmuxCapabilities::from_help(&send_help, &send_key_help);
+        debug!(?caps, "probed cmux CLI input capabilities");
+        *cached = Some((std::time::Instant::now(), caps));
+        caps
     }
 
     /// Returns the next monotonic state sequence number for a surface.
@@ -224,6 +257,21 @@ impl CmuxBackend for LiveCmuxBackend {
         Ok(target)
     }
 
+    async fn rename_workspace(&self, workspace_key: &str, title: &str) -> Result<WorkspaceInfo, CmuxError> {
+        self.run_cmux(&rename_workspace_args(workspace_key, title)).await?;
+        let workspaces = self.list_workspaces().await?;
+        let target = workspaces
+            .into_iter()
+            .find(|w| w.id == workspace_key || w.key.as_deref() == Some(workspace_key) || w.name == title)
+            .unwrap_or_else(|| WorkspaceInfo::new(workspace_key, title));
+        Ok(target)
+    }
+
+    async fn close_workspace(&self, workspace_key: &str) -> Result<bool, CmuxError> {
+        self.run_cmux(&close_workspace_args(workspace_key)).await?;
+        Ok(true)
+    }
+
     async fn select_workspace(&self, workspace_key: &str) -> Result<(), CmuxError> {
         self.run_cmux(&select_workspace_args(workspace_key)).await?;
         Ok(())
@@ -281,18 +329,48 @@ impl CmuxBackend for LiveCmuxBackend {
         Ok(true)
     }
 
+    async fn rename_surface(
+        &self,
+        surface_id: &str,
+        title: &str,
+        workspace_key: Option<&str>,
+    ) -> Result<SurfaceInfo, CmuxError> {
+        self.run_cmux(&rename_surface_args(surface_id, title)).await?;
+        if let Ok(workspaces) = self.list_workspaces().await {
+            for ws in workspaces {
+                if let Some(surf) = ws.surfaces.into_iter().find(|s| s.id == surface_id) {
+                    return Ok(surf);
+                }
+            }
+        }
+        Ok(SurfaceInfo {
+            id: surface_id.to_string(),
+            surface_type: "terminal".to_string(),
+            title: Some(title.to_string()),
+            workspace_key: workspace_key.map(ToString::to_string),
+            pane_id: None,
+            tab_index: 0,
+            agent_state: None,
+            attention: false,
+            dead: false,
+            cwd: None,
+            extra: serde_json::Map::new(),
+        })
+    }
+
     async fn send_input(&self, surface_id: &str, text: &str) -> Result<(), CmuxError> {
-        self.send_input_with_options(surface_id, text, TerminalInputOptions::default())
+        self.send_input_with_kind(surface_id, text, TerminalInputKind::Text)
             .await
     }
 
-    async fn send_input_with_options(
+    async fn send_input_with_kind(
         &self,
         surface_id: &str,
         text: &str,
-        options: TerminalInputOptions,
+        kind: TerminalInputKind,
     ) -> Result<(), CmuxError> {
-        self.run_cmux(&send_input_args(surface_id, text, options))
+        let capabilities = self.capabilities().await;
+        self.run_cmux(&send_input_args(surface_id, text, kind, capabilities))
             .await?;
         Ok(())
     }

@@ -119,12 +119,16 @@ fn test_json_rpc_error_data_payload() {
 fn test_rpc_methods_and_aliases() {
     let methods = [
         ("mobile.host.status", RpcMethod::HostStatus, false),
+        ("mobile.host.wake_cmux", RpcMethod::HostWakeCmux, false),
         ("mobile.workspace.list", RpcMethod::WorkspaceList, false),
         ("workspace.list", RpcMethod::WorkspaceList, true),
         ("mobile.workspace.create", RpcMethod::WorkspaceCreate, false),
         ("mobile.workspace.select", RpcMethod::WorkspaceSelect, false),
+        ("mobile.workspace.rename", RpcMethod::WorkspaceRename, false),
+        ("mobile.workspace.close", RpcMethod::WorkspaceClose, false),
         ("mobile.surface.create", RpcMethod::SurfaceCreate, false),
         ("mobile.surface.close", RpcMethod::SurfaceClose, false),
+        ("mobile.surface.rename", RpcMethod::SurfaceRename, false),
         ("mobile.surface.focus", RpcMethod::SurfaceFocus, false),
         ("mobile.events.subscribe", RpcMethod::EventsSubscribe, false),
         ("mobile.terminal.input", RpcMethod::TerminalInput, false),

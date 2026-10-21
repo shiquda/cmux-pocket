@@ -75,6 +75,7 @@ pub async fn handle_config(
                     .as_ref()
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|| "cmux".to_string()),
+                "endpoint" => config.endpoint.as_deref().unwrap_or_default().to_string(),
                 _ => {
                     if let Some(v) = config.extra.get(key) {
                         v.to_string()
@@ -132,6 +133,10 @@ pub async fn handle_config(
                     let path = Path::new(value);
                     validate_outside_cellar(path, "cmux_path")?;
                     config.cmux_path = Some(path.to_path_buf());
+                }
+                "endpoint" => {
+                    let parsed = cmux_pocket_macos::validate_remote_endpoint(value)?;
+                    config.endpoint = Some(parsed.raw);
                 }
                 _ => {
                     // Try parsing as boolean, integer, or default to string
