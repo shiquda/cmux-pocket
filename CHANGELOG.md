@@ -11,6 +11,12 @@ extracts the section for the pushed tag while publishing, and
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-22
+
+**First-launch onboarding, and a one-command upgrade**
+
+A fresh install now explains what to run on the Mac before it asks for a QR code, and the CLI can upgrade itself. No protocol change: this build speaks the same protocol as 0.3.0.
+
 ### Added
 
 - `cmux-pocket upgrade` upgrades the CLI and Gateway without the user having to remember the package manager: it reads the latest GitHub Release tag from the `releases/latest` redirect, compares it with the running build, identifies the install source (Homebrew `Cellar`/`opt`/`bin`, `CARGO_HOME/bin`, or a `brew list --versions` hit), and delegates to `brew upgrade shiquda/cmux-pocket/cmux-pocket` or `cargo install --force --git … --tag <release> cmux-pocket-cli`. The registered LaunchAgent is restarted afterwards through the existing service restart path, the printed report names the old and new build, and it points at **Settings → Connection → Recheck version** in the app. An unrecognized install is never overwritten: both manual commands are printed and the command exits non-zero. `--check` reports without changing anything and `--json` follows the existing envelope.
