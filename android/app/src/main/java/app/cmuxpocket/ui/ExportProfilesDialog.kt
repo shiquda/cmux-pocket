@@ -5,10 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FileDownload
@@ -25,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +49,13 @@ fun ExportProfilesDialog(
     onExportWithCredentials: () -> Unit
 ) {
     val theme = CmuxTheme.colors
+    // `usePlatformDefaultWidth = false` only relaxes the window width to match_parent; the height
+    // keeps wrapping the content without a budget. A column of fixed-height children then measures
+    // taller than a short window (landscape, split screen, large system font) and the window clips
+    // the overflow, leaving the credential buttons unreachable. Capping the surface and scrolling
+    // the column keeps every action reachable; the reserve covers the status and navigation bars
+    // plus a small margin, which the dialog window itself does not subtract.
+    val maxDialogHeight = (LocalConfiguration.current.screenHeightDp.dp - 96.dp)
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -52,6 +63,7 @@ fun ExportProfilesDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
+                .heightIn(max = maxDialogHeight)
                 .clip(RoundedCornerShape(18.dp)),
             color = theme.surface,
             tonalElevation = 6.dp
@@ -59,6 +71,7 @@ fun ExportProfilesDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
