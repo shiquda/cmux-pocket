@@ -193,9 +193,22 @@ class ForegroundRecoveryTest {
                 model.connectionStatus.first { it != ConnectionStatus.CONNECTED }
             }
 
-            restarted = MockWebServer()
-            restarted.enqueue(gatewaySocket())
-            restarted.start(port)
+            var lastBindError: java.net.BindException? = null
+            for (attempt in 0 until 20) {
+                val candidate = MockWebServer()
+                candidate.enqueue(gatewaySocket())
+                try {
+                    candidate.start(port)
+                    restarted = candidate
+                    lastBindError = null
+                    break
+                } catch (e: java.net.BindException) {
+                    lastBindError = e
+                    runCatching { candidate.shutdown() }
+                    delay(100)
+                }
+            }
+            if (lastBindError != null) throw lastBindError
 
             val startedAt = System.nanoTime()
             model.onAppForegrounded()
