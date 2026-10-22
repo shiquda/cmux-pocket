@@ -89,7 +89,6 @@ Install cmux Pocket using either Obtainium for source updates or by downloading 
    ```text
    https://github.com/shiquda/cmux-pocket
    ```
-   *(Or tap the [Obtainium Deep Link](obtainium://add/https://github.com/shiquda/cmux-pocket) directly on your Android device).*
 2. Leave the asset filter settings at default. Obtainium detects release APKs automatically (`app-release.apk` on existing releases and `cmux-pocket-vX.Y.Z.apk` on upcoming releases). **Do not** add a custom filename filter that matches only one pattern.
 3. Tap **Add** to fetch and install the release.
 
