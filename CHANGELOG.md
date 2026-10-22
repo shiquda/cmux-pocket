@@ -16,6 +16,10 @@ extracts the section for the pushed tag while publishing, and
 - `cmux-pocket upgrade` upgrades the CLI and Gateway without the user having to remember the package manager: it reads the latest GitHub Release tag from the `releases/latest` redirect, compares it with the running build, identifies the install source (Homebrew `Cellar`/`opt`/`bin`, `CARGO_HOME/bin`, or a `brew list --versions` hit), and delegates to `brew upgrade shiquda/cmux-pocket/cmux-pocket` or `cargo install --force --git … --tag <release> cmux-pocket-cli`. The registered LaunchAgent is restarted afterwards through the existing service restart path, the printed report names the old and new build, and it points at **Settings → Connection → Recheck version** in the app. An unrecognized install is never overwritten: both manual commands are printed and the command exits non-zero. `--check` reports without changing anything and `--json` follows the existing envelope.
 - `cmux-pocket status` reports the Gateway build (`gateway_version`) alongside the protocol version, so a client can tell which Gateways are actually running the upgraded binary.
 
+### Fixed
+
+- **Settings → Storage → Export host profiles** no longer loses its buttons on short or landscape windows: the prompt caps its height below the system bars and scrolls its content, so the description and all three actions stay reachable when the dialog would otherwise be clipped by the window.
+
 ## [0.3.0] - 2026-10-22
 
 **Phone-width terminal, floating window, and one-command pairing**
