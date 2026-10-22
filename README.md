@@ -111,7 +111,7 @@ Your cmux workspaces and tabs appear immediately on Android.
 
 ## Interface & Interactions
 
-![cmux Pocket: Portrait and Landscape terminal viewports](docs/assets/device-portrait-landscape.png)
+![cmux Pocket: the same live session on a phone in portrait (1080 × 2400) and a tablet in landscape (2560 × 1600)](docs/assets/device-portrait-landscape.png)
 
 ### Terminal Navigation & Sessions
 - **Floating Island Pill**: Shows current workspace, active session number, and connection status. Tapping the pill opens the **Sessions & Surfaces Drawer** to switch workspaces or create new tabs on the fly.
