@@ -17,11 +17,11 @@ class SettingsManager(context: Context) {
     }
 
     var host: String
-        get() = prefs.getString(KEY_HOST, "127.0.0.1")?.ifBlank { "127.0.0.1" } ?: "127.0.0.1"
+        get() = prefs.getString(KEY_HOST, DEFAULT_HOST)?.ifBlank { DEFAULT_HOST } ?: DEFAULT_HOST
         set(value) = prefs.edit().putString(KEY_HOST, value).apply()
 
     var port: Int
-        get() = prefs.getInt(KEY_PORT, 8088)
+        get() = prefs.getInt(KEY_PORT, DEFAULT_PORT)
         set(value) = prefs.edit().putInt(KEY_PORT, value).apply()
 
     var token: String
@@ -105,6 +105,27 @@ class SettingsManager(context: Context) {
             prefs.edit().putString(KEY_APP_LANGUAGE, value.tag).apply()
             AppLanguageStore.current = value
         }
+
+    /**
+     * Set when the user pairs through the first-launch guide or skips it. Kept next to the
+     * connection settings because the guide exists solely to create them.
+     */
+    var onboardingCompleted: Boolean
+        get() = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
+        set(value) = prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, value).apply()
+
+    /**
+     * True when this install already points at a Gateway: a saved profile, or an endpoint and
+     * token typed into Settings. An upgrade must never be greeted by the guide.
+     */
+    val hasConfiguredEndpoint: Boolean
+        get() = prefs.contains(KEY_PROFILES) ||
+            token.isNotBlank() ||
+            host != DEFAULT_HOST ||
+            port != DEFAULT_PORT
+
+    val shouldShowOnboarding: Boolean
+        get() = FirstLaunchOnboarding.shouldShow(onboardingCompleted, hasConfiguredEndpoint)
 
     fun exportProfilesJson(includeCredentials: Boolean): String =
         encodeProfilesBackup(profiles, includeCredentials)
@@ -234,6 +255,9 @@ class SettingsManager(context: Context) {
         const val MAX_PIP_ASPECT_RATIO = 2.39f
         const val DEFAULT_PIP_ASPECT_RATIO = 1f
 
+        const val DEFAULT_HOST = "127.0.0.1"
+        const val DEFAULT_PORT = 8088
+
         private const val LEGACY_PREFS_NAME = "cmux_preferences"
         private const val SECURE_PREFS_NAME = "cmux_preferences_secure"
         private const val KEY_HOST = "host"
@@ -249,6 +273,7 @@ class SettingsManager(context: Context) {
         private const val KEY_DIAGNOSTICS_ENABLED = "diagnostics_enabled"
         private const val KEY_VIBRATE_ON_SESSION_COMPLETE = "vibrate_on_session_complete"
         private const val KEY_APP_LANGUAGE = "app_language"
+        private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         private const val KEY_FLOATING_WINDOW_ENABLED = "floating_window_enabled"
         private const val KEY_FLOATING_WINDOW_AUTO_ENTER = "floating_window_auto_enter"
         private const val KEY_PIP_ASPECT_RATIO = "pip_aspect_ratio"

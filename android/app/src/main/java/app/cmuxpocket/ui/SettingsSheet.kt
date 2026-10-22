@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.compose.foundation.shape.CircleShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.ui.platform.LocalContext
 import app.cmuxpocket.diagnostics.DiagnosticsManager
 import app.cmuxpocket.transport.ConnectionStatus
@@ -88,6 +89,7 @@ fun SettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     onConnectClick: () -> Unit,
     onScanQrClick: () -> Unit = {},
+    onOpenOnboarding: () -> Unit = {},
     onClearScrollback: () -> Unit = {},
     onRecheckGatewayVersion: () -> Unit = {},
     isRefreshingGatewayVersion: Boolean = false,
@@ -322,6 +324,7 @@ fun SettingsScreen(
                                 onTokenChange = onTokenChange,
                                 onConnectClick = onConnectClick,
                                 onScanQrClick = onScanQrClick,
+                                onOpenOnboarding = onOpenOnboarding,
                                 onRecheckGatewayVersion = onRecheckGatewayVersion,
                                 isRefreshingGatewayVersion = isRefreshingGatewayVersion,
                             )
@@ -817,6 +820,7 @@ fun ConnectionSection(
     onTokenChange: (String) -> Unit,
     onConnectClick: () -> Unit,
     onScanQrClick: () -> Unit = {},
+    onOpenOnboarding: () -> Unit = {},
     onRecheckGatewayVersion: () -> Unit = {},
     isRefreshingGatewayVersion: Boolean = false,
 ) {
@@ -902,6 +906,13 @@ fun ConnectionSection(
                     label = { Text(stringResource(R.string.settings_scan_qr), fontSize = 11.sp) },
                     leadingIcon = {
                         Icon(Icons.Default.QrCodeScanner, contentDescription = stringResource(R.string.settings_scan_qr_desc), modifier = Modifier.size(16.dp))
+                    }
+                )
+                AssistChip(
+                    onClick = onOpenOnboarding,
+                    label = { Text(stringResource(R.string.settings_open_onboarding), fontSize = 11.sp) },
+                    leadingIcon = {
+                        Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(16.dp))
                     }
                 )
             }

@@ -149,6 +149,7 @@
     <string name="settings_add_host">Add host</string>
     <string name="settings_scan_qr">Scan QR</string>
     <string name="settings_scan_qr_desc">Scan QR code</string>
+    <string name="settings_open_onboarding">Setup guide</string>
     <string name="settings_host_or_url">Host or URL</string>
     <string name="settings_host_placeholder">IP or https://tunnel.example.com</string>
     <string name="settings_host_placeholder_short">host.example or https://tunnel.example</string>
@@ -237,5 +238,20 @@
     <string name="stage_wake_timeout">cmux did not respond within 15 seconds. Confirm the Mac is awake, then retry.</string>
     <string name="stage_wake_background_hint">Starts in the background and keeps your Mac\'s current window in front.</string>
     <string name="stage_wake_unavailable">This Gateway version cannot wake cmux. Upgrade the Mac Gateway from Settings → Connection.</string>
+
+    <!-- First-launch onboarding -->
+    <string name="onboarding_title">Connect your phone to cmux</string>
+    <string name="onboarding_subtitle">cmux Pocket reaches the terminals on your Mac through a Gateway you install once. Two steps and you are in.</string>
+    <string name="onboarding_step1_title">Install the Gateway on your Mac</string>
+    <string name="onboarding_step1_body">Run both commands in Terminal. setup prints a pairing QR code as soon as the Gateway is ready.</string>
+    <string name="onboarding_install_command" translatable="false">brew install shiquda/cmux-pocket/cmux-pocket</string>
+    <string name="onboarding_setup_command" translatable="false">cmux-pocket setup</string>
+    <string name="onboarding_copy_install">Copy install command</string>
+    <string name="onboarding_copy_setup">Copy setup command</string>
+    <string name="onboarding_copied">Copied to clipboard</string>
+    <string name="onboarding_step2_title">Scan the pairing code</string>
+    <string name="onboarding_step2_body">Point the camera at the QR code from setup. The endpoint, port, and access token are filled in for you.</string>
+    <string name="onboarding_scan_qr">Scan QR code</string>
+    <string name="onboarding_skip">Skip for now</string>
 
 </resources>
