@@ -75,6 +75,8 @@ cmux-pocket status
 
 `cmux-pocket setup` is idempotent: it provisions an authenticated bearer token with user-only permissions (`0600`), creates a macOS LaunchAgent, and tests local connectivity.
 
+To upgrade, run `brew upgrade shiquda/cmux-pocket/cmux-pocket`; the formula restarts the LaunchAgent so the new build serves the phone immediately. If `cmux-pocket --version` reports an older build than `brew list --versions cmux-pocket`, a duplicate binary earlier in `PATH` (for example an old `~/.local/bin/cmux-pocket` from a manual `cargo install`) is shadowing Homebrew: remove it, then rerun `cmux-pocket setup` so the LaunchAgent points at the Homebrew `opt` path again.
+
 ### 3. Pair with Android in One Tap
 
 Generate a pairing QR code:
