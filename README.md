@@ -105,6 +105,8 @@ cmux-pocket endpoint list
 
 Your cmux workspaces and tabs appear immediately on Android.
 
+![One-tap QR pairing flow: generate a QR on the Mac, scan it in cmux Pocket, and workspaces appear on Android](docs/assets/qr-pairing-flow.png)
+
 ---
 
 ## Interface & Interactions
@@ -140,6 +142,8 @@ A compact, scrollable accessory row above the keyboard provides the developer ke
 ---
 
 ## Networking Options
+
+![Networking bridges: Android reaches the loopback-only Mac Gateway through Local WLAN, Tailscale, or Cloudflare Tunnel](docs/assets/networking-bridges.png)
 
 | Method | Endpoint | Security | Recommended For |
 | :--- | :--- | :--- | :--- |
