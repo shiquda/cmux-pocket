@@ -1,0 +1,32 @@
+cmux Pocket is an independent open-source Android companion for cmux on macOS, delivering real-time terminal streaming, an immersive mobile viewport, and instant one-tap QR pairing over a secure Gateway.
+
+KEY FEATURES
+
+• Live Terminal Streaming: Renders differential grid frames directly over secure WebSocket (wss://). The Mac host owns the PTY and VT parsing; Android displays the host's terminal grid without running local shells.
+• Decoupled Dual-End Navigation: Switch workspaces and tabs freely on your phone without hijacking your Mac's active focus.
+• Phone-Width Reflow: Request the host to reflow terminal TUIs to fit your mobile screen, or switch back with one tap.
+• One-Tap QR Pairing: Generate a pairing QR code on macOS with `cmux-pocket qr` and scan it with your phone camera to import the connection profile.
+• Remote Wake: Wake cmux on macOS directly from the phone if the background Gateway is running.
+• Immersive Interface: Fullscreen terminal canvas, floating island breadcrumb pill, pinch-to-zoom, and accessory keyboard bar with essential terminal keys (ESC, Tab, Ctrl+C, arrows).
+• Picture-in-Picture: Run terminal sessions in an Android floating window while using other apps.
+• Bilingual Support: Full runtime localization for English and Simplified Chinese (简体中文).
+
+HOW IT WORKS
+
+cmux Pocket uses a local-first architecture:
+1. cmux (macOS): Manages real terminal state and processes.
+2. Gateway (macOS): A lightweight loopback daemon listening on 127.0.0.1:8088 that bridges cmux to WebSocket.
+3. TLS Boundary: Reached securely over Tailscale HTTPS (.ts.net), a LAN reverse proxy (Caddy/Nginx), or USB tunnel.
+4. Android App: Renders grid cells with bundled Maple Mono Nerd Font.
+
+PRIVACY & SECURITY
+
+• 100% Free and Open Source (AGPL-3.0).
+• Local-first with no analytics or telemetry and no vendor-hosted backend. You choose the network route to your Mac.
+• Gateway binds strictly to loopback (127.0.0.1) with authenticated bearer tokens.
+• Sensitive credentials and tokens are encrypted with Android Keystore.
+• Camera access is used solely for offline QR code pairing.
+
+DISCLAIMER
+
+Independent community project. Not affiliated with or endorsed by cmux. “cmux” identifies the compatibility target only.
