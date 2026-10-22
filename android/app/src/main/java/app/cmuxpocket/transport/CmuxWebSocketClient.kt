@@ -273,6 +273,11 @@ class CmuxWebSocketClient(
         pendingRequests.clear()
     }
 
+    override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+        if (this.webSocket !== webSocket) return
+        webSocket.close(code, reason)
+    }
+
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
         if (this.webSocket !== webSocket) return
         Log.i(tag, "onClosed: code=$code, reason=$reason")

@@ -58,11 +58,13 @@ class ForegroundRecoveryTest {
     private fun gatewaySocket(
         onBootstrapComplete: () -> Unit = {},
         answerRpc: () -> Boolean = { true },
+        onOpenSocket: (WebSocket) -> Unit = {},
     ): MockResponse {
         var sawWorkspaceList = false
         return MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
                 connections.incrementAndGet()
+                onOpenSocket(webSocket)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -174,11 +176,11 @@ class ForegroundRecoveryTest {
 
     @Test
     fun foregroundReconnectsBeforeTheScheduledBackoff() = runBlocking {
+        var activeSocket: WebSocket? = null
+        server.enqueue(gatewaySocket(onOpenSocket = { activeSocket = it }))
         server.enqueue(gatewaySocket())
         server.start()
-        val port = server.port
         val model = TerminalViewModel()
-        var restarted: MockWebServer? = null
         try {
             model.connectToServer()
             withTimeout(8_000) {
@@ -188,27 +190,10 @@ class ForegroundRecoveryTest {
 
             // The Gateway disappears while the app is in the background: the client schedules a
             // 1s retry, which the foreground event must not wait for.
-            server.shutdown()
+            activeSocket?.close(1000, "gateway stopping")
             withTimeout(8_000) {
                 model.connectionStatus.first { it != ConnectionStatus.CONNECTED }
             }
-
-            var lastBindError: java.net.BindException? = null
-            for (attempt in 0 until 20) {
-                val candidate = MockWebServer()
-                candidate.enqueue(gatewaySocket())
-                try {
-                    candidate.start(port)
-                    restarted = candidate
-                    lastBindError = null
-                    break
-                } catch (e: java.net.BindException) {
-                    lastBindError = e
-                    runCatching { candidate.shutdown() }
-                    delay(100)
-                }
-            }
-            if (lastBindError != null) throw lastBindError
 
             val startedAt = System.nanoTime()
             model.onAppForegrounded()
@@ -221,7 +206,6 @@ class ForegroundRecoveryTest {
         } finally {
             model.disconnect()
             model.viewModelScope.cancel()
-            restarted?.shutdown()
         }
     }
 }
