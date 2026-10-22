@@ -11,6 +11,14 @@ extracts the section for the pushed tag while publishing, and
 
 ## [Unreleased]
 
+### Added
+
+- Obtainium installation instructions and fastlane app descriptions, icon, and phone screenshots for an IzzyOnDroid listing request.
+
+### Fixed
+
+- Release APK assets use the actual filename `cmux-pocket-vX.Y.Z.apk`, rather than only displaying that name as a label on `app-release.apk`. Existing releases are unchanged.
+
 ## [0.3.1] - 2026-10-22
 
 **First-launch onboarding, and a one-command upgrade**

@@ -8,7 +8,7 @@ cmux Pocket is an independent Android companion for [cmux](https://cmux.com/) on
 
 > **Disclaimer:** Independent community project. Not affiliated with or endorsed by cmux. “cmux” identifies the compatibility target only.
 
-[Download Signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Quick Start](#quick-start) · [Networking Guide](docs/networking.md) · [Design System](DESIGN.md) · [Changelog](CHANGELOG.md)
+[Download Signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Install with Obtainium](#3-install-the-android-app) · [Quick Start](#quick-start) · [Networking Guide](docs/networking.md) · [Design System](DESIGN.md) · [Changelog](CHANGELOG.md)
 
 ![cmux Pocket: Mac desktop showing cmux terminal alongside Android phone displaying the same workspace](docs/assets/hero.png)
 
@@ -79,9 +79,29 @@ To upgrade, run `cmux-pocket upgrade`: it compares the installed build with the 
 
 If `cmux-pocket --version` reports an older build than `brew list --versions cmux-pocket`, a duplicate binary earlier in `PATH` (for example an old `~/.local/bin/cmux-pocket` from a manual `cargo install`) is shadowing Homebrew: remove it, then rerun `cmux-pocket setup` so the LaunchAgent points at the Homebrew `opt` path again. `cmux-pocket upgrade` prints the same warning when the registered LaunchAgent runs a different binary than the one it just upgraded.
 
-### 3. Pair with Android in One Tap
+### 3. Install the Android App
 
-Generate a pairing QR code:
+Install cmux Pocket using either Obtainium for source updates or by downloading the signed APK directly:
+
+#### Option A: Automatic Updates via Obtainium (Recommended)
+[Obtainium](https://github.com/ImranR98/Obtainium) checks GitHub Releases for updates and lets you install them on Android:
+1. In Obtainium, tap **Add App** and paste the repository URL:
+   ```text
+   https://github.com/shiquda/cmux-pocket
+   ```
+2. Leave the asset filter settings at default. Obtainium detects release APKs automatically (`app-release.apk` on existing releases and `cmux-pocket-vX.Y.Z.apk` on upcoming releases). **Do not** add a custom filename filter that matches only one pattern.
+3. Tap **Add** to fetch and install the release.
+
+#### Option B: Direct Signed APK Download
+Download the latest signed release APK directly from [GitHub Releases](https://github.com/shiquda/cmux-pocket/releases/latest) and install it on Android.
+
+Verification details:
+- **Application ID:** `app.cmuxpocket`
+- **Signing Certificate SHA-256:** `c801d49f10948b465936c3155fa5ffef4fea7b2a1b0f029804bf4a7ea68282fa`
+
+### 4. Pair with Android in One Tap
+
+Generate a pairing QR code in your Mac terminal:
 
 ```bash
 cmux-pocket qr
@@ -99,9 +119,9 @@ cmux-pocket endpoint add wss://gateway.lan.example --name LAN
 cmux-pocket endpoint list
 ```
 
-1. [Download the latest signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) and install it on Android.
-2. Open **Settings → Connection** and tap **Scan QR**.
-3. Point your camera at the Mac terminal. Review the **Import Preview** dialog and tap **Import & Connect**.
+Pairing steps on your phone:
+1. Open **Settings → Connection** and tap **Scan QR**.
+2. Point your camera at the Mac terminal. Review the **Import Preview** dialog and tap **Import & Connect**.
 
 Your cmux workspaces and tabs appear immediately on Android.
 

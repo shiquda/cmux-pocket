@@ -1,0 +1,5 @@
+First-launch onboarding and one-command upgrade:
+• Step-by-step onboarding guide on first launch
+• New `cmux-pocket upgrade` CLI command
+• Gateway version reporting in status diagnostics
+• Layout fixes for host profile export dialog

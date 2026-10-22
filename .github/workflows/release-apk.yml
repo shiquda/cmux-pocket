@@ -128,13 +128,15 @@ jobs:
         working-directory: android
         run: |
           set -euo pipefail
+          RELEASE_APK="cmux-pocket-${GITHUB_REF_NAME}.apk"
+          mv app/build/outputs/apk/release/app-release.apk "$RELEASE_APK"
           printf '%s\n' \
             "version_name=${{ steps.verify.outputs.version_name }}" \
             "certificate_sha256=$CERTIFICATE_FINGERPRINT" \
             "apk_sha256=$APK_SHA256" \
             > release-metadata.txt
           gh release create "$GITHUB_REF_NAME" \
-            "app/build/outputs/apk/release/app-release.apk#cmux-pocket-${GITHUB_REF_NAME}.apk" \
+            "$RELEASE_APK" \
             release-metadata.txt#release-metadata.txt \
             --repo "$GITHUB_REPOSITORY" \
             --title "cmux Pocket $GITHUB_REF_NAME" \
