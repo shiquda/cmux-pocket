@@ -14,6 +14,21 @@ cmux Pocket is an independent Android companion for [cmux](https://cmux.com/) on
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/terminal.png" width="220" alt="Phone-width terminal with the floating island"></td>
+    <td><img src="docs/screenshots/session-drawer.png" width="220" alt="Session drawer listing workspaces and terminals"></td>
+    <td><img src="docs/screenshots/floating-window.png" width="220" alt="Terminal running in an Android picture-in-picture window"></td>
+    <td><img src="docs/screenshots/qr-pairing.png" width="220" alt="Scanning a connection QR code"></td>
+  </tr>
+</table>
+
+Captured on a 1080 × 2400 Android emulator against a local Gateway.
+
+---
+
 ## Highlights
 
 - **Pure Immersive Viewport & Floating Island**: Fullscreen terminal canvas with a dynamic breadcrumb island pill (`[status] workspace > #session [count]`) for instant session context, switching, and status indication.
@@ -21,11 +36,11 @@ cmux Pocket is an independent Android companion for [cmux](https://cmux.com/) on
 - **Decoupled Dual-End Navigation**: Switch workspaces or tabs on the phone without changing your Mac's active focus; main-screen scrollback stays local to Android while alternate-screen/TUI scrollback remains cmux-managed.
 - **One-Tap Pairing via CLI QR Code**: Generate pairing QR codes in your Mac terminal (`cmux-pocket qr`) — with an interactive picker for saved, Tailscale, Cloudflare Tunnel, and USB endpoints — and scan with the in-app camera for instant, validated profile import with overwrite protection.
 - **Remote Wake & Version Transparency**: If the Gateway is online but cmux.app is not running, the terminal offers **Wake cmux on Mac** and switches to the live terminal once the socket is ready. Settings → Connection shows the Gateway, app, and protocol versions with a compatibility badge and a copyable Mac upgrade command.
-- **Modernized Settings Hub**: Clean secondary-menu navigation with live diagnostics ring buffer (500-frame replay), profile backup/restore via clipboard, and in-app GitHub Releases update checker.
-- **P3 Neon Grid Color System**: Unified violet/neon-cyan/lime color palette optimized for OLED screens, with a first-class tuned light mode and contrast WCAG AA compliance.
-- **High-Performance Rendering**: Batched text runs, memoized ARGB cell parsing, dirty-row caching, and GPU-accelerated scaling drop janky frames from 58.5% down to 13.0%.
-- **Bilingual Localization**: Native English and 简体中文 support across all screens and notifications with instant runtime switching.
-- **100% Offline & Zero Cloud Dependency**: Loopback-only Mac Gateway with random bearer tokens, encrypted Android Keystore storage, and zero unnecessary device permissions.
+- **Modernized Settings Hub**: Sectioned navigation with a 500-line diagnostics log, profile backup/restore via clipboard, and an in-app GitHub Releases update checker.
+- **Neon Grid Color System**: Unified violet/neon-cyan/lime color palette optimized for OLED screens, with a first-class tuned light mode and contrast WCAG AA compliance.
+- **High-Performance Rendering**: Batched text runs, memoized ARGB cell parsing, and cached row pictures keep scrolling and resizing smooth.
+- **Bilingual Localization**: Native English and 简体中文 support across all screens and notifications, switchable at runtime.
+- **Local-First & Zero Telemetry**: Loopback-only Mac Gateway with a random bearer token and encrypted Android Keystore storage. There is no backend server and no analytics; the camera is used only for QR pairing, and notifications are optional.
 
 ---
 
@@ -46,7 +61,7 @@ cmux Pocket uses a local-first, decoupled architecture:
 ### 1. Prerequisites
 - **macOS**: [cmux](https://cmux.com/) installed and running (`cmux ping`).
 - **Android**: Android 8.0+ (API 26+) device or emulator.
-- **Networking**: Tailscale (recommended) or a user-managed TLS reverse proxy.
+- **Networking**: Tailscale (recommended), Cloudflare Tunnel, or a user-managed TLS reverse proxy.
 
 ### 2. Install the macOS CLI & Gateway
 
@@ -62,7 +77,7 @@ cmux-pocket status
 
 ### 3. Pair with Android in One Tap
 
-Generate a terminal QR code with automatic Tailscale discovery:
+Generate a pairing QR code:
 
 ```bash
 cmux-pocket qr
@@ -104,7 +119,7 @@ Your cmux workspaces and tabs appear immediately on Android.
 - **Contextual Action Bubble**: Long-press any terminal text to select and access one-tap actions: Copy selection, Copy screen, Paste at cursor, Send interrupt (Ctrl+C), or Clear screen.
 
 ### Accessory Keyboard Bar
-A persistent bottom bar provides essential developer keys missing from mobile software keyboards: `ESC`, `Enter`, `TAB`, `^C`, navigation arrows (`↑`, `↓`, `←`, `→`), symbol shortcuts (`|`, `/`, `-`, `~`), and a toggle for the full Computer Keyboard panel (F1–F12, function combinations).
+A compact, scrollable accessory row above the keyboard provides the developer keys missing from mobile software keyboards: `ESC`, `Enter`, `TAB`, `^C`, navigation arrows (`↑`, `↓`, `←`, `→`), symbol shortcuts (`|`, `/`, `-`, `~`), plus shortcuts for the floating window and settings. The full Computer Keyboard panel (F1–F12, function combinations) is one tap away.
 
 ---
 
@@ -112,9 +127,9 @@ A persistent bottom bar provides essential developer keys missing from mobile so
 
 ![cmux Pocket connection settings](docs/assets/connection-settings.png)
 
-- **Connection Profiles**: Manage multiple hosts (Tailscale, LAN, USB Reverse) with encrypted credential storage in Android Keystore.
+- **Connection Profiles**: Manage multiple hosts (Tailscale, LAN, Cloudflare Tunnel, USB Reverse) with encrypted credential storage in Android Keystore.
 - **Gateway Versions & Upgrades**: The Connection page reports Gateway, app, and cmux protocol versions, flags protocol mismatches or a Gateway that lacks remote wake, and offers a one-tap copy of the Mac upgrade command plus a direct latest-APK link.
-- **Live Diagnostics**: Built-in 500-frame circular buffer captures WebSocket handshakes, frame timings, and RPC payloads. Export redacted JSON logs directly to clipboard for troubleshooting.
+- **Live Diagnostics**: Built-in 500-line log captures WebSocket handshakes, connection state changes, and RPC traffic. Export redacted JSON logs directly to clipboard for troubleshooting.
 - **Data & Backup**: Export and import host profiles via clipboard JSON. Export asks whether to include the Gateway access keys: without them the JSON carries endpoints only, and you can fill a key in after importing.
 - **In-App Updates**: Check for new releases directly against GitHub Releases and download updated APKs in one tap.
 

@@ -1356,7 +1356,7 @@ fun BrandHeroCard() {
         }
 
         Text(
-            text = stringResource(R.string.settings_brand_tagline, "0.2.0"),
+            text = stringResource(R.string.settings_brand_tagline, BuildConfig.VERSION_NAME),
             fontSize = 12.sp,
             color = theme.onContainerMuted,
             modifier = Modifier.padding(top = 4.dp)
