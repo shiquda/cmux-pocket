@@ -75,7 +75,9 @@ cmux-pocket status
 
 `cmux-pocket setup` is idempotent: it provisions an authenticated bearer token with user-only permissions (`0600`), creates a macOS LaunchAgent, and tests local connectivity.
 
-To upgrade, run `brew upgrade shiquda/cmux-pocket/cmux-pocket`; the formula restarts the LaunchAgent so the new build serves the phone immediately. If `cmux-pocket --version` reports an older build than `brew list --versions cmux-pocket`, a duplicate binary earlier in `PATH` (for example an old `~/.local/bin/cmux-pocket` from a manual `cargo install`) is shadowing Homebrew: remove it, then rerun `cmux-pocket setup` so the LaunchAgent points at the Homebrew `opt` path again.
+To upgrade, run `cmux-pocket upgrade`: it compares the installed build with the latest GitHub Release, hands the upgrade to whichever package manager installed the CLI (`brew upgrade shiquda/cmux-pocket/cmux-pocket`, or `cargo install --force --git … --tag <release> cmux-pocket-cli`), and restarts the LaunchAgent so the new Gateway serves the phone immediately. `cmux-pocket upgrade --check` only reports whether an update exists, and `--json` keeps it scriptable. The command never overwrites the binary itself: an install it cannot attribute to Homebrew or `cargo install` is reported with both commands to run by hand.
+
+If `cmux-pocket --version` reports an older build than `brew list --versions cmux-pocket`, a duplicate binary earlier in `PATH` (for example an old `~/.local/bin/cmux-pocket` from a manual `cargo install`) is shadowing Homebrew: remove it, then rerun `cmux-pocket setup` so the LaunchAgent points at the Homebrew `opt` path again. `cmux-pocket upgrade` prints the same warning when the registered LaunchAgent runs a different binary than the one it just upgraded.
 
 ### 3. Pair with Android in One Tap
 

@@ -49,6 +49,10 @@ pub struct GatewayStatus {
     pub listening: bool,
     pub authenticated_probe: bool,
     pub server_version: Option<String>,
+    /// Build version the running Gateway reports (`mobile.host.status`), distinct from
+    /// the `server_version` protocol handshake.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_version: Option<String>,
     pub capabilities: Vec<String>,
     pub backend_health: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -176,6 +180,7 @@ pub async fn handle_status(
 
     let mut auth_probe_ok = false;
     let mut server_version = None;
+    let mut gateway_version = None;
     let mut capabilities = Vec::new();
     let mut backend_health = None;
     let mut backend_error = None;
@@ -191,6 +196,12 @@ pub async fn handle_status(
         .await
         {
             auth_probe_ok = report.authenticated;
+            gateway_version = report
+                .host_status
+                .as_ref()
+                .and_then(|status| status.get("gateway_version"))
+                .and_then(serde_json::Value::as_str)
+                .map(String::from);
             server_version = report.server_version;
             capabilities = report.capabilities;
             backend_health = report.backend_health;
@@ -203,6 +214,7 @@ pub async fn handle_status(
         listening,
         authenticated_probe: auth_probe_ok,
         server_version: server_version.clone(),
+        gateway_version: gateway_version.clone(),
         capabilities: capabilities.clone(),
         backend_health: backend_health.clone(),
         error: backend_error.clone(),
@@ -254,7 +266,8 @@ pub async fn handle_status(
          Token FP:        {}\n\
          Launchd Service: {} (registered: {}, PID: {})\n\
          TCP Listener:    {}\n\
-         Gateway Probe:   {} (version: {}, latency: {})\n\
+         Gateway Probe:   {} (protocol: {}, latency: {})\n\
+         Gateway Build:   {}\n\
          Workspace Access: {}\n\
          cmux Reachable:  {} ({})\n\
          Capabilities:    {}",
@@ -286,6 +299,7 @@ pub async fn handle_status(
         probe_latency
             .map(|ms| format!("{}ms", ms))
             .unwrap_or_else(|| "n/a".to_string()),
+        gateway_version.as_deref().unwrap_or("n/a"),
         if auth_probe_ok && backend_health.as_deref() == Some("healthy") {
             "Ready"
         } else {
