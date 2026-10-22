@@ -19,6 +19,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -91,6 +93,24 @@ fun OnboardingScreen(
                     OnboardingCommand(
                         command = stringResource(R.string.scan_command_qr),
                         copyLabelRes = R.string.onboarding_copy_qr
+                    )
+                    val hintCommand = stringResource(R.string.onboarding_tailscale_command)
+                    val hintText = stringResource(R.string.onboarding_tailscale_hint, hintCommand)
+                    Text(
+                        text = buildAnnotatedString {
+                            append(hintText)
+                            val start = hintText.indexOf(hintCommand)
+                            if (start >= 0) {
+                                addStyle(
+                                    SpanStyle(fontFamily = FontFamily.Monospace),
+                                    start,
+                                    start + hintCommand.length
+                                )
+                            }
+                        },
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = theme.onSurfaceVariant
                     )
                 }
             }

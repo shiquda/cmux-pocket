@@ -246,6 +246,7 @@
     <string name="onboarding_step2_title">生成配对二维码并扫描</string>
     <string name="onboarding_step2_body">在 Mac 终端运行以下命令生成二维码，再用相机对准它；地址、端口与访问密钥会自动填入。</string>
     <string name="onboarding_copy_qr">复制二维码命令</string>
+    <string name="onboarding_tailscale_hint">手机走 Tailscale 时，先在 Mac 上执行 %1$s。</string>
     <string name="onboarding_scan_qr">扫描二维码</string>
     <string name="onboarding_skip">暂时跳过</string>
 
