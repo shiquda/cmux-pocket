@@ -16,8 +16,17 @@ extracts the section for the pushed tag while publishing, and
 ### Highlights
 
 - **Phone-width terminal layout**: the shared PTY is asked to reflow to the phone's real column count, so host-side TUIs fit the screen instead of being zoomed or panned.
+
+  <img src="https://raw.githubusercontent.com/shiquda/cmux-pocket/main/docs/screenshots/terminal.png" width="300" alt="Phone-width terminal layout">
+
 - **Floating terminal window**: the focused session keeps streaming into Android picture-in-picture after you leave the app, with optional auto-open, an aspect-ratio slider, and per-window text size.
+
+  <img src="https://raw.githubusercontent.com/shiquda/cmux-pocket/main/docs/screenshots/floating-window.png" width="300" alt="Floating terminal window in picture-in-picture">
+
 - **One-command pairing**: `cmux-pocket qr` picks between saved endpoints, a verified Tailscale Serve route, Cloudflare Tunnel hostnames, and USB, then re-renders the QR code live; the app scans it and previews host, port, TLS, and a masked token before importing.
+
+  <img src="https://raw.githubusercontent.com/shiquda/cmux-pocket/main/docs/screenshots/qr-pairing.png" width="300" alt="Scanning connection QR code">
+
 - **Session completion feedback**: a short pulse for the session on screen, a tappable capsule for any other session, and a notification that names its target when the app is backgrounded.
 
 ### Added
@@ -26,9 +35,13 @@ extracts the section for the pushed tag while publishing, and
 - Floating terminal window: the focused session renders into Android picture-in-picture with a bottom-aligned, word-wrapped tail of the grid. **Settings → Floating window** offers an enable switch, **Auto-open when leaving the app**, a 0.6–2.39 aspect-ratio slider, a 2–24 sp font size, and a live preview; the accessory bar's picture-in-picture button opens it on demand. **Adapt terminal layout** reflows the real grid to the window's measured width and font size on every resize, and releases the report when the window closes so the full-screen layout comes back.
 - Session completion feedback: when the session on screen finishes its agent turn, the phone gives a short haptic pulse; any other session raises a tappable capsule under the floating island (`workspace › #N title Done`) that jumps straight to it, with a `+N` badge for queued completions. **Settings → Notifications** turns the pulse off (on by default). While the app is in the foreground these replace the system notification; a backgrounded app still posts one labelled with its target (`workspace › #N title`), and tapping it opens that surface — including on a cold start or when the Gateway reports a workspace id the mobile tree does not know.
 - Workspace and tab management: create a workspace (optionally with its first tab), rename workspaces and tabs, and confirm before deleting the active workspace or closing the active tab.
+
+  <img src="https://raw.githubusercontent.com/shiquda/cmux-pocket/main/docs/screenshots/session-drawer.png" width="300" alt="Sessions and surfaces drawer">
 - Edge-drag scrollback: a drag the rendered grid can no longer absorb continues into history at the top edge and walks back to live output at the bottom; the right joystick shares the same offset handler and its rail shows the current history position.
 - Remote wake: when the Gateway is online but cmux.app is not running, the Android terminal shows a **Mac online · cmux not running** card with a one-tap **Wake cmux on Mac** action. The Gateway launches the app through LaunchServices in the background (10-second debounce), polls the socket every 500 ms for up to 15 seconds, then pushes a full workspace sync.
 - Android **Settings → Connection** shows the Pocket Gateway version, the app version, the cmux protocol version, and remote-wake support with a compatibility badge, a **Recheck version** action, a copyable Mac upgrade command, and an APK download link when the app is older than the Gateway.
+
+  <img src="https://raw.githubusercontent.com/shiquda/cmux-pocket/main/docs/screenshots/connection.png" width="300" alt="Connection settings and Gateway versions">
 - `mobile.host.status` now reports `gateway_version`, `protocol_version`, and `cmux_status` (`installed`, `running`, `can_wake`), and Gateways advertise the `mobile.host.wake_cmux.v1` capability plus a new `mobile.host.wake_cmux` RPC.
 - Connection QR pairing: `cmux-pocket qr` renders a QR code and a `cmux-pocket://` import link for the resolved endpoint, and Android **Settings → Connection → Scan QR** or the deep link imports it after a preview showing host, port, TLS state, and a masked token.
 - Interactive QR picker: `cmux-pocket qr` shows the first candidate's QR code immediately and re-renders it live as you switch between saved endpoints, a verified Tailscale Serve route, Cloudflare Tunnel hostnames, and USB (ADB reverse) with ↑/↓ (Enter confirms, Esc cancels); `--endpoint` skips it, and `--no-interactive`, `--json`, and `--url-only` keep the previous single-shot behavior.
