@@ -10,7 +10,9 @@ pub mod output;
 pub mod picker;
 pub mod probe;
 pub mod tailscale;
+pub mod upgrade;
 pub mod uri;
+pub mod version;
 
 pub use cli::{Cli, Commands};
 pub use error::{CliError, CliExitCode};
@@ -64,6 +66,9 @@ pub async fn run_cli(cli: Cli) -> Result<(), CliError> {
         }
         Commands::Gateway(args) => {
             commands::handle_gateway(&paths, &args.command, json_mode).await?;
+        }
+        Commands::Upgrade(args) => {
+            commands::handle_upgrade(&paths, args, json_mode).await?;
         }
         Commands::Qr(args) => {
             commands::handle_qr(&paths, args, json_mode).await?;

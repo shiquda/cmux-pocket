@@ -330,7 +330,10 @@ fn gateway_is_current(report: &ProbeReport) -> bool {
         .as_ref()
         .and_then(|status| status.get("gateway_version"))
         .and_then(Value::as_str);
-    match (running.and_then(parse_version), parse_version(env!("CARGO_PKG_VERSION"))) {
+    match (
+        running.and_then(crate::version::parse_version),
+        crate::version::parse_version(env!("CARGO_PKG_VERSION")),
+    ) {
         (Some(running), Some(current)) => running >= current,
         // Gateways older than 0.2.0 do not report a build version at all, and an
         // unparseable value cannot prove the process is current.
@@ -338,23 +341,9 @@ fn gateway_is_current(report: &ProbeReport) -> bool {
     }
 }
 
-fn parse_version(value: &str) -> Option<(u64, u64, u64)> {
-    let core = value.split(['-', '+']).next()?;
-    let mut parts = core.split('.');
-    let parsed = (
-        parts.next()?.parse().ok()?,
-        parts.next()?.parse().ok()?,
-        parts.next()?.parse().ok()?,
-    );
-    if parts.next().is_some() {
-        return None;
-    }
-    Some(parsed)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{gateway_is_current, parse_version, CMUX_BINARY_CANDIDATES};
+    use super::{gateway_is_current, CMUX_BINARY_CANDIDATES};
     use crate::probe::ProbeReport;
 
     fn report(gateway_version: Option<&str>) -> ProbeReport {
@@ -385,15 +374,6 @@ mod tests {
         assert!(!gateway_is_current(&report(Some("0.0.1"))));
         assert!(!gateway_is_current(&report(Some("not-a-version"))));
         assert!(!gateway_is_current(&report(None)));
-    }
-
-    #[test]
-    fn compares_three_part_versions_and_ignores_prerelease_suffixes() {
-        assert_eq!(parse_version("0.2.0"), Some((0, 2, 0)));
-        assert_eq!(parse_version("0.3.0-rc1"), Some((0, 3, 0)));
-        assert_eq!(parse_version("1.2"), None);
-        assert_eq!(parse_version("1.2.3.4"), None);
-        assert!(parse_version("10.0.0") > parse_version("9.9.9"));
     }
 
     #[test]

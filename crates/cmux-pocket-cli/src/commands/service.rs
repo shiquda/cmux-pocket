@@ -33,6 +33,28 @@ pub struct ServiceStatusData {
     pub last_exit_code: Option<i32>,
 }
 
+/// Restarts the registered Gateway LaunchAgent in place (`launchctl kickstart -k`).
+///
+/// Shared by `cmux-pocket service restart` and `cmux-pocket upgrade`, which has to
+/// put the freshly installed build into service without waiting for a re-login.
+pub fn restart_service() -> Result<(), CliError> {
+    let target = LaunchdTarget::Gui(get_current_uid());
+    let kickstart_cmd = launchctl_kickstart_cmd(&target, DEFAULT_LAUNCHD_LABEL, true);
+    let out = kickstart_cmd.to_std_command().output().map_err(|e| {
+        CliError::DependencyUnavailable(format!("Failed to execute launchctl kickstart: {e}"))
+    })?;
+
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        return Err(CliError::DependencyUnavailable(format!(
+            "launchctl kickstart restart failed for service '{}': {}",
+            DEFAULT_LAUNCHD_LABEL,
+            stderr.trim()
+        )));
+    }
+    Ok(())
+}
+
 /// Handles `cmux-pocket service` subcommands.
 pub async fn handle_service(
     paths: &PocketPaths,
@@ -214,22 +236,7 @@ pub async fn handle_service(
             Ok(())
         }
         ServiceSubcommand::Restart => {
-            let kickstart_cmd = launchctl_kickstart_cmd(&target, label, true);
-            let out = kickstart_cmd.to_std_command().output().map_err(|e| {
-                CliError::DependencyUnavailable(format!(
-                    "Failed to execute launchctl kickstart: {}",
-                    e
-                ))
-            })?;
-
-            if !out.status.success() {
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                return Err(CliError::DependencyUnavailable(format!(
-                    "launchctl kickstart restart failed for service '{}': {}",
-                    label,
-                    stderr.trim()
-                )));
-            }
+            restart_service()?;
 
             let msg = format!("Service '{}' restarted successfully", label);
             let data = ServiceOperationData {

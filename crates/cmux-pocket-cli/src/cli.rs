@@ -57,6 +57,9 @@ pub enum Commands {
     /// Gateway runtime and health probe
     Gateway(GatewayArgs),
 
+    /// Upgrade the installed CLI and Gateway to the latest GitHub Release
+    Upgrade(UpgradeArgs),
+
     /// Display connection QR code and import link for Android cmux-pocket
     #[command(alias = "qrcode")]
     Qr(QrArgs),
@@ -229,6 +232,14 @@ pub enum ServiceSubcommand {
     Restart,
     /// Inspect launchd registration, PID, version, and health
     Status,
+}
+
+/// Arguments for `cmux-pocket upgrade`.
+#[derive(Args, Debug, Clone, PartialEq, Eq, Default)]
+pub struct UpgradeArgs {
+    /// Only compare the installed version with the latest release; change nothing
+    #[arg(long)]
+    pub check: bool,
 }
 
 /// Arguments for `cmux-pocket logs`.

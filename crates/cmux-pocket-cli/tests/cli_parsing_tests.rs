@@ -2,7 +2,7 @@ use clap::Parser;
 use cmux_pocket_cli::cli::{
     Cli, Commands, ConfigArgs, ConfigSubcommand, DoctorArgs, GatewayArgs, GatewaySubcommand,
     LogsArgs, QrArgs, ServiceArgs, ServiceSubcommand, SetupArgs, StatusArgs, TokenArgs,
-    TokenSubcommand,
+    TokenSubcommand, UpgradeArgs,
 };
 use std::path::PathBuf;
 
@@ -324,6 +324,16 @@ fn test_parse_gateway() {
             command: GatewaySubcommand::Probe,
         })
     );
+}
+
+#[test]
+fn test_parse_upgrade() {
+    let cli = Cli::try_parse_from(["cmux-pocket", "upgrade"]).unwrap();
+    assert_eq!(cli.command, Commands::Upgrade(UpgradeArgs { check: false }));
+
+    let cli = Cli::try_parse_from(["cmux-pocket", "upgrade", "--check", "--json"]).unwrap();
+    assert!(cli.json);
+    assert_eq!(cli.command, Commands::Upgrade(UpgradeArgs { check: true }));
 }
 
 #[test]
