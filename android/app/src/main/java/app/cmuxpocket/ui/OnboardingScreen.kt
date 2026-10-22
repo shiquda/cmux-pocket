@@ -88,6 +88,10 @@ fun OnboardingScreen(
                         fontSize = 12.sp,
                         color = theme.onSurfaceVariant
                     )
+                    OnboardingCommand(
+                        command = stringResource(R.string.onboarding_qr_command),
+                        copyLabelRes = R.string.onboarding_copy_qr
+                    )
                 }
             }
 

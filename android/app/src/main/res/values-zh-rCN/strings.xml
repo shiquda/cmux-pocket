@@ -239,12 +239,13 @@
     <string name="onboarding_title">把手机连接到 cmux</string>
     <string name="onboarding_subtitle">cmux Pocket 通过 Mac 上的网关访问终端，两步即可接入。</string>
     <string name="onboarding_step1_title">在 Mac 上安装网关</string>
-    <string name="onboarding_step1_body">在终端中依次执行以下命令，setup 会输出配对二维码。</string>
+    <string name="onboarding_step1_body">在终端中依次执行，setup 会创建访问密钥并注册后台网关服务。</string>
     <string name="onboarding_copy_install">复制安装命令</string>
     <string name="onboarding_copy_setup">复制初始化命令</string>
     <string name="onboarding_copied">已复制到剪贴板</string>
-    <string name="onboarding_step2_title">扫描配对二维码</string>
-    <string name="onboarding_step2_body">用相机对准 setup 的二维码，地址与密钥会自动填入。</string>
+    <string name="onboarding_step2_title">生成配对二维码并扫描</string>
+    <string name="onboarding_step2_body">在 Mac 终端运行以下命令生成二维码，再用相机对准它；地址、端口与访问密钥会自动填入。</string>
+    <string name="onboarding_copy_qr">复制二维码命令</string>
     <string name="onboarding_scan_qr">扫描二维码</string>
     <string name="onboarding_skip">暂时跳过</string>
 
