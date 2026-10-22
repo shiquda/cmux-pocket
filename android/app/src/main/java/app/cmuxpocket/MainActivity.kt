@@ -232,6 +232,8 @@ fun CmuxAppRoot(
     var importPayload by remember { mutableStateOf<CmuxImportPayload?>(null) }
     var importErrorMessage by remember { mutableStateOf<String?>(null) }
     var showQrScanner by remember { mutableStateOf(false) }
+    // First launch only: Settings → Connection reopens the same screen on demand.
+    var showOnboarding by rememberSaveable { mutableStateOf(settingsManager.shouldShowOnboarding) }
 
     LaunchedEffect(pendingImportUri) {
         val rawUri = pendingImportUri
@@ -263,48 +265,59 @@ fun CmuxAppRoot(
             )
             return@CmuxAppTheme
         }
-        CmuxApp(
-            viewModel = viewModel,
-            settingsManager = settingsManager,
-            hostInput = hostInput,
-            portInput = portInput,
-            tokenInput = tokenInput,
-            fontSizeSp = fontSizeSp,
-            selectedThemeHex = selectedThemeHex,
-            themeMode = themeMode,
-            floatingWindowEnabled = floatingWindowEnabled,
-            onEnterFloatingWindow = onEnterFloatingWindow,
-            onFloatingWindowSettingsChanged = {
-                floatingWindowEnabled = settingsManager.floatingWindowEnabled
-                onFloatingWindowSettingsChanged()
-            },
-            onScanQrClick = { showQrScanner = true },
+        if (showOnboarding) {
+            OnboardingScreen(
+                onScanQrClick = { showQrScanner = true },
+                onSkip = {
+                    settingsManager.onboardingCompleted = true
+                    showOnboarding = false
+                }
+            )
+        } else {
+            CmuxApp(
+                viewModel = viewModel,
+                settingsManager = settingsManager,
+                hostInput = hostInput,
+                portInput = portInput,
+                tokenInput = tokenInput,
+                fontSizeSp = fontSizeSp,
+                selectedThemeHex = selectedThemeHex,
+                themeMode = themeMode,
+                floatingWindowEnabled = floatingWindowEnabled,
+                onEnterFloatingWindow = onEnterFloatingWindow,
+                onFloatingWindowSettingsChanged = {
+                    floatingWindowEnabled = settingsManager.floatingWindowEnabled
+                    onFloatingWindowSettingsChanged()
+                },
+                onScanQrClick = { showQrScanner = true },
+                onOpenOnboarding = { showOnboarding = true },
 
-            onHostChange = {
-                hostInput = it
-                settingsManager.host = it
-            },
-            onPortChange = {
-                portInput = it
-                settingsManager.port = it.toIntOrNull() ?: 8088
-            },
-            onTokenChange = {
-                tokenInput = it
-                settingsManager.token = it
-            },
-            onFontSizeChange = {
-                fontSizeSp = it
-                settingsManager.fontSizeSp = it
-            },
-            onThemeHexChange = {
-                selectedThemeHex = it
-                settingsManager.terminalBgTheme = it
-            },
-            onThemeModeChange = {
-                themeMode = it
-                settingsManager.themeMode = it
-            },
-        )
+                onHostChange = {
+                    hostInput = it
+                    settingsManager.host = it
+                },
+                onPortChange = {
+                    portInput = it
+                    settingsManager.port = it.toIntOrNull() ?: 8088
+                },
+                onTokenChange = {
+                    tokenInput = it
+                    settingsManager.token = it
+                },
+                onFontSizeChange = {
+                    fontSizeSp = it
+                    settingsManager.fontSizeSp = it
+                },
+                onThemeHexChange = {
+                    selectedThemeHex = it
+                    settingsManager.terminalBgTheme = it
+                },
+                onThemeModeChange = {
+                    themeMode = it
+                    settingsManager.themeMode = it
+                },
+            )
+        }
 
         importPayload?.let { payload ->
             ImportPreviewDialog(
@@ -315,6 +328,7 @@ fun CmuxAppRoot(
                     viewModel.clearPendingImportUri()
                 },
                 onImportConfirmed = { profile, connectImmediately ->
+                    val wasOnboarding = showOnboarding
                     settingsManager.upsertProfile(profile)
                     settingsManager.activeProfileId = profile.id
                     hostInput = profile.host
@@ -325,7 +339,12 @@ fun CmuxAppRoot(
                     settingsManager.token = profile.token
                     importPayload = null
                     viewModel.clearPendingImportUri()
-                    if (connectImmediately) {
+                    // Pairing through the guide is the success it waits for, whether the scan
+                    // started from the guide itself or from Settings.
+                    settingsManager.onboardingCompleted = true
+                    showOnboarding = false
+                    // The terminal screen connects on its own when it replaces the guide.
+                    if (connectImmediately && !wasOnboarding) {
                         viewModel.connect(profile.host, profile.port, profile.token)
                     }
                 }
@@ -376,6 +395,7 @@ fun CmuxApp(
     onThemeHexChange: (String) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
     onScanQrClick: () -> Unit = {},
+    onOpenOnboarding: () -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
     val status by viewModel.connectionStatus.collectAsState(initial = ConnectionStatus.DISCONNECTED)
@@ -856,6 +876,10 @@ fun CmuxApp(
                 onThemeModeChange = onThemeModeChange,
                 onConnectClick = settingsOnConnect,
                 onScanQrClick = onScanQrClick,
+                onOpenOnboarding = {
+                    showSettingsDialog = false
+                    onOpenOnboarding()
+                },
                 onClearScrollback = settingsOnClearScrollback,
                 onRecheckGatewayVersion = viewModel::refreshHostStatus,
                 isRefreshingGatewayVersion = refreshingHostStatus,
