@@ -31,6 +31,8 @@ You need **Android 8.0+** and a **Mac with macOS 13+** running cmux. Keep the Ma
    Select the Tailscale endpoint in the QR picker. For TLS setup and other networks, see the [networking guide](docs/networking.md#2-choose-a-secure-boundary).
 4. **Pair:** open **Settings → Connection → Scan QR** on Android, scan the code, review the preview, and tap **Import & Connect**. Your cmux workspaces and tabs appear on the phone.
 
+![One-tap QR pairing: generate a QR on the Mac, scan it in cmux Pocket, and workspaces appear on Android](docs/assets/qr-pairing-flow.png)
+
 If workspace access fails, check [cmux socket permissions](docs/networking.md#cmux-socket-access): cmux's default process restriction can reject the background Gateway. Keep pairing QR codes private—they contain your access token.
 
 ## Documentation

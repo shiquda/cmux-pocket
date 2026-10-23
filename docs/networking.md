@@ -165,31 +165,21 @@ tailscale serve status
 
 Tailscale Serve keeps its background configuration, but the Mac, cmux, VPN, and Gateway must remain running. QR pairing (`cmux-pocket qr`) transfers the Gateway endpoint, TLS state, and token in one scan; see §3.
 
-### LAN with a TLS reverse proxy
+### LAN or hosted ingress through a TLS reverse proxy
 
-Use a reverse proxy on the Mac or another host that is reachable from the phone over the LAN. The proxy should:
+Use a reverse proxy on the Mac, or at a trusted edge that forwards to the Mac through a private link. It should:
 
-1. Listen on a trusted TLS hostname and certificate.
-2. Accept WebSocket upgrades.
+1. Listen on a TLS hostname with a certificate trusted by Android.
+2. Accept WebSocket upgrades without buffering or HTTP polling conversion.
 3. Forward only to `ws://127.0.0.1:8088`.
-4. Keep the Gateway off the LAN interface.
-5. Restrict access to the intended LAN, VPN, or authenticated users.
+4. Keep the Gateway off the LAN interface. The local `8088` is not automatically a public port; the public side normally uses `443`.
+5. Ingress from the LAN or through the private link to the Mac's loopback Gateway.
+6. Keep idle and read timeouts long enough for a persistent WebSocket.
+7. Restrict access to the intended LAN, VPN, or authenticated users, and never log or expose the Gateway token.
 
 Use a stable hostname that resolves to the proxy from the phone. In the app, enter either the complete `wss://` URL or a hostname with public TLS port `443`.
 
 Do not configure a plaintext `ws://` LAN endpoint. A reachable LAN port is not sufficient; the transport must be TLS-protected.
-
-### Reverse proxy or hosted ingress
-
-A reverse proxy may terminate TLS at a trusted edge and forward the WebSocket to the Mac through a private link. The public side should normally use port `443`; the Gateway's local `8088` is not automatically a public port.
-
-Verify all of the following before configuring the app:
-
-- The certificate is trusted by Android.
-- WebSocket upgrade requests are forwarded without buffering or HTTP polling conversion.
-- The proxy can reach the Mac's loopback Gateway through its private link.
-- The proxy does not log or expose the Gateway token.
-- Idle and read timeouts are long enough for a persistent WebSocket.
 
 ### Cloud or other secure tunnel
 

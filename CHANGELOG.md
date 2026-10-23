@@ -18,6 +18,7 @@ extracts the section for the pushed tag while publishing, and
 ### Changed
 
 - Shortened the README to product identity, signed-APK installation, and QR pairing. Removed the alternative installer instructions and moved app usage/screenshots, architecture, development, and Gateway upgrade details into linked documentation.
+- Illustrated QR pairing inside the README Quick Start, and tightened wording in the split guides (one merged reverse-proxy section) without dropping setup details.
 
 ### Fixed
 
