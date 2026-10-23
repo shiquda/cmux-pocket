@@ -87,6 +87,12 @@ pbcopy < "$(cmux-pocket token path)"
 
 `cmux-pocket service uninstall` removes only the CLI-owned LaunchAgent. Homebrew installation and upgrades do not create tokens, start services, or mutate user configuration; the formula does restart an already-registered LaunchAgent after install, so a `brew upgrade` puts the new Gateway build in service immediately. Running `cmux-pocket setup` after an upgrade also restarts a Gateway whose reported build is older than the CLI, because launchd otherwise keeps the previous process running; a Gateway at the same or a newer build is reused untouched.
 
+### Gateway upgrades
+
+Run `cmux-pocket upgrade` to compare the installed build with the latest GitHub Release, upgrade through the package manager that installed the CLI, and restart the LaunchAgent. Homebrew installs use `brew upgrade shiquda/cmux-pocket/cmux-pocket`; Cargo installs use `cargo install --force --git … --tag <release> cmux-pocket-cli`. `cmux-pocket upgrade --check` only reports availability, and `--json` provides scriptable output. The CLI never overwrites its own binary; an unrecognized installation reports manual upgrade commands instead.
+
+If `cmux-pocket --version` is older than `brew list --versions cmux-pocket`, check for an old binary earlier in `PATH` (for example, a manual installation in `~/.local/bin`). Remove the obsolete duplicate, then rerun `cmux-pocket setup` to point the LaunchAgent at Homebrew's `opt` path. Upgrade also warns when the registered LaunchAgent runs a different binary than the one just upgraded.
+
 ### Remote wake and Gateway version checks
 
 The Gateway runs as a login agent, but the cmux desktop app may not be running after a reboot or a manual quit. When the phone is connected and the Gateway reports `cmux_status.running: false`, the terminal replaces its empty state with a **Wake cmux on Mac** card:

@@ -13,7 +13,11 @@ extracts the section for the pushed tag while publishing, and
 
 ### Added
 
-- Obtainium installation instructions and fastlane app descriptions, icon, and phone screenshots for an IzzyOnDroid listing request.
+- Fastlane app descriptions, icon, and phone screenshots for an IzzyOnDroid listing request.
+
+### Changed
+
+- Shortened the README to product identity, signed-APK installation, and QR pairing. Removed the alternative installer instructions and moved app usage/screenshots, architecture, development, and Gateway upgrade details into linked documentation.
 
 ### Fixed
 
