@@ -8,7 +8,7 @@ cmux Pocket is an independent Android companion for [cmux](https://cmux.com/) on
 
 > **Disclaimer:** Independent community project. Not affiliated with or endorsed by cmux. “cmux” identifies the compatibility target only.
 
-[Download Signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Install with Obtainium](#3-install-the-android-app) · [Quick Start](#quick-start) · [Networking Guide](docs/networking.md) · [Design System](DESIGN.md) · [Changelog](CHANGELOG.md)
+[Download Signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Quick Start](#quick-start) · [Networking Guide](docs/networking.md) · [Design System](DESIGN.md) · [Changelog](CHANGELOG.md)
 
 ![cmux Pocket: Mac desktop showing cmux terminal alongside Android phone displaying the same workspace](docs/assets/hero.png)
 
@@ -81,18 +81,6 @@ If `cmux-pocket --version` reports an older build than `brew list --versions cmu
 
 ### 3. Install the Android App
 
-Install cmux Pocket using either Obtainium for source updates or by downloading the signed APK directly:
-
-#### Option A: Automatic Updates via Obtainium (Recommended)
-[Obtainium](https://github.com/ImranR98/Obtainium) checks GitHub Releases for updates and lets you install them on Android:
-1. In Obtainium, tap **Add App** and paste the repository URL:
-   ```text
-   https://github.com/shiquda/cmux-pocket
-   ```
-2. Leave the asset filter settings at default. Obtainium detects release APKs automatically (`app-release.apk` on existing releases and `cmux-pocket-vX.Y.Z.apk` on upcoming releases). **Do not** add a custom filename filter that matches only one pattern.
-3. Tap **Add** to fetch and install the release.
-
-#### Option B: Direct Signed APK Download
 Download the latest signed release APK directly from [GitHub Releases](https://github.com/shiquda/cmux-pocket/releases/latest) and install it on Android.
 
 Verification details:
