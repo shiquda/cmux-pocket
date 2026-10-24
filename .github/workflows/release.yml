@@ -1,0 +1,381 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing v* tag to publish or recover
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Open a draft or leave a published release alone
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+      release_state: ${{ steps.release.outputs.release_state }}
+    steps:
+      - name: Resolve the release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.release_tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag=$INPUT_TAG
+          else
+            tag=$REF_NAME
+          fi
+          python3 - "$tag" <<'PY'
+          import re
+          import sys
+
+          tag = sys.argv[1]
+          if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+              raise SystemExit(f"tag must look like v1.2.3, got {tag!r}")
+          PY
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null; then
+            echo "tag ${tag} does not exist; refusing to create one" >&2
+            exit 1
+          fi
+          echo "release_tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the tagged source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ steps.tag.outputs.release_tag }}
+          persist-credentials: false
+
+      - name: Create a draft, or record a published release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          set +e
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > "$RUNNER_TEMP/release.json"
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            draft=$(jq -r .draft "$RUNNER_TEMP/release.json")
+            if [ "$draft" = "true" ]; then
+              echo "release_state=draft" >> "$GITHUB_OUTPUT"
+              ./scripts/release-notes-from-changelog.sh "$RELEASE_TAG" > "$RUNNER_TEMP/release-notes.md"
+              test -s "$RUNNER_TEMP/release-notes.md"
+              # --draft keeps an existing draft from being published by a notes edit.
+              gh release edit "$RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --draft \
+                --notes-file "$RUNNER_TEMP/release-notes.md"
+            else
+              echo "release_state=published" >> "$GITHUB_OUTPUT"
+              echo "${RELEASE_TAG} is already published; builds will not upload or move latest" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          elif jq -e '.status == 404' "$RUNNER_TEMP/release.json" >/dev/null 2>&1; then
+            ./scripts/release-notes-from-changelog.sh "$RELEASE_TAG" > "$RUNNER_TEMP/release-notes.md"
+            test -s "$RUNNER_TEMP/release-notes.md"
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft \
+              --verify-tag \
+              --title "cmux Pocket $RELEASE_TAG" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+            echo "release_state=draft" >> "$GITHUB_OUTPUT"
+          else
+            echo "could not read release ${RELEASE_TAG}" >&2
+            cat "$RUNNER_TEMP/release.json" >&2
+            exit 1
+          fi
+
+  apk:
+    name: Build and verify the signed APK
+    needs: prepare
+    if: needs.prepare.outputs.release_state == 'draft'
+    runs-on: ubuntu-24.04
+    environment: release-signing
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Decode the protected signing keystore
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PATH: ${{ runner.temp }}/cmux-pocket-release.keystore
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_B64"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+
+      - name: Build release APK
+        working-directory: android
+        env:
+          ORG_GRADLE_PROJECT_releaseStoreFile: ${{ runner.temp }}/cmux-pocket-release.keystore
+          ORG_GRADLE_PROJECT_releaseStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_releaseKeyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_releaseKeyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./gradlew testDebugUnitTest assembleRelease --no-daemon
+
+      - name: Verify APK identity and signature
+        id: verify
+        working-directory: android
+        env:
+          APK_PATH: app/build/outputs/apk/release/app-release.apk
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          CERT_TOOL="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          BADGING_TOOL="$ANDROID_HOME/build-tools/35.0.0/aapt2"
+          test -f "$APK_PATH"
+          "$CERT_TOOL" verify --verbose --print-certs "$APK_PATH"
+          python3 - "$APK_PATH" "$CERT_TOOL" "$BADGING_TOOL" "$RELEASE_TAG" "$GITHUB_OUTPUT" <<'PY'
+          import hashlib
+          import pathlib
+          import re
+          import subprocess
+          import sys
+
+          apk_path, cert_tool, badging_tool, ref_name, output_path = sys.argv[1:]
+          cert_output = subprocess.check_output(
+              [cert_tool, "verify", "--print-certs", apk_path],
+              text=True,
+          )
+          cert_match = re.search(
+              r"Signer #1 certificate SHA-256 digest: ([0-9A-Fa-f:]+)",
+              cert_output,
+          )
+          if cert_match is None:
+              raise SystemExit("APK certificate fingerprint was not found")
+
+          badging = subprocess.check_output(
+              [badging_tool, "dump", "badging", apk_path],
+              text=True,
+          )
+          package_line = next(
+              (line for line in badging.splitlines() if line.startswith("package:")),
+              "",
+          )
+          print(f"badgingPackageLine={package_line}")
+          package_match = re.search(
+              r"name='([^']+)'.*?versionCode='([^']+)'.*?versionName='([^']+)'",
+              package_line,
+          )
+          if package_match is None:
+              raise SystemExit("APK package metadata was not found")
+          package_name, version_code, version_name = package_match.groups()
+          if package_name != "app.cmuxpocket":
+              raise SystemExit(f"Unexpected application ID: {package_name}")
+          tag_version = ref_name.lstrip("v")
+          if version_name != tag_version:
+              raise SystemExit(f"versionName {version_name} does not match tag {tag_version}")
+
+          digest = hashlib.sha256(pathlib.Path(apk_path).read_bytes()).hexdigest()
+          with open(output_path, "a", encoding="utf-8") as output:
+              output.write(f"certificate_fingerprint={cert_match.group(1)}\n")
+              output.write(f"apk_sha256={digest}\n")
+              output.write(f"version_name={version_name}\n")
+          print(f"applicationId={package_name}")
+          print(f"versionCode={version_code}")
+          print(f"versionName={version_name}")
+          print(f"certificateSHA256={cert_match.group(1)}")
+          print(f"apkSHA256={digest}")
+          PY
+
+      - name: Stage the APK artifact
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+          CERTIFICATE_FINGERPRINT: ${{ steps.verify.outputs.certificate_fingerprint }}
+          APK_SHA256: ${{ steps.verify.outputs.apk_sha256 }}
+          VERSION_NAME: ${{ steps.verify.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/android-release"
+          mkdir -p "$stage"
+          cp android/app/build/outputs/apk/release/app-release.apk "$stage/cmux-pocket-${RELEASE_TAG}.apk"
+          printf '%s\n' \
+            "version_name=${VERSION_NAME}" \
+            "certificate_sha256=${CERTIFICATE_FINGERPRINT}" \
+            "apk_sha256=${APK_SHA256}" \
+            > "$stage/release-metadata.txt"
+
+      - name: Upload the APK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-release
+          path: ${{ runner.temp }}/android-release/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          rm -f "${RUNNER_TEMP}/cmux-pocket-release.keystore"
+          if [ -x android/gradlew ]; then
+            (cd android && ./gradlew --stop)
+          fi
+
+  macos:
+    name: Package ${{ matrix.target }}
+    needs: prepare
+    if: needs.prepare.outputs.release_state == 'draft'
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            target: aarch64-apple-darwin
+          - runner: macos-26-intel
+            target: x86_64-apple-darwin
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
+          persist-credentials: false
+
+      - name: Install the Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # 2026-10-16
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Build the tagged CLI
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+          CARGO_BUILD_JOBS: "2"
+        run: cargo build --release --locked -p cmux-pocket-cli --target ${{ matrix.target }}
+
+      - name: Sign, check, and pack the CLI
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+          TARGET: ${{ matrix.target }}
+        run: ./scripts/package-macos-cli.sh "target/${TARGET}/release/cmux-pocket" "$RELEASE_TAG" "$TARGET" "$RUNNER_TEMP"
+
+      - name: Upload the macOS archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-${{ matrix.target }}
+          path: ${{ runner.temp }}/cmux-pocket-${{ needs.prepare.outputs.release_tag }}-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish the draft after every asset exists
+    needs: [prepare, apk, macos]
+    if: needs.prepare.outputs.release_state == 'draft' && needs.apk.result == 'success' && needs.macos.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: release-assets
+
+      - name: Upload assets and publish the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          apk="release-assets/android-release/cmux-pocket-${RELEASE_TAG}.apk"
+          metadata="release-assets/android-release/release-metadata.txt"
+          arm="release-assets/macos-aarch64-apple-darwin/cmux-pocket-${RELEASE_TAG}-aarch64-apple-darwin.tar.gz"
+          intel="release-assets/macos-x86_64-apple-darwin/cmux-pocket-${RELEASE_TAG}-x86_64-apple-darwin.tar.gz"
+          test -s "$apk"
+          test -s "$metadata"
+          test -s "$arm"
+          test -s "$intel"
+          draft=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)
+          if [ "$draft" != "true" ]; then
+            echo "${RELEASE_TAG} is no longer a draft; refusing to upload or move latest" >&2
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" "$apk" "$metadata" "$arm" "$intel" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,assets > "$RUNNER_TEMP/release.json"
+          test "$(jq -r .isDraft "$RUNNER_TEMP/release.json")" = "true"
+          jq -r '.assets[].name' "$RUNNER_TEMP/release.json" > "$RUNNER_TEMP/assets"
+          grep -qx "cmux-pocket-${RELEASE_TAG}.apk" "$RUNNER_TEMP/assets"
+          grep -qx "release-metadata.txt" "$RUNNER_TEMP/assets"
+          grep -qx "cmux-pocket-${RELEASE_TAG}-aarch64-apple-darwin.tar.gz" "$RUNNER_TEMP/assets"
+          grep -qx "cmux-pocket-${RELEASE_TAG}-x86_64-apple-darwin.tar.gz" "$RUNNER_TEMP/assets"
+          # A recovered older draft must not become latest.
+          current=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName || true)
+          latest_flag=--latest
+          if [ -n "$current" ]; then
+            newest=$(printf '%s\n%s\n' "${current#v}" "${RELEASE_TAG#v}" | sort -V | tail -1)
+            if [ "$newest" != "${RELEASE_TAG#v}" ]; then
+              latest_flag=--latest=false
+            fi
+          fi
+          gh release edit "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false \
+            "$latest_flag"
+
+  verify-published:
+    name: Check a published release without changing it
+    needs: prepare
+    if: needs.prepare.outputs.release_state == 'published'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Require the published assets and do not upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,assets > "$RUNNER_TEMP/release.json"
+          test "$(jq -r .isDraft "$RUNNER_TEMP/release.json")" = "false"
+          jq -r '.assets[].name' "$RUNNER_TEMP/release.json" > "$RUNNER_TEMP/assets"
+          missing=0
+          for name in \
+            "cmux-pocket-${RELEASE_TAG}.apk" \
+            "cmux-pocket-${RELEASE_TAG}-aarch64-apple-darwin.tar.gz" \
+            "cmux-pocket-${RELEASE_TAG}-x86_64-apple-darwin.tar.gz"
+          do
+            if ! grep -qx "$name" "$RUNNER_TEMP/assets"; then
+              echo "published release is missing ${name}; refusing to rebuild or overwrite it" >&2
+              missing=1
+            fi
+          done
+          exit "$missing"

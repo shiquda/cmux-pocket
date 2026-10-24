@@ -13,7 +13,7 @@ on:
 permissions:
   contents: write
 
-# A release published with the repository's own GITHUB_TOKEN (as release-apk.yml does) does not
+# A release published with the repository's own GITHUB_TOKEN (as release.yml does) does not
 # start a new workflow run, and it already carries the changelog notes. This workflow refreshes
 # the description for releases published elsewhere, and workflow_dispatch re-syncs a release after
 # CHANGELOG.md is edited on the branch it runs from.
