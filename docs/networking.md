@@ -89,7 +89,7 @@ pbcopy < "$(cmux-pocket token path)"
 
 ### Gateway upgrades
 
-Run `cmux-pocket upgrade` to compare the installed build with the latest GitHub Release, upgrade through the package manager that installed the CLI, and restart the LaunchAgent. Homebrew installs use `brew upgrade shiquda/cmux-pocket/cmux-pocket`; Cargo installs use `cargo install --force --git … --tag <release> cmux-pocket-cli`. `cmux-pocket upgrade --check` only reports availability, and `--json` provides scriptable output. The CLI never overwrites its own binary; an unrecognized installation reports manual upgrade commands instead.
+Run `cmux-pocket upgrade` to compare the installed build with the latest GitHub Release, upgrade through the package manager that installed the CLI, and restart the LaunchAgent. Homebrew installs use `brew upgrade shiquda/cmux-pocket/cmux-pocket`; Cargo installs use `cargo install --force --git … --tag <release> cmux-pocket-cli`. After a release is published, Homebrew may still offer the previous formula until the tap updates and `brew update` refreshes local metadata; upgrade reports that mismatch instead of claiming the new build is installed. `cmux-pocket upgrade --check` only reports availability, and `--json` provides scriptable output. The CLI never overwrites its own binary; an unrecognized installation reports manual upgrade commands instead.
 
 If `cmux-pocket --version` is older than `brew list --versions cmux-pocket`, check for an old binary earlier in `PATH` (for example, a manual installation in `~/.local/bin`). Remove the obsolete duplicate, then rerun `cmux-pocket setup` to point the LaunchAgent at Homebrew's `opt` path. Upgrade also warns when the registered LaunchAgent runs a different binary than the one just upgraded.
 
