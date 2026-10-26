@@ -21,6 +21,7 @@ extracts the section for the pushed tag while publishing, and
 - Illustrated QR pairing inside the README Quick Start, and tightened wording in the split guides (one merged reverse-proxy section) without dropping setup details.
 - Release publishing waits until the signed APK and both macOS CLI archives exist, then publishes them together. Homebrew switches to those archives on the next newer release; 0.3.1 stays a source install.
 - Extracted terminal row rendering, glyph batching, typeface setup, and Picture caching from `TerminalCanvas` into `TerminalCanvasRenderer`, isolating draw-pipeline execution while preserving canvas layout and interaction state.
+- Decomposed the monolithic `dispatch_rpc` gateway dispatcher into cohesive RPC family modules (`host`, `workspace`, `surface`, `events`, `terminal`, `viewport`) while preserving JSON-RPC framing, wire structures, locking order, and error semantics.
 
 ### Fixed
 

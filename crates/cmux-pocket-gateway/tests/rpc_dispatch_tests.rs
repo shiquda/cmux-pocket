@@ -373,3 +373,52 @@ async fn test_viewport_clear_works_when_the_capability_probe_fails() {
     assert_eq!(res["result"]["rows"], 24);
     assert!(backend.viewport_reports_for("surf-main-1").is_empty());
 }
+
+#[tokio::test]
+async fn test_stale_viewport_clear_still_reports_accepted() {
+    let token = "test-token";
+    let (backend, gw, port) = spawn_gateway_with_backend(token).await;
+    let mut ws = authenticate_ws(port, token).await;
+
+    let report = json!({
+        "id": "req-vp-live",
+        "method": "mobile.terminal.viewport",
+        "params": {
+            "surface_id": "surf-main-1",
+            "client_id": "test-client",
+            "viewport_generation": 11,
+            "viewport_columns": 44,
+            "viewport_rows": 30,
+        }
+    });
+    ws.send(Message::Text(report.to_string())).await.unwrap();
+    let res: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(res["result"]["accepted"], true);
+
+    // A clear carrying an older generation is answered, not refused: `accepted`
+    // reports that the request was processed, while `cleared`/`stale` say the
+    // newer lease survived.
+    let stale_clear = json!({
+        "id": "req-vp-clear-stale",
+        "method": "mobile.terminal.viewport",
+        "params": {
+            "surface_id": "surf-main-1",
+            "client_id": "test-client",
+            "viewport_generation": 10,
+            "clear": true,
+        }
+    });
+    ws.send(Message::Text(stale_clear.to_string()))
+        .await
+        .unwrap();
+    let res: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(res["result"]["accepted"], true);
+    assert_eq!(res["result"]["cleared"], false);
+    assert_eq!(res["result"]["stale"], true);
+    assert_eq!(res["result"]["geometry_owner"], false);
+    assert_eq!(backend.viewport_reports_for("surf-main-1").len(), 1);
+
+    gw.stop().await;
+}
