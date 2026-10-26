@@ -20,6 +20,7 @@ extracts the section for the pushed tag while publishing, and
 - Shortened the README to product identity, signed-APK installation, and QR pairing. Removed the alternative installer instructions and moved app usage/screenshots, architecture, development, and Gateway upgrade details into linked documentation.
 - Illustrated QR pairing inside the README Quick Start, and tightened wording in the split guides (one merged reverse-proxy section) without dropping setup details.
 - Release publishing waits until the signed APK and both macOS CLI archives exist, then publishes them together. Homebrew switches to those archives on the next newer release; 0.3.1 stays a source install.
+- Extracted terminal row rendering, glyph batching, typeface setup, and Picture caching from `TerminalCanvas` into `TerminalCanvasRenderer`, isolating draw-pipeline execution while preserving canvas layout and interaction state.
 
 ### Fixed
 
