@@ -26,6 +26,7 @@ extracts the section for the pushed tag while publishing, and
 ### Fixed
 
 - Release APK assets use the actual filename `cmux-pocket-vX.Y.Z.apk`, rather than only displaying that name as a label on `app-release.apk`. Existing releases are unchanged.
+- Phone-width layout becomes available after remotely waking a stopped cmux without reconnecting: the Gateway retries failed host capability probes immediately, and Android refreshes the layout capability alongside host status.
 
 ## [0.3.1] - 2026-10-22
 

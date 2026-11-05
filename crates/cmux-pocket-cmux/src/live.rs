@@ -278,7 +278,8 @@ impl LiveCmuxBackend {
     }
 
     /// Probes the host capability list, cached briefly so polling does not
-    /// spawn a `cmux capabilities` process per frame.
+    /// spawn a `cmux capabilities` process per frame. Command failures are not
+    /// cached so that a waking or recovering host is detected immediately.
     async fn probe_viewport_capability(&self) -> bool {
         {
             let cached = self.viewport_capability.lock();
@@ -300,7 +301,7 @@ impl LiveCmuxBackend {
                 }),
             Err(e) => {
                 warn!("cmux capability probe failed: {e}");
-                false
+                return false;
             }
         };
 

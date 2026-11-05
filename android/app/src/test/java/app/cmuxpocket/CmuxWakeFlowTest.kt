@@ -3,6 +3,8 @@ package app.cmuxpocket
 import androidx.lifecycle.viewModelScope
 import app.cmuxpocket.ui.CmuxWakeState
 import app.cmuxpocket.ui.TerminalViewModel
+import app.cmuxpocket.ui.TerminalWidthMetrics
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -47,6 +49,7 @@ class CmuxWakeFlowTest {
     @Test
     fun stoppedCmuxShowsWakeStateAndResumesAfterTimedSync() = runBlocking {
         var cmuxRunning = false
+        val viewportReport = CompletableDeferred<kotlinx.serialization.json.JsonObject>()
         val statusJson = {
             buildJsonObject {
                 put("mac_display_name", "cmux Host")
@@ -56,6 +59,9 @@ class CmuxWakeFlowTest {
                     "capabilities",
                     kotlinx.serialization.json.buildJsonArray {
                         add(kotlinx.serialization.json.JsonPrimitive("mobile.host.wake_cmux.v1"))
+                        if (cmuxRunning) {
+                            add(kotlinx.serialization.json.JsonPrimitive("terminal.viewport.v1"))
+                        }
                     },
                 )
                 put(
@@ -137,6 +143,17 @@ class CmuxWakeFlowTest {
                             put("result", statusJson())
                         }.toString()
                     )
+                    "mobile.terminal.replay" -> {
+                        webSocket.send("""{"id":$id,"result":{}}""")
+                        webSocket.send(
+                            """{"event":"terminal.render_grid","data":{"surface_id":"surf-1",
+                              "state_seq":1,"render_epoch":"wake","columns":148,"rows":46,"full":true}}"""
+                        )
+                    }
+                    "mobile.terminal.viewport" -> {
+                        viewportReport.complete(request["params"]!!.jsonObject)
+                        webSocket.send("""{"id":$id,"result":{"pending":true}}""")
+                    }
                     "mobile.surface.focus" -> webSocket.send(
                         buildJsonObject {
                             put("id", id)
@@ -170,6 +187,7 @@ class CmuxWakeFlowTest {
             assertEquals("Mac online · cmux not running", stopped.summary)
             assertTrue(model.workspaces.value.isEmpty())
             assertEquals(CmuxWakeState.IDLE, model.wakeState.value)
+            assertFalse(model.gatewayCapabilities.value.contains("terminal.viewport.v1"))
 
             model.wakeCmux()
             withTimeout(8_000) {
@@ -183,6 +201,15 @@ class CmuxWakeFlowTest {
             }
             assertEquals(1, readiness.workspaceCount)
             assertFalse(readiness.cmuxStopped)
+            withTimeout(8_000) {
+                model.activeScreenState.first { it.surfaceId == "surf-1" && it.columns == 148 }
+            }
+            model.updatePhoneWidthMetrics("surf-1", TerminalWidthMetrics(400f, 600f, 10f, 20f))
+            model.setPhoneWidthEnabled("surf-1", true)
+            val report = withTimeout(8_000) { viewportReport.await() }
+            assertEquals("40", report["viewport_columns"]?.jsonPrimitive?.content)
+            assertEquals("46", report["viewport_rows"]?.jsonPrimitive?.content)
+            assertTrue(model.phoneWidthStates.value["surf-1"]?.enabled == true)
         } finally {
             model.disconnect()
             model.viewModelScope.cancel()

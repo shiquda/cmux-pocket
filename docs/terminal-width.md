@@ -57,6 +57,11 @@ an uncaptured laptop size.
   released immediately. Releasing one client never clears another client's
   report. The live mode is not persisted; only the Settings default is, and it
   is applied once to each newly opened terminal.
+- **cmux wake**: when cmux starts on an existing connection, the host-status
+  refresh also updates the phone's resize capability and rechecks the selected
+  terminal's default layout. The Gateway does not cache failed capability
+  commands while cmux is unavailable; successful supported/unsupported results
+  keep their 60-second cache.
 - **Crash or network blackhole**: reports are non-sticky replays piggybacked on
   `mobile.terminal.replay`, so they expire about five seconds after the last
   renewal. Killing the Gateway (not just closing the WebSocket) therefore
