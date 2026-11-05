@@ -4,9 +4,36 @@ cmux Pocket is an independent Android companion for [cmux](https://cmux.com/) on
 
 > **Disclaimer:** Independent community project. Not affiliated with or endorsed by cmux. “cmux” identifies the compatibility target only.
 
-[Download Signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Quick Start](#quick-start) · [Documentation](#documentation)
+[Download Signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Highlights](#highlights) · [Quick Start](#quick-start) · [Documentation](#documentation)
 
 ![cmux Pocket: Mac desktop showing cmux terminal alongside Android phone displaying the same workspace](docs/assets/hero.png)
+
+## Highlights
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="25%">
+      <img src="docs/screenshots/terminal.png" width="180" alt="Phone-width terminal and Claude Code agent companion"><br><br>
+      <strong>Phone-width Terminal</strong><br>
+      <sub>Dynamic PTY reflow for AI agents &amp; TUIs</sub>
+    </td>
+    <td align="center" valign="top" width="25%">
+      <img src="docs/screenshots/session-drawer.png" width="180" alt="Independent workspace and surface drawer"><br><br>
+      <strong>Independent Drawer</strong><br>
+      <sub>Switch surfaces without Mac focus conflict</sub>
+    </td>
+    <td align="center" valign="top" width="25%">
+      <img src="docs/screenshots/floating-window.png" width="180" alt="Terminal running in Android picture-in-picture mode"><br><br>
+      <strong>Floating Window</strong><br>
+      <sub>Live PiP terminal stream over any app</sub>
+    </td>
+    <td align="center" valign="top" width="25%">
+      <img src="docs/screenshots/qr-pairing.png" width="180" alt="Scanning connection QR code from terminal"><br><br>
+      <strong>One-tap Pairing</strong><br>
+      <sub>Instant QR import &amp; Keystore security</sub>
+    </td>
+  </tr>
+</table>
 
 ## Quick Start
 
