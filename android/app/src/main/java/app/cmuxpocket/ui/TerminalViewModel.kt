@@ -507,13 +507,19 @@ class TerminalViewModel : ViewModel() {
     /** Re-reads `mobile.host.status` without reconnecting (version card and upgrade guide). */
     fun refreshHostStatus() {
         if (_hostStatusRefreshing.value) return
+        val generation = connectionGeneration
         viewModelScope.launch {
             _hostStatusRefreshing.value = true
             try {
-                val status = wsClient.callRpc("mobile.host.status") as? JsonObject ?: return@launch
+                val statusJson = wsClient.callRpc("mobile.host.status") as? JsonObject ?: return@launch
+                if (generation != connectionGeneration) return@launch
+                val status = decodeHostStatus(statusJson)
+                // Host capabilities can change when cmux starts without reconnecting.
+                _gatewayCapabilities.value = status.capabilities.toSet()
                 _connectionReadiness.value = _connectionReadiness.value.copy(
-                    hostStatus = decodeHostStatus(status),
+                    hostStatus = status,
                 )
+                _selectedSurfaceId.value?.let { maybeApplyDefaultPhoneWidth(it) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
