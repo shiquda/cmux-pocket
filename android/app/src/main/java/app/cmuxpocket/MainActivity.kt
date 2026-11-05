@@ -567,6 +567,7 @@ fun CmuxApp(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(theme.background)
+                    .statusBarsPadding()
             ) {
                 LandscapeSidebar(
                     workspaces = workspaces,
