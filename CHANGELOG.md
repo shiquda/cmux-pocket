@@ -11,22 +11,30 @@ extracts the section for the pushed tag while publishing, and
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-05
+
+**Prebuilt macOS archives, rendering pipeline isolation, and remote wake fixes**
+
+Releases now include prebuilt macOS CLI archives for faster Homebrew installs, the terminal draw pipeline and RPC dispatcher are modularized, and phone-width layout recovers immediately after waking cmux on the Mac.
+
 ### Added
 
-- Fastlane app descriptions, icon, and phone screenshots for an IzzyOnDroid listing request.
+- Fastlane app descriptions, icon, and phone screenshots for store listings.
+- Screenshot-driven highlights showcase table in the README for adaptive reflow, session drawer, floating PiP, and QR pairing.
 
 ### Changed
 
-- Shortened the README to product identity, signed-APK installation, and QR pairing. Removed the alternative installer instructions and moved app usage/screenshots, architecture, development, and Gateway upgrade details into linked documentation.
-- Illustrated QR pairing inside the README Quick Start, and tightened wording in the split guides (one merged reverse-proxy section) without dropping setup details.
-- Release publishing waits until the signed APK and both macOS CLI archives exist, then publishes them together. Homebrew switches to those archives on the next newer release; 0.3.1 stays a source install.
+- Release publishing now packages and publishes prebuilt macOS CLI archives (`aarch64` and `x86_64`) alongside the signed APK, enabling fast binary distribution for Homebrew.
 - Extracted terminal row rendering, glyph batching, typeface setup, and Picture caching from `TerminalCanvas` into `TerminalCanvasRenderer`, isolating draw-pipeline execution while preserving canvas layout and interaction state.
 - Decomposed the monolithic `dispatch_rpc` gateway dispatcher into cohesive RPC family modules (`host`, `workspace`, `surface`, `events`, `terminal`, `viewport`) while preserving JSON-RPC framing, wire structures, locking order, and error semantics.
+- Shortened the README to product identity, signed-APK installation, and QR pairing, moving detailed guides into linked documentation.
+- Illustrated QR pairing inside the README Quick Start, and tightened wording across guides.
 
 ### Fixed
 
+- Phone-width layout becomes available immediately after remotely waking a stopped cmux without reconnecting: the Gateway retries failed host capability probes right away, and Android refreshes the layout capability alongside host status.
+- Padded landscape root layout below the status bar, preventing terminal content and the session sidebar from clipping beneath landscape camera cutouts.
 - Release APK assets use the actual filename `cmux-pocket-vX.Y.Z.apk`, rather than only displaying that name as a label on `app-release.apk`. Existing releases are unchanged.
-- Phone-width layout becomes available after remotely waking a stopped cmux without reconnecting: the Gateway retries failed host capability probes immediately, and Android refreshes the layout capability alongside host status.
 
 ## [0.3.1] - 2026-10-22
 
