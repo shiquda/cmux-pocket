@@ -559,7 +559,7 @@ fun CmuxApp(
     // Orientation is derived from the real window size rather than LocalConfiguration: the
     // activity handles configuration changes itself, so a rotation must not depend on the
     // configuration CompositionLocal being refreshed.
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().imePadding()) {
         val isLandscape = maxWidth > maxHeight
         if (isLandscape) {
             // LANDSCAPE LAYOUT: Collapsible Left Sidebar + Full Height Terminal Stage
