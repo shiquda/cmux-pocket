@@ -139,6 +139,35 @@ class TerminalKeyEncoderTest {
     fun plainTextWithoutModifiersPassesThrough() {
         assertEquals("hello", TerminalKeyEncoder.encodePrintable("hello", TerminalModifiers()))
     }
+
+    @Test
+    fun ctrlSpaceProducesNul() {
+        assertEquals("\u0000", TerminalKeyEncoder.encodePrintable(" ", TerminalModifiers(ctrl = true)))
+    }
+
+    @Test
+    fun supportsPrintableModifiersReflectsCtrlAvailability() {
+        assertTrue(TerminalKeyEncoder.supportsPrintableModifiers("c", TerminalModifiers(ctrl = true)))
+        assertTrue(TerminalKeyEncoder.supportsPrintableModifiers(" ", TerminalModifiers(ctrl = true)))
+        assertTrue(TerminalKeyEncoder.supportsPrintableModifiers("[", TerminalModifiers(ctrl = true)))
+        assertFalse(TerminalKeyEncoder.supportsPrintableModifiers("5", TerminalModifiers(ctrl = true)))
+        assertFalse(TerminalKeyEncoder.supportsPrintableModifiers("5", TerminalModifiers(shift = true)))
+        assertFalse(TerminalKeyEncoder.supportsPrintableModifiers(" ", TerminalModifiers(shift = true)))
+        assertTrue(TerminalKeyEncoder.supportsPrintableModifiers("a", TerminalModifiers(shift = true)))
+        assertTrue(TerminalKeyEncoder.supportsPrintableModifiers("b", TerminalModifiers(alt = true, shift = true)))
+        assertTrue(TerminalKeyEncoder.supportsPrintableModifiers("5", TerminalModifiers()))
+    }
+
+    @Test
+    fun supportsSpecialModifiersReflectsActualEncodingDifferences() {
+        assertTrue(TerminalKeyEncoder.supportsSpecialModifiers(SpecialKey.TAB, TerminalModifiers(shift = true)))
+        assertFalse(TerminalKeyEncoder.supportsSpecialModifiers(SpecialKey.TAB, TerminalModifiers(ctrl = true)))
+        assertTrue(TerminalKeyEncoder.supportsSpecialModifiers(SpecialKey.BACKSPACE, TerminalModifiers(ctrl = true)))
+        assertFalse(TerminalKeyEncoder.supportsSpecialModifiers(SpecialKey.BACKSPACE, TerminalModifiers(shift = true)))
+        assertFalse(TerminalKeyEncoder.supportsSpecialModifiers(SpecialKey.ENTER, TerminalModifiers(ctrl = true)))
+        assertTrue(TerminalKeyEncoder.supportsSpecialModifiers(SpecialKey.ENTER, TerminalModifiers(alt = true)))
+        assertTrue(TerminalKeyEncoder.supportsSpecialModifiers(SpecialKey.LEFT, TerminalModifiers(ctrl = true, shift = true)))
+    }
 }
 
 class KeyboardModifierControllerTest {

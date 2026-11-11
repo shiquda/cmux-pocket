@@ -89,7 +89,7 @@ object TerminalKeyEncoder {
     /** ASCII control code for Ctrl+<char>, or null when the char has none. */
     fun ctrlCode(ch: Char): Char? = when (val upper = ch.uppercaseChar()) {
         in 'A'..'Z' -> (upper.code - 'A'.code + 1).toChar()
-        '@' -> '\u0000'
+        ' ', '@' -> '\u0000'
         '[' -> ESC[0]
         '\\' -> '\u001c'
         ']' -> '\u001d'
@@ -97,6 +97,31 @@ object TerminalKeyEncoder {
         '_' -> '\u001f'
         '?' -> DEL[0]
         else -> null
+    }
+
+    /**
+     * False when [mods] has no standard terminal effect for printable [text]:
+     * Ctrl on a char without an ASCII control code, or Shift on a non-letter char.
+     */
+    fun supportsPrintableModifiers(text: String, mods: TerminalModifiers): Boolean {
+        if (mods.ctrl && (text.isEmpty() || ctrlCode(text[0]) == null)) return false
+        if (mods.shift && !mods.ctrl && text.uppercase() == text) return false
+        return true
+    }
+
+    /**
+     * False when [mods] has no distinct xterm or fallback encoding for [key]
+     * (for example Shift+Backspace or Ctrl+Enter without Alt/Meta).
+     */
+    fun supportsSpecialModifiers(key: SpecialKey, mods: TerminalModifiers): Boolean {
+        if (mods.none()) return true
+        if (modifiedSequence(key, mods) != null) return true
+        if (mods.alt || mods.meta) return true
+        return when (key) {
+            SpecialKey.TAB -> mods.shift && !mods.ctrl
+            SpecialKey.BACKSPACE -> mods.ctrl && !mods.shift
+            else -> false
+        }
     }
 
     /**

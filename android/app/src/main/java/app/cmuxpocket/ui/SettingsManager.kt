@@ -106,6 +106,15 @@ class SettingsManager(context: Context) {
             AppLanguageStore.current = value
         }
 
+    var accessoryKeys: List<AccessoryKeyItem>
+        get() = AccessoryKeyCatalog.decode(prefs.getString(KEY_ACCESSORY_KEYS, null))
+        set(value) = prefs.edit().putString(KEY_ACCESSORY_KEYS, AccessoryKeyCatalog.encode(value)).apply()
+
+    fun resetAccessoryKeys(): List<AccessoryKeyItem> {
+        prefs.edit().remove(KEY_ACCESSORY_KEYS).apply()
+        return AccessoryKeyCatalog.defaultKeys()
+    }
+
     /**
      * Set when the user pairs through the first-launch guide or skips it. Kept next to the
      * connection settings because the guide exists solely to create them.
@@ -279,6 +288,7 @@ class SettingsManager(context: Context) {
         private const val KEY_PIP_ASPECT_RATIO = "pip_aspect_ratio"
         private const val KEY_PIP_FONT_SIZE = "pip_font_size_sp"
         private const val KEY_PIP_ADAPT_TERMINAL = "pip_adapt_terminal"
+        private const val KEY_ACCESSORY_KEYS = "accessory_keyboard_keys"
     }
 
         private fun createEncryptedPreferences(context: Context): SharedPreferences {

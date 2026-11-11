@@ -87,6 +87,7 @@
     <string name="settings_group_appearance">外观</string>
     <string name="settings_group_support">支持</string>
     <string name="settings_group_data">数据</string>
+    <string name="settings_group_input">输入</string>
     <string name="settings_row_profiles">%1$d 个配置</string>
     <string name="settings_row_diagnostics_on">已开启</string>
     <string name="settings_row_diagnostics_off">已关闭</string>
@@ -99,6 +100,7 @@
     <string name="settings_section_storage">存储</string>
     <string name="settings_section_notifications">通知</string>
     <string name="settings_section_floating_window">悬浮窗</string>
+    <string name="settings_section_keyboard_bar">底部键盘</string>
 
     <!-- Settings · Floating window -->
     <string name="settings_floating_window_title">悬浮窗</string>

@@ -25,7 +25,7 @@ Switch workspaces or tabs on the phone without changing the Mac's focus. The flo
 - **Width** in the bottom bar requests a shared PTY resize so host-side TUIs reflow for the phone; **Restore** returns to the Mac layout. Leaving a surface or backgrounding releases this device's report, and other clients can constrain the size. See [terminal width](terminal-width.md).
 - **Long press** terminal text to select it, then Copy selection, Copy screen, Paste at cursor, Send interrupt (Ctrl+C), or Clear screen.
 
-The accessory row provides `ESC`, `Enter`, `TAB`, `^C`, arrows, symbols, and shortcuts for the floating window and settings; the Computer Keyboard panel adds F1–F12 and function combinations.
+The accessory row provides `ESC`, `Enter`, `TAB`, `^C`, arrows, symbols, and shortcuts for the floating window and settings; you can customize, reorder, add common presets, or pick keys and modifier combinations from a keyboard in **Settings → Bottom keyboard**. The Computer Keyboard panel adds F1–F12 and on-the-fly function combinations.
 
 ## Settings and diagnostics
 

@@ -11,6 +11,10 @@ extracts the section for the pushed tag while publishing, and
 
 ## [Unreleased]
 
+### Added
+
+- Customizable bottom keyboard bar in **Settings → Bottom keyboard**: reorder or remove bar keys, toggle categorized common presets (navigation, Ctrl/Option shortcuts, symbols, F1–F12), or pick any key and modifier combination (`Ctrl`, `Shift`, `Opt`, `Cmd`) from an interactive keyboard picker.
+
 ## [0.4.0] - 2026-11-05
 
 **Prebuilt macOS archives, rendering pipeline isolation, and remote wake fixes**
