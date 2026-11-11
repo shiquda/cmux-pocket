@@ -2,6 +2,13 @@
 
 cmux Pocket is an independent Android companion for [cmux](https://cmux.com/) on Mac, for developers who want remote access to their terminal workspaces and AI agent sessions from a phone.
 
+[![Release](https://img.shields.io/github/v/release/shiquda/cmux-pocket?style=for-the-badge&logo=github&label=release&labelColor=27303D&color=0D1117)](https://github.com/shiquda/cmux-pocket/releases/latest)
+[![Release build](https://img.shields.io/github/actions/workflow/status/shiquda/cmux-pocket/release.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=release%20build&labelColor=27303D)](https://github.com/shiquda/cmux-pocket/actions/workflows/release.yml)
+[![License](https://img.shields.io/github/license/shiquda/cmux-pocket?style=for-the-badge&labelColor=27303D&color=0877D2)](LICENSE)
+[![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white&labelColor=27303D)](#quick-start)
+[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-000000?style=for-the-badge&logo=apple&logoColor=white&labelColor=27303D)](#quick-start)
+[![Homebrew tap](https://img.shields.io/badge/Homebrew-tap-FBB040?style=for-the-badge&logo=homebrew&logoColor=white&labelColor=27303D)](https://github.com/shiquda/homebrew-cmux-pocket)
+
 > **Disclaimer:** Independent community project. Not affiliated with or endorsed by cmux. “cmux” identifies the compatibility target only.
 
 [Download Signed APK](https://github.com/shiquda/cmux-pocket/releases/latest) · [Highlights](#highlights) · [Quick Start](#quick-start) · [Documentation](#documentation)
