@@ -25,13 +25,14 @@ import androidx.compose.ui.unit.sp
 
 /**
  * Compact single-row accessory keyboard bar.
- * Contains: ESC, Enter, TAB, ^C, ↑, ↓, ←, →, |, /, -, ~ plus the keyboard-panel,
- * floating window, and settings shortcuts.
+ * Renders the user's configured [keys] (defaulting to ESC, Enter, TAB, ^C, arrows, |, /, -, ~)
+ * flanked by fixed shortcuts for the computer-keyboard panel, optional floating window, and settings.
  */
 @Composable
 fun AccessoryKeyboardBar(
     onSendKey: (String) -> Unit,
     onOpenKeyboardPanel: () -> Unit,
+    keys: List<AccessoryKeyItem> = AccessoryKeyCatalog.defaultKeys(),
     onFloatingWindowClick: (() -> Unit)? = null,
     onSettingsClick: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -76,34 +77,18 @@ fun AccessoryKeyboardBar(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            KeyButton(text = "ESC", isPrimary = true) {
-                onSendKey("\u001b")
+            keys.forEach { item ->
+                key(item.id) {
+                    val onKeyClick = remember(item.sequence, onSendKey) {
+                        { onSendKey(item.sequence) }
+                    }
+                    AccessoryKeyButton(
+                        text = item.label,
+                        style = item.style,
+                        onClick = onKeyClick
+                    )
+                }
             }
-
-            KeyButton(text = "Enter", isPrimary = true) {
-                onSendKey("\r")
-            }
-
-            KeyButton(text = "TAB") {
-                onSendKey("\t")
-            }
-
-            KeyButton(
-                text = "^C",
-                isSpecial = true
-            ) {
-                onSendKey("\u0003")
-            }
-
-            KeyButton(text = "↑") { onSendKey("\u001b[A") }
-            KeyButton(text = "↓") { onSendKey("\u001b[B") }
-            KeyButton(text = "←") { onSendKey("\u001b[D") }
-            KeyButton(text = "→") { onSendKey("\u001b[C") }
-
-            KeyButton(text = "|") { onSendKey("|") }
-            KeyButton(text = "/") { onSendKey("/") }
-            KeyButton(text = "-") { onSendKey("-") }
-            KeyButton(text = "~") { onSendKey("~") }
         }
 
         VerticalDivider(
@@ -142,26 +127,25 @@ fun AccessoryKeyboardBar(
 }
 
 @Composable
-private fun KeyButton(
+internal fun AccessoryKeyButton(
     text: String,
-    isPrimary: Boolean = false,
-    isSpecial: Boolean = false,
+    style: AccessoryKeyStyle = AccessoryKeyStyle.NORMAL,
     isHighlighted: Boolean = false,
-    onClick: () -> Unit
+    onClick: (() -> Unit)? = null
 ) {
     val theme = CmuxTheme.colors
 
     val bg = when {
         isHighlighted -> theme.primary
-        isSpecial -> theme.accentOrange.copy(alpha = 0.2f)
-        isPrimary -> theme.primary.copy(alpha = 0.15f)
+        style == AccessoryKeyStyle.SPECIAL -> theme.accentOrange.copy(alpha = 0.2f)
+        style == AccessoryKeyStyle.PRIMARY -> theme.primary.copy(alpha = 0.15f)
         else -> theme.accessoryKeyBg
     }
 
     val textColor = when {
         isHighlighted -> theme.onPrimary
-        isSpecial -> theme.accentOrangeInk
-        isPrimary -> theme.primary
+        style == AccessoryKeyStyle.SPECIAL -> theme.accentOrangeInk
+        style == AccessoryKeyStyle.PRIMARY -> theme.primary
         else -> theme.accessoryKeyText
     }
 
@@ -174,7 +158,7 @@ private fun KeyButton(
             .defaultMinSize(minWidth = 28.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(bg)
-            .clickable(role = Role.Button, onClick = onClick)
+            .let { if (onClick != null) it.clickable(role = Role.Button, onClick = onClick) else it }
             .padding(horizontal = 5.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -184,7 +168,9 @@ private fun KeyButton(
             fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = FontFamily.Monospace,
-            letterSpacing = 0.1.sp
+            letterSpacing = 0.1.sp,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
