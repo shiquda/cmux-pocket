@@ -11,10 +11,21 @@ extracts the section for the pushed tag while publishing, and
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-11
+
+**Quick command phrases, customizable keyboard bar, and IME layout fix**
+
+Android adds saved quick command phrases, full customization for the bottom accessory keyboard bar, and proper `imePadding()` resizing so the active terminal line and toolbar stay visible above the soft keyboard.
+
 ### Added
 
 - Custom quick command phrases: added a `⚡` quick-phrase launcher to the left of the terminal text-size controls that swaps the bar in-place (`✕` to return) for a scrollable chip strip with `⏎` auto-enter indicators, quick-add (`+`), long-press actions, and a full half-screen bottom sheet for browsing, editing, reordering, and deleting locally persisted phrases across all hosts.
 - Customizable bottom keyboard bar in **Settings → Bottom keyboard**: reorder or remove bar keys, toggle categorized common presets (navigation, Ctrl/Option shortcuts, symbols, F1–F12), or pick any key and modifier combination (`Ctrl`, `Shift`, `Opt`, `Cmd`) from an interactive keyboard picker.
+- Release, build, license, platform compatibility, and Homebrew tap badges in the README.
+
+### Fixed
+
+- Added `imePadding()` to the root layout so the on-screen keyboard pushes the terminal canvas and accessory keyboard bar into view instead of covering the active input line.
 
 ## [0.4.0] - 2026-11-05
 
