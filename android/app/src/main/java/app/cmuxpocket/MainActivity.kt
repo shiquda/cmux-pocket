@@ -445,6 +445,11 @@ fun CmuxApp(
     var showSessionSurfaceDrawer by remember { mutableStateOf(false) }
     var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
     var showKeyboardPanel by remember { mutableStateOf(false) }
+    var commandPhrases by remember { mutableStateOf(settingsManager.commandPhrases) }
+    var isPhraseBarExpanded by rememberSaveable { mutableStateOf(false) }
+    var showCommandPhrasesSheet by rememberSaveable { mutableStateOf(false) }
+    var showPhraseEditorDialog by rememberSaveable { mutableStateOf(false) }
+    var editingPhraseId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingCloseSurface by remember { mutableStateOf<SurfaceInfo?>(null) }
     var pendingCloseWorkspace by remember { mutableStateOf<WorkspaceInfo?>(null) }
     var renamingWorkspace by remember { mutableStateOf<WorkspaceInfo?>(null) }
@@ -544,6 +549,49 @@ fun CmuxApp(
             changeTerminalDisplay(currentTerminalDisplay.copy(fontSizeSp = size, fitWidth = false, panX = 0f, panY = null))
         }
     }
+    val latestCommandPhrases by rememberUpdatedState(commandPhrases)
+    val sendCommandPhrase: (String, Boolean) -> Unit = remember(viewModel) {
+        { content, autoEnter -> viewModel.sendCommandPhrase(content, autoEnter) }
+    }
+    val saveCommandPhrase: (CommandPhrase) -> Unit = remember(settingsManager) {
+        { phrase ->
+            val next = upsertCommandPhrase(latestCommandPhrases, phrase)
+            commandPhrases = next
+            settingsManager.commandPhrases = next
+        }
+    }
+    val removeCommandPhrase: (String) -> Unit = remember(settingsManager) {
+        { id ->
+            val next = deleteCommandPhrase(latestCommandPhrases, id)
+            commandPhrases = next
+            settingsManager.commandPhrases = next
+        }
+    }
+    val reorderCommandPhrase: (String, Int) -> Unit = remember(settingsManager) {
+        { id, delta ->
+            val next = moveCommandPhrase(latestCommandPhrases, id, delta)
+            commandPhrases = next
+            settingsManager.commandPhrases = next
+        }
+    }
+    val openAddCommandPhrase: () -> Unit = remember {
+        {
+            editingPhraseId = null
+            showPhraseEditorDialog = true
+        }
+    }
+    val openEditCommandPhrase: (CommandPhrase) -> Unit = remember {
+        { phrase ->
+            editingPhraseId = phrase.id
+            showPhraseEditorDialog = true
+        }
+    }
+    val openCommandPhrasesSheet: () -> Unit = remember {
+        { showCommandPhrasesSheet = true }
+    }
+    val phraseBarExpandedChange: (Boolean) -> Unit = remember {
+        { expanded -> isPhraseBarExpanded = expanded }
+    }
 
     // Auto connect on launch with saved configuration
     LaunchedEffect(Unit) {
@@ -617,6 +665,15 @@ fun CmuxApp(
                             viewportResizeSupported = viewportResizeSupported,
                             onPhoneWidthModeChange = onPhoneWidthModeChange,
                             onPhoneWidthMetrics = onPhoneWidthMetrics,
+                            commandPhrases = commandPhrases,
+                            isPhraseBarExpanded = isPhraseBarExpanded,
+                            onPhraseBarExpandedChange = phraseBarExpandedChange,
+                            onSendCommandPhrase = sendCommandPhrase,
+                            onAddCommandPhraseClick = openAddCommandPhrase,
+                            onEditCommandPhraseClick = openEditCommandPhrase,
+                            onDeleteCommandPhrase = removeCommandPhrase,
+                            onMoveCommandPhrase = reorderCommandPhrase,
+                            onOpenCommandPhrasesSheet = openCommandPhrasesSheet,
                         )
 
                         // D2 breadcrumb pill: same entry point in landscape
@@ -693,6 +750,15 @@ fun CmuxApp(
                         viewportResizeSupported = viewportResizeSupported,
                         onPhoneWidthModeChange = onPhoneWidthModeChange,
                         onPhoneWidthMetrics = onPhoneWidthMetrics,
+                        commandPhrases = commandPhrases,
+                        isPhraseBarExpanded = isPhraseBarExpanded,
+                        onPhraseBarExpandedChange = phraseBarExpandedChange,
+                        onSendCommandPhrase = sendCommandPhrase,
+                        onAddCommandPhraseClick = openAddCommandPhrase,
+                        onEditCommandPhraseClick = openEditCommandPhrase,
+                        onDeleteCommandPhrase = removeCommandPhrase,
+                        onMoveCommandPhrase = reorderCommandPhrase,
+                        onOpenCommandPhrasesSheet = openCommandPhrasesSheet,
                     )
 
                     // Minimalist frosted Floating Island Pill overlaid at top center
@@ -742,6 +808,37 @@ fun CmuxApp(
                 onSendKey = { key -> viewModel.sendInput(key, TerminalInputKind.KEY) },
                 onDismissRequest = { showKeyboardPanel = false },
                 isLandscape = isLandscape
+            )
+        }
+
+        if (showCommandPhrasesSheet) {
+            CommandPhrasesSheet(
+                phrases = commandPhrases,
+                isLandscape = isLandscape,
+                onSendPhrase = sendCommandPhrase,
+                onAddPhraseClick = openAddCommandPhrase,
+                onEditPhraseClick = openEditCommandPhrase,
+                onDeletePhrase = removeCommandPhrase,
+                onMovePhrase = reorderCommandPhrase,
+                onDismissRequest = { showCommandPhrasesSheet = false }
+            )
+        }
+
+        if (showPhraseEditorDialog) {
+            val initialPhrase = editingPhraseId?.let { id ->
+                commandPhrases.firstOrNull { it.id == id }
+            }
+            CommandPhraseEditorDialog(
+                initialPhrase = initialPhrase,
+                onDismissRequest = {
+                    showPhraseEditorDialog = false
+                    editingPhraseId = null
+                },
+                onConfirm = { saved ->
+                    saveCommandPhrase(saved)
+                    showPhraseEditorDialog = false
+                    editingPhraseId = null
+                }
             )
         }
 

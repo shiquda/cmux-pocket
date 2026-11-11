@@ -16,6 +16,11 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,6 +32,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.Smartphone
@@ -47,6 +53,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -190,6 +197,15 @@ fun TerminalCanvas(
     viewportResizeSupported: Boolean = false,
     onPhoneWidthModeChange: (String, Boolean) -> Unit = { _, _ -> },
     onPhoneWidthMetrics: (String, TerminalWidthMetrics?, Boolean) -> Unit = { _, _, _ -> },
+    commandPhrases: List<CommandPhrase> = emptyList(),
+    isPhraseBarExpanded: Boolean = false,
+    onPhraseBarExpandedChange: (Boolean) -> Unit = {},
+    onSendCommandPhrase: (String, Boolean) -> Unit = { _, _ -> },
+    onAddCommandPhraseClick: () -> Unit = {},
+    onEditCommandPhraseClick: (CommandPhrase) -> Unit = {},
+    onDeleteCommandPhrase: (String) -> Unit = {},
+    onMoveCommandPhrase: (String, Int) -> Unit = { _, _ -> },
+    onOpenCommandPhrasesSheet: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -753,6 +769,15 @@ fun TerminalCanvas(
                     }
                 }
             },
+            commandPhrases = commandPhrases,
+            isPhraseBarExpanded = isPhraseBarExpanded,
+            onPhraseBarExpandedChange = onPhraseBarExpandedChange,
+            onSendCommandPhrase = onSendCommandPhrase,
+            onAddCommandPhraseClick = onAddCommandPhraseClick,
+            onEditCommandPhraseClick = onEditCommandPhraseClick,
+            onDeleteCommandPhrase = onDeleteCommandPhrase,
+            onMoveCommandPhrase = onMoveCommandPhrase,
+            onOpenCommandPhrasesSheet = onOpenCommandPhrasesSheet,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
         if (showUnsupportedDialog) {
@@ -802,12 +827,22 @@ private fun TerminalTextControls(
     supported: Boolean,
     onChange: (TerminalDisplayPreference) -> Unit,
     onToggleMode: (Boolean) -> Unit,
+    commandPhrases: List<CommandPhrase>,
+    isPhraseBarExpanded: Boolean,
+    onPhraseBarExpandedChange: (Boolean) -> Unit,
+    onSendCommandPhrase: (String, Boolean) -> Unit,
+    onAddCommandPhraseClick: () -> Unit,
+    onEditCommandPhraseClick: (CommandPhrase) -> Unit,
+    onDeleteCommandPhrase: (String) -> Unit,
+    onMoveCommandPhrase: (String, Int) -> Unit,
+    onOpenCommandPhrasesSheet: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val canDecrease = enabled && !preference.fitWidth && preference.fontSizeSp > 2f
     val canIncrease = enabled && !preference.fitWidth && preference.fontSizeSp < 48f
     val decreaseLabel = stringResource(R.string.canvas_decrease_text_size)
     val increaseLabel = stringResource(R.string.canvas_increase_text_size)
+    val phrasesEntryLabel = stringResource(R.string.phrases_entry_cd)
     val fitWidthLabel = stringResource(
         if (preference.fitWidth) R.string.canvas_readable else R.string.canvas_fit_width
     )
@@ -820,79 +855,154 @@ private fun TerminalTextControls(
         if (phoneWidthActive) R.string.terminal_width_mode_phone else R.string.terminal_width_mode_desktop
     )
     Surface(modifier = modifier, color = theme.containerBg) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(
-                    onClick = {
-                        onChange(preference.copy(fontSizeSp = (preference.fontSizeSp - 1f).coerceAtLeast(2f), panX = 0f, panY = null))
-                    },
-                    enabled = canDecrease,
-                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                        .semantics { contentDescription = decreaseLabel }
-                ) { Text("A−", color = if (canDecrease) theme.onContainer else theme.onContainerMuted) }
-                Text(stringResource(R.string.font_size_sp_value, ((renderedFontSizeSp * 10).roundToInt() / 10f).toString()), color = theme.onContainerMuted, fontSize = 12.sp)
-                TextButton(
-                    onClick = {
-                        onChange(preference.copy(fontSizeSp = (preference.fontSizeSp + 1f).coerceAtMost(48f), panX = 0f, panY = null))
-                    },
-                    enabled = canIncrease,
-                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                        .semantics { contentDescription = increaseLabel }
-                ) { Text("A+", color = if (canIncrease) theme.onContainer else theme.onContainerMuted) }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = { onToggleMode(!phoneWidthActive) },
-                    // Keep the button clickable when the host cannot resize so a tap
-                    // explains why instead of looking broken. Questions of state
-                    // (selection, in-flight request) still gate it.
-                    enabled = enabled && !busy,
-                    modifier = Modifier.size(48.dp)
+        AnimatedContent(
+            targetState = isPhraseBarExpanded,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(150)) togetherWith fadeOut(animationSpec = tween(120))
+            },
+            label = "terminal_text_controls_mode"
+        ) { expanded ->
+            if (expanded) {
+                TerminalQuickPhraseBar(
+                    phrases = commandPhrases,
+                    enabled = enabled,
+                    onCloseBar = { onPhraseBarExpandedChange(false) },
+                    onSendPhrase = onSendCommandPhrase,
+                    onAddPhraseClick = onAddCommandPhraseClick,
+                    onEditPhraseClick = onEditCommandPhraseClick,
+                    onDeletePhrase = onDeleteCommandPhrase,
+                    onMovePhrase = onMoveCommandPhrase,
+                    onOpenFullSheet = onOpenCommandPhrasesSheet
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    if (busy) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = theme.onContainerMuted
-                        )
-                    } else {
-                        Icon(
-                            if (phoneWidthActive) Icons.Default.Smartphone else Icons.Default.Computer,
-                            contentDescription = modeLabel,
-                            tint = when {
-                                phoneWidthActive -> theme.primary
-                                !supported || !enabled -> theme.onContainerMuted
-                                else -> theme.onContainer
-                            },
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-                if (!phoneWidthActive) {
-                    IconButton(
-                        onClick = {
-                            onChange(
-                                preference.copy(
-                                    fitWidth = !preference.fitWidth,
-                                    panX = 0f,
-                                    panY = null,
-                                    panAnchorRow = null
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 40.dp, height = 44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(
+                                    enabled = enabled,
+                                    role = Role.Button,
+                                    onClick = { onPhraseBarExpandedChange(true) }
                                 )
+                                .semantics { contentDescription = phrasesEntryLabel },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(theme.primary.copy(alpha = if (enabled) 0.14f else 0.06f))
+                                    .border(
+                                        width = 1.dp,
+                                        color = theme.primary.copy(alpha = if (enabled) 0.45f else 0.2f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Bolt,
+                                    contentDescription = null,
+                                    tint = if (enabled) theme.primary else theme.onContainerMuted,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(2.dp))
+                        TextButton(
+                            onClick = {
+                                onChange(preference.copy(fontSizeSp = (preference.fontSizeSp - 1f).coerceAtLeast(2f), panX = 0f, panY = null))
+                            },
+                            enabled = canDecrease,
+                            modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 48.dp)
+                                .semantics { contentDescription = decreaseLabel }
+                        ) {
+                            Text(
+                                "A−",
+                                color = if (canDecrease) theme.onContainer else theme.onContainerMuted,
+                                maxLines = 1,
+                                softWrap = false
                             )
-                        },
-                        enabled = enabled,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.FitScreen,
-                            contentDescription = fitWidthLabel,
-                            tint = if (preference.fitWidth) theme.primary else theme.onContainer,
-                            modifier = Modifier.size(20.dp)
+                        }
+                        Text(
+                            stringResource(R.string.font_size_sp_value, ((renderedFontSizeSp * 10).roundToInt() / 10f).toString()),
+                            color = theme.onContainerMuted,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            softWrap = false
                         )
+                        TextButton(
+                            onClick = {
+                                onChange(preference.copy(fontSizeSp = (preference.fontSizeSp + 1f).coerceAtMost(48f), panX = 0f, panY = null))
+                            },
+                            enabled = canIncrease,
+                            modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 48.dp)
+                                .semantics { contentDescription = increaseLabel }
+                        ) {
+                            Text(
+                                "A+",
+                                color = if (canIncrease) theme.onContainer else theme.onContainerMuted,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { onToggleMode(!phoneWidthActive) },
+                            // Keep the button clickable when the host cannot resize so a tap
+                            // explains why instead of looking broken. Questions of state
+                            // (selection, in-flight request) still gate it.
+                            enabled = enabled && !busy,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            if (busy) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = theme.onContainerMuted
+                                )
+                            } else {
+                                Icon(
+                                    if (phoneWidthActive) Icons.Default.Smartphone else Icons.Default.Computer,
+                                    contentDescription = modeLabel,
+                                    tint = when {
+                                        phoneWidthActive -> theme.primary
+                                        !supported || !enabled -> theme.onContainerMuted
+                                        else -> theme.onContainer
+                                    },
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        if (!phoneWidthActive) {
+                            IconButton(
+                                onClick = {
+                                    onChange(
+                                        preference.copy(
+                                            fitWidth = !preference.fitWidth,
+                                            panX = 0f,
+                                            panY = null,
+                                            panAnchorRow = null
+                                        )
+                                    )
+                                },
+                                enabled = enabled,
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.FitScreen,
+                                    contentDescription = fitWidthLabel,
+                                    tint = if (preference.fitWidth) theme.primary else theme.onContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

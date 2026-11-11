@@ -134,4 +134,38 @@
     <string name="conn_err_handshake_incomplete">Gateway did not complete the readiness handshake</string>
     <string name="conn_err_sync_failed">Workspace synchronization failed</string>
 
+    <!-- Command Phrases -->
+    <string name="phrases_entry_cd">Quick command phrases</string>
+    <string name="phrases_close_bar_cd">Close command phrases bar</string>
+    <string name="phrases_add_cd">Add command phrase</string>
+    <string name="phrases_open_list_cd">All command phrases</string>
+    <string name="phrases_add_first_chip">+ Add phrase</string>
+    <string name="phrases_sheet_title">Command Phrases</string>
+    <string name="phrases_add_button">Add</string>
+    <string name="phrases_empty_title">No command phrases yet</string>
+    <string name="phrases_empty_desc">Save frequent commands or agent prompts for one-tap sending across all hosts.</string>
+    <string name="phrases_add_first_button">Add first phrase</string>
+    <string name="phrases_badge_auto_enter">Auto Enter ⏎</string>
+    <string name="phrases_badge_insert_only">Insert only</string>
+    <string name="phrases_sheet_hint">Tap a card to send · ⋮ to edit, reorder, insert, or delete</string>
+    <string name="phrases_more_actions_cd">Phrase actions</string>
+    <string name="phrases_action_insert_only">Insert without Enter</string>
+    <string name="phrases_action_send_with_enter">Send with Enter ⏎</string>
+    <string name="phrases_action_edit">Edit</string>
+    <string name="phrases_action_move_up">Move up</string>
+    <string name="phrases_action_move_down">Move down</string>
+    <string name="phrases_action_move_earlier">Move left</string>
+    <string name="phrases_action_move_later">Move right</string>
+    <string name="phrases_dialog_add_title">Add Command Phrase</string>
+    <string name="phrases_dialog_edit_title">Edit Command Phrase</string>
+    <string name="phrases_field_title_label">Title (optional)</string>
+    <string name="phrases_field_title_placeholder">e.g. Git status, Continue</string>
+    <string name="phrases_field_content_label">Command or phrase</string>
+    <string name="phrases_field_content_placeholder">e.g. git status -sb</string>
+    <string name="phrases_field_auto_enter">Auto-send Enter (⏎)</string>
+    <string name="phrases_field_auto_enter_on_desc">Sends the text and submits immediately</string>
+    <string name="phrases_field_auto_enter_off_desc">Inserts the text without submitting</string>
+    <string name="phrases_dialog_save">Save</string>
+    <string name="phrases_dialog_cancel">Cancel</string>
+
 </resources>

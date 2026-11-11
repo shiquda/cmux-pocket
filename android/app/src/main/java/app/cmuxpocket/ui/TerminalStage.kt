@@ -50,6 +50,15 @@ fun TerminalStage(
     viewportResizeSupported: Boolean = false,
     onPhoneWidthModeChange: (String, Boolean) -> Unit = { _, _ -> },
     onPhoneWidthMetrics: (String, TerminalWidthMetrics?, Boolean) -> Unit = { _, _, _ -> },
+    commandPhrases: List<CommandPhrase> = emptyList(),
+    isPhraseBarExpanded: Boolean = false,
+    onPhraseBarExpandedChange: (Boolean) -> Unit = {},
+    onSendCommandPhrase: (String, Boolean) -> Unit = { _, _ -> },
+    onAddCommandPhraseClick: () -> Unit = {},
+    onEditCommandPhraseClick: (CommandPhrase) -> Unit = {},
+    onDeleteCommandPhrase: (String) -> Unit = {},
+    onMoveCommandPhrase: (String, Int) -> Unit = { _, _ -> },
+    onOpenCommandPhrasesSheet: () -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
     val stageBg = try {
@@ -150,6 +159,15 @@ fun TerminalStage(
                 viewportResizeSupported = viewportResizeSupported,
                 onPhoneWidthModeChange = onPhoneWidthModeChange,
                 onPhoneWidthMetrics = onPhoneWidthMetrics,
+                commandPhrases = commandPhrases,
+                isPhraseBarExpanded = isPhraseBarExpanded,
+                onPhraseBarExpandedChange = onPhraseBarExpandedChange,
+                onSendCommandPhrase = onSendCommandPhrase,
+                onAddCommandPhraseClick = onAddCommandPhraseClick,
+                onEditCommandPhraseClick = onEditCommandPhraseClick,
+                onDeleteCommandPhrase = onDeleteCommandPhrase,
+                onMoveCommandPhrase = onMoveCommandPhrase,
+                onOpenCommandPhrasesSheet = onOpenCommandPhrasesSheet,
             )
         }
 

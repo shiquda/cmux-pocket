@@ -133,4 +133,38 @@
     <string name="conn_err_handshake_incomplete">Gateway 未完成握手</string>
     <string name="conn_err_sync_failed">工作区同步失败</string>
 
+    <!-- Command Phrases -->
+    <string name="phrases_entry_cd">快捷短语</string>
+    <string name="phrases_close_bar_cd">收起快捷短语栏</string>
+    <string name="phrases_add_cd">新增短语</string>
+    <string name="phrases_open_list_cd">全部短语</string>
+    <string name="phrases_add_first_chip">+ 添加短语</string>
+    <string name="phrases_sheet_title">快捷短语</string>
+    <string name="phrases_add_button">新增</string>
+    <string name="phrases_empty_title">暂无快捷短语</string>
+    <string name="phrases_empty_desc">保存常用命令或 Agent 提示词，跨主机一键快速发送。</string>
+    <string name="phrases_add_first_button">新增第一条短语</string>
+    <string name="phrases_badge_auto_enter">自动回车 ⏎</string>
+    <string name="phrases_badge_insert_only">仅输入不回车</string>
+    <string name="phrases_sheet_hint">点按卡片即发送 · ⋮ 支持编辑、调序、仅填入或删除</string>
+    <string name="phrases_more_actions_cd">短语操作</string>
+    <string name="phrases_action_insert_only">仅填入不回车</string>
+    <string name="phrases_action_send_with_enter">发送并回车 ⏎</string>
+    <string name="phrases_action_edit">编辑</string>
+    <string name="phrases_action_move_up">上移</string>
+    <string name="phrases_action_move_down">下移</string>
+    <string name="phrases_action_move_earlier">前移</string>
+    <string name="phrases_action_move_later">后移</string>
+    <string name="phrases_dialog_add_title">新增快捷短语</string>
+    <string name="phrases_dialog_edit_title">编辑快捷短语</string>
+    <string name="phrases_field_title_label">名称（可选）</string>
+    <string name="phrases_field_title_placeholder">例如：Git 状态、继续推进</string>
+    <string name="phrases_field_content_label">命令或短语正文</string>
+    <string name="phrases_field_content_placeholder">例如：git status -sb</string>
+    <string name="phrases_field_auto_enter">发送后自动回车 (⏎)</string>
+    <string name="phrases_field_auto_enter_on_desc">输入正文后自动回车提交</string>
+    <string name="phrases_field_auto_enter_off_desc">仅输入正文到终端，不自动回车</string>
+    <string name="phrases_dialog_save">保存</string>
+    <string name="phrases_dialog_cancel">取消</string>
+
 </resources>

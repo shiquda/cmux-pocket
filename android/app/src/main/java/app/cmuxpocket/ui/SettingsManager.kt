@@ -167,6 +167,10 @@ class SettingsManager(context: Context) {
         ).apply()
     }
 
+    var commandPhrases: List<CommandPhrase>
+        get() = decodeCommandPhrases(prefs.getString(KEY_COMMAND_PHRASES, null))
+        set(value) = prefs.edit().putString(KEY_COMMAND_PHRASES, encodeCommandPhrases(value)).apply()
+
     var activeProfileId: String?
         get() = prefs.getString(KEY_ACTIVE_PROFILE, null)
         set(value) = prefs.edit().putString(KEY_ACTIVE_PROFILE, value).apply()
@@ -279,6 +283,7 @@ class SettingsManager(context: Context) {
         private const val KEY_PIP_ASPECT_RATIO = "pip_aspect_ratio"
         private const val KEY_PIP_FONT_SIZE = "pip_font_size_sp"
         private const val KEY_PIP_ADAPT_TERMINAL = "pip_adapt_terminal"
+        private const val KEY_COMMAND_PHRASES = "command_phrases"
     }
 
         private fun createEncryptedPreferences(context: Context): SharedPreferences {

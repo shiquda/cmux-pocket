@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
@@ -156,6 +158,7 @@ class TerminalViewModel : ViewModel() {
     private var connectionValidationError: String? = null
     private var pendingNotificationWorkspaceId: String? = null
     private var pendingNotificationSurfaceId: String? = null
+    private val phraseSendMutex = Mutex()
 
     init {
         // 1. Collect RenderGrid delta/full frames, validate consistency and route
@@ -936,6 +939,30 @@ class TerminalViewModel : ViewModel() {
                 wsClient.sendTerminalInput(target, text, kind.wire)
             } catch (e: Exception) {
                 Log.e(tag, "Failed to send input to surface $target", e)
+            }
+        }
+    }
+
+    /**
+     * Sends a saved command phrase to the currently selected surface.
+     *
+     * Text and optional Enter keystroke execute sequentially inside one mutex-guarded
+     * coroutine so rapid taps or bracketed paste on the host never interleave `TEXT`
+     * and `\r` `KEY`.
+     */
+    fun sendCommandPhrase(content: String, autoEnter: Boolean) {
+        if (content.isEmpty()) return
+        val target = _selectedSurfaceId.value ?: return
+        viewModelScope.launch {
+            phraseSendMutex.withLock {
+                try {
+                    wsClient.sendTerminalInput(target, content, TerminalInputKind.TEXT.wire)
+                    if (autoEnter) {
+                        wsClient.sendTerminalInput(target, "\r", TerminalInputKind.KEY.wire)
+                    }
+                } catch (e: Exception) {
+                    Log.e(tag, "Failed to send command phrase to surface $target", e)
+                }
             }
         }
     }
