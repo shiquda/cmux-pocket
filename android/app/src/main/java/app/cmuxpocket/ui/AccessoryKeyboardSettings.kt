@@ -690,6 +690,7 @@ internal fun KeyboardKeyPickerSheet(
     var selectedModifiers by remember { mutableStateOf(emptySet<ModifierKey>()) }
     var combinationMode by remember { mutableStateOf(false) }
     var feedbackText by remember { mutableStateOf<String?>(null) }
+    var feedbackIsError by remember { mutableStateOf(false) }
     var previousSize by remember { mutableIntStateOf(keys.size) }
 
     LaunchedEffect(keys.size) {
@@ -712,37 +713,45 @@ internal fun KeyboardKeyPickerSheet(
     )
 
     fun tryAddPrintable(rawText: String) {
-        if (!TerminalKeyEncoder.supportsPrintableModifiers(rawText, activeMods)) {
-            val previewLabel = AccessoryKeyCatalog.formatPrintableLabel(rawText, activeMods)
+        val currentMods = controller.currentModifiers()
+        if (!TerminalKeyEncoder.supportsPrintableModifiers(rawText, currentMods)) {
+            val previewLabel = AccessoryKeyCatalog.formatPrintableLabel(rawText, currentMods)
+            feedbackIsError = true
             feedbackText = context.getString(R.string.settings_kb_picker_unsupported, previewLabel)
             return
         }
-        val candidate = AccessoryKeyCatalog.fromPrintable(rawText, activeMods)
+        val candidate = AccessoryKeyCatalog.fromPrintable(rawText, currentMods)
         val (updated, added) = AccessoryKeyCatalog.addIfAbsent(keys, candidate)
         if (added) {
             onKeysChange(updated)
+            feedbackIsError = false
             feedbackText = context.getString(R.string.settings_kb_picker_added, candidate.label)
             controller.onKeySent()
             syncController()
         } else {
+            feedbackIsError = true
             feedbackText = context.getString(R.string.settings_kb_picker_duplicate, candidate.label)
         }
     }
 
     fun tryAddSpecial(key: SpecialKey) {
-        if (!TerminalKeyEncoder.supportsSpecialModifiers(key, activeMods)) {
-            val previewLabel = AccessoryKeyCatalog.formatSpecialLabel(key, activeMods)
+        val currentMods = controller.currentModifiers()
+        if (!TerminalKeyEncoder.supportsSpecialModifiers(key, currentMods)) {
+            val previewLabel = AccessoryKeyCatalog.formatSpecialLabel(key, currentMods)
+            feedbackIsError = true
             feedbackText = context.getString(R.string.settings_kb_picker_unsupported, previewLabel)
             return
         }
-        val candidate = AccessoryKeyCatalog.fromSpecial(key, activeMods)
+        val candidate = AccessoryKeyCatalog.fromSpecial(key, currentMods)
         val (updated, added) = AccessoryKeyCatalog.addIfAbsent(keys, candidate)
         if (added) {
             onKeysChange(updated)
+            feedbackIsError = false
             feedbackText = context.getString(R.string.settings_kb_picker_added, candidate.label)
             controller.onKeySent()
             syncController()
         } else {
+            feedbackIsError = true
             feedbackText = context.getString(R.string.settings_kb_picker_duplicate, candidate.label)
         }
     }
@@ -856,13 +865,18 @@ internal fun KeyboardKeyPickerSheet(
                 val armedText = remember(activeMods) { formatArmedModifiers(activeMods) }
                 Text(
                     text = when {
-                        !activeMods.none() -> stringResource(R.string.settings_kb_picker_hint_armed, armedText)
                         feedbackText != null -> feedbackText!!
+                        !activeMods.none() -> stringResource(R.string.settings_kb_picker_hint_armed, armedText)
                         else -> stringResource(R.string.settings_kb_picker_hint_idle)
                     },
                     fontSize = 12.sp,
-                    color = if (!activeMods.none()) theme.primary else theme.onSurfaceVariant,
-                    fontWeight = if (!activeMods.none()) FontWeight.Medium else FontWeight.Normal,
+                    color = when {
+                        feedbackText != null && feedbackIsError -> theme.accentOrangeInk
+                        feedbackText != null -> theme.accentGreenInk
+                        !activeMods.none() -> theme.primary
+                        else -> theme.onSurfaceVariant
+                    },
+                    fontWeight = if (!activeMods.none() || feedbackText != null) FontWeight.Medium else FontWeight.Normal,
                     maxLines = 2
                 )
 
@@ -873,18 +887,22 @@ internal fun KeyboardKeyPickerSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     PickerModifierButton("⌃ Ctrl", ModifierKey.CONTROL in selectedModifiers) {
+                        feedbackText = null
                         controller.toggle(ModifierKey.CONTROL)
                         syncController()
                     }
                     PickerModifierButton("⇧ Shift", ModifierKey.SHIFT in selectedModifiers) {
+                        feedbackText = null
                         controller.toggle(ModifierKey.SHIFT)
                         syncController()
                     }
                     PickerModifierButton("⌥ Opt", ModifierKey.OPTION in selectedModifiers) {
+                        feedbackText = null
                         controller.toggle(ModifierKey.OPTION)
                         syncController()
                     }
                     PickerModifierButton("⌘ Cmd", ModifierKey.COMMAND in selectedModifiers) {
+                        feedbackText = null
                         controller.toggle(ModifierKey.COMMAND)
                         syncController()
                     }
@@ -904,6 +922,7 @@ internal fun KeyboardKeyPickerSheet(
                             Switch(
                                 checked = combinationMode,
                                 onCheckedChange = {
+                                    feedbackText = null
                                     controller.setCombinationMode(it)
                                     syncController()
                                 },
@@ -932,6 +951,7 @@ internal fun KeyboardKeyPickerSheet(
                         Switch(
                             checked = combinationMode,
                             onCheckedChange = {
+                                feedbackText = null
                                 controller.setCombinationMode(it)
                                 syncController()
                             },
