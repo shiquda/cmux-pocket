@@ -421,6 +421,8 @@ fun CmuxApp(
     LaunchedEffect(defaultPhoneWidthMode) {
         viewModel.setDefaultPhoneWidthMode(defaultPhoneWidthMode)
     }
+    var accessoryKeys by remember { mutableStateOf(settingsManager.accessoryKeys) }
+
 
     val displaySurfaceId = selectedSurfaceId.orEmpty()
     val displayPort = portInput.toIntOrNull() ?: 8088
@@ -646,6 +648,7 @@ fun CmuxApp(
                     AccessoryKeyboardBar(
                         onSendKey = accessorySendKey,
                         onOpenKeyboardPanel = accessoryOpenKeyboardPanel,
+                        keys = accessoryKeys,
                         onFloatingWindowClick = if (floatingWindowEnabled) onEnterFloatingWindow else null,
                         onSettingsClick = accessoryOpenSettings
                     )
@@ -659,6 +662,7 @@ fun CmuxApp(
                         AccessoryKeyboardBar(
                             onSendKey = accessorySendKey,
                             onOpenKeyboardPanel = accessoryOpenKeyboardPanel,
+                            keys = accessoryKeys,
                             onFloatingWindowClick = if (floatingWindowEnabled) onEnterFloatingWindow else null,
                             onSettingsClick = accessoryOpenSettings
                         )
@@ -890,6 +894,14 @@ fun CmuxApp(
                 onDefaultPhoneWidthModeChange = { enabled ->
                     defaultPhoneWidthMode = enabled
                     settingsManager.defaultPhoneWidthMode = enabled
+                },
+                accessoryKeys = accessoryKeys,
+                onAccessoryKeysChange = { updated ->
+                    accessoryKeys = updated
+                    settingsManager.accessoryKeys = updated
+                },
+                onResetAccessoryKeys = {
+                    accessoryKeys = settingsManager.resetAccessoryKeys()
                 },
             )
         }

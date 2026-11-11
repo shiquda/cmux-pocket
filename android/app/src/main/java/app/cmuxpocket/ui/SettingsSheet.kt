@@ -96,6 +96,9 @@ fun SettingsScreen(
     onDismissRequest: () -> Unit,
     defaultPhoneWidthMode: Boolean = false,
     onDefaultPhoneWidthModeChange: (Boolean) -> Unit = {},
+    accessoryKeys: List<AccessoryKeyItem> = AccessoryKeyCatalog.defaultKeys(),
+    onAccessoryKeysChange: (List<AccessoryKeyItem>) -> Unit = {},
+    onResetAccessoryKeys: () -> Unit = {},
 ) {
     val theme = CmuxTheme.colors
     val uriHandler = LocalUriHandler.current
@@ -109,6 +112,7 @@ fun SettingsScreen(
     var showLicensesDialog by remember { mutableStateOf(false) }
     var showDiagnosticsDialog by remember { mutableStateOf(false) }
     var showExportProfilesDialog by remember { mutableStateOf(false) }
+    var showKeyboardPicker by rememberSaveable { mutableStateOf(false) }
     var isDiagnosticsEnabled by remember { mutableStateOf(settingsManager.isDiagnosticsEnabled) }
     var vibrateOnSessionComplete by remember { mutableStateOf(settingsManager.vibrateOnSessionComplete) }
     var floatingWindowEnabled by remember { mutableStateOf(settingsManager.floatingWindowEnabled) }
@@ -240,6 +244,16 @@ fun SettingsScreen(
                                     else R.string.settings_notif_off
                                 ),
                                 onClick = { openSectionOrdinal = SettingsSection.FLOATING_WINDOW.ordinal }
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_group_input)) {
+                            SettingsNavRow(
+                                section = SettingsSection.KEYBOARD_BAR,
+                                summary = accessoryBarSummary(accessoryKeys),
+                                onClick = { openSectionOrdinal = SettingsSection.KEYBOARD_BAR.ordinal }
                             )
                         }
                     }
@@ -501,6 +515,12 @@ fun SettingsScreen(
                                 }
                             )
                         }
+                        SettingsSection.KEYBOARD_BAR -> keyboardBarSection(
+                            keys = accessoryKeys,
+                            onKeysChange = onAccessoryKeysChange,
+                            onResetDefaults = onResetAccessoryKeys,
+                            onOpenPicker = { showKeyboardPicker = true }
+                        )
                     }
                 }
             }
@@ -570,6 +590,13 @@ fun SettingsScreen(
             textContentColor = theme.onContainer
         )
     }
+    if (showKeyboardPicker) {
+        KeyboardKeyPickerSheet(
+            keys = accessoryKeys,
+            onKeysChange = onAccessoryKeysChange,
+            onDismissRequest = { showKeyboardPicker = false }
+        )
+    }
 }
 
 /** Ordinal stored when the root menu is showing instead of a section page. */
@@ -585,7 +612,8 @@ enum class SettingsSection(@StringRes val labelRes: Int, val icon: ImageVector) 
     OPENSOURCE(R.string.settings_section_opensource, Icons.Default.Code),
     DIAGNOSTICS(R.string.settings_section_diagnostics, Icons.Default.BugReport),
     STORAGE(R.string.settings_section_storage, Icons.Default.Save),
-    NOTIFICATIONS(R.string.settings_section_notifications, Icons.Default.Notifications)
+    NOTIFICATIONS(R.string.settings_section_notifications, Icons.Default.Notifications),
+    KEYBOARD_BAR(R.string.settings_section_keyboard_bar, Icons.Default.Keyboard)
 }
 
 @StringRes
