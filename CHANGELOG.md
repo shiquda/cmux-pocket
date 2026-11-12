@@ -11,6 +11,10 @@ extracts the section for the pushed tag while publishing, and
 
 ## [Unreleased]
 
+### Changed
+
+- Enlarged README hero typography and device artwork for portrait-phone readability.
+
 ## [0.4.1] - 2026-11-11
 
 **Quick command phrases, customizable keyboard bar, and IME layout fix**
