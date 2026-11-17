@@ -160,6 +160,14 @@ fn parse_single_surface(
         .or_else(|| surf_obj.get("id").and_then(Value::as_str))?
         .to_string();
 
+    // `cmux tree --id-format both` reports the durable UUID next to the ref.
+    // Older builds only report the ref, which leaves the UUID unknown.
+    let surface_uuid = surf_obj
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|uuid| *uuid != id)
+        .map(ToString::to_string);
+
     let surface_type = surf_obj
         .get("type")
         .and_then(Value::as_str)
@@ -199,6 +207,7 @@ fn parse_single_surface(
 
     Some(SurfaceInfo {
         id,
+        surface_uuid,
         surface_type,
         title,
         workspace_key: Some(workspace_id.to_string()),

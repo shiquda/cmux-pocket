@@ -5,6 +5,7 @@ use cmux_pocket_protocol::{BackendHealth, RenderGridFrame, SurfaceInfo, Workspac
 
 use crate::error::CmuxError;
 use crate::events::CmuxEventStream;
+use crate::lifecycle::SurfaceAgentLifecycle;
 
 /// How a remote client intends cmux to deliver terminal input.
 ///
@@ -141,6 +142,16 @@ pub trait CmuxBackend: Send + Sync {
     /// Lists all workspaces and surfaces in cmux.
     async fn list_workspaces(&self) -> Result<Vec<WorkspaceInfo>, CmuxError>;
 
+    /// Reads cmux's confirmed per-surface agent lifecycle.
+    ///
+    /// Backends that cannot answer must fail rather than return an empty list:
+    /// an empty answer means "no agent anywhere", which clients render as idle.
+    async fn list_agent_lifecycles(&self) -> Result<Vec<SurfaceAgentLifecycle>, CmuxError> {
+        Err(CmuxError::unavailable(
+            "agent lifecycle snapshot not supported",
+        ))
+    }
+
     /// Creates a new workspace on the host.
     async fn create_workspace(&self, name: &str) -> Result<WorkspaceInfo, CmuxError>;
 
@@ -223,6 +234,16 @@ pub trait CmuxBackend: Send + Sync {
 
     /// Lists compact notification records from cmux.
     async fn list_notifications(&self) -> Result<Vec<String>, CmuxError>;
+
+    /// Lists structured notification records from `cmux list-notifications --json`.
+    ///
+    /// The event stream redacts title, subtitle, and body. This is the structured
+    /// source for a reply that belongs to one notification, not a screen scrape.
+    /// The default is unavailable so older hosts and test doubles keep the compact
+    /// record fallback.
+    async fn list_notification_details(&self) -> Result<Vec<serde_json::Value>, CmuxError> {
+        Err(CmuxError::unavailable("notification details unavailable"))
+    }
 
     /// Whether the connected host advertises real terminal viewport resizing.
     ///

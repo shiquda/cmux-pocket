@@ -21,6 +21,30 @@ pub fn tree_args() -> Vec<String> {
     ]
 }
 
+/// Constructs arguments for `cmux tree --all --json --id-format both`.
+///
+/// Agent lifecycle facts are keyed by the durable surface UUID while every
+/// Pocket RPC addresses the short `surface:N` ref, so the tree must carry both.
+pub fn tree_args_with_ids() -> Vec<String> {
+    let mut args = tree_args();
+    args.push("--id-format".to_string());
+    args.push("both".to_string());
+    args
+}
+
+/// Constructs arguments for `cmux current --json`.
+///
+/// `current` is cmux's bounded projection of work it already knows, including
+/// the merged per-surface agent state. `--limit 200` is the documented maximum.
+pub fn current_args() -> Vec<String> {
+    vec![
+        "current".to_string(),
+        "--json".to_string(),
+        "--limit".to_string(),
+        "200".to_string(),
+    ]
+}
+
 /// Constructs arguments for `cmux new-workspace [--name <name>]`.
 pub fn new_workspace_args(name: &str) -> Vec<String> {
     if name.is_empty() {
@@ -252,6 +276,11 @@ pub fn read_screen_args(surface_id: &str) -> Vec<String> {
 /// Constructs arguments for `cmux list-notifications`.
 pub fn list_notifications_args() -> Vec<String> {
     vec!["list-notifications".to_string()]
+}
+
+/// Structured notification records. The event stream redacts the body.
+pub fn list_notifications_json_args() -> Vec<String> {
+    vec!["list-notifications".to_string(), "--json".to_string()]
 }
 
 /// Constructs arguments for `cmux events --category agent --category notification --reconnect --no-heartbeat`.

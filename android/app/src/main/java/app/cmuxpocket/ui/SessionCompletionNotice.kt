@@ -15,7 +15,8 @@ data class SessionCompletionNotice(
     val workspaceName: String,
     val tabLabel: String?,
     val surfaceTitle: String,
-    val agentKind: String?
+    val agentKind: String?,
+    val reply: String? = null,
 )
 
 /**
@@ -40,6 +41,7 @@ fun sessionCompletionNotice(
         tabLabel = surface?.let { "#${it.tabIndex + 1}" },
         surfaceTitle = surface?.displayTitle ?: "session",
         agentKind = completion.agentKind?.takeIf { it.isNotBlank() },
+        reply = completion.body?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
 

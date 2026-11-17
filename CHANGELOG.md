@@ -11,9 +11,24 @@ extracts the section for the pushed tag while publishing, and
 
 ## [Unreleased]
 
+### Added
+
+- Surface agent state now comes from cmux's own lifecycle projection: the Gateway joins `cmux current` (working / needs input / idle, with freshness) onto the tree by durable surface UUID, so a running agent no longer shows as idle. Surfaces whose state cannot be confirmed are reported as unknown instead of idle.
+- A "notifications are blocked" banner appears after a completion could not be posted, with a shortcut to the system notification settings.
+
 ### Changed
 
+- The Gateway refreshes the tree and agent state every 2 seconds instead of 5, and broadcasts when only the agent state changes.
+- Every surface status consumer (drawer badge, island pill, landscape sidebar, floating window, close confirmation) reads one normalized lifecycle mapping.
 - Enlarged README hero typography and device artwork for portrait-phone readability.
+
+### Fixed
+
+- Completions in the background, picture-in-picture and multi-window now post a system notification; only the ordinary full-screen foreground keeps the in-app capsule, so one finished turn never alerts twice.
+- Completion notifications now target the surface the client knows: cmux events carry the durable UUID, and the Gateway translates it to the `surface:N` ref, so tapping a notification opens the right tab.
+- One finished turn no longer produces several completion alerts when cmux publishes the same Stop hook twice or also emits a completion notification.
+- A completion alert now uses the matching notification's reply when that record has one, and keeps the generic completion text only when it does not. A later generic status does not replace the reply or post a second alert.
+- Returning to the terminal no longer drops a healthy Gateway connection, and a stale liveness probe cannot discard the connection that replaced it. A brief background disconnect no longer leaves the "check the IP" toast; a real failure names the network or authentication reason.
 
 ## [0.4.1] - 2026-11-11
 

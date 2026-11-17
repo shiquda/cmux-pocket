@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 
 use crate::backend::CmuxBackend;
 use crate::error::CmuxError;
+use crate::lifecycle::{apply_agent_lifecycles, SurfaceAgentLifecycle};
 use crate::events::CmuxEventStream;
 
 /// Per-surface reports: `client_id -> (columns, rows, generation)`.
@@ -233,6 +234,8 @@ pub struct MockCmuxBackend {
     viewport_reports: Arc<Mutex<ViewportReports>>,
     viewport_report_calls: Arc<AtomicU64>,
     viewport_supported: Arc<AtomicBool>,
+    /// Confirmed agent lifecycle per surface UUID, mirroring `cmux current`.
+    agent_lifecycles: Arc<Mutex<Vec<SurfaceAgentLifecycle>>>,
 }
 
 impl Default for MockCmuxBackend {
@@ -254,6 +257,7 @@ impl MockCmuxBackend {
             surfaces: vec![
                 SurfaceInfo {
                     id: "surf-main-1".to_string(),
+                    surface_uuid: None,
                     surface_type: "terminal".to_string(),
                     title: Some("zsh".to_string()),
                     workspace_key: Some("ws-main".to_string()),
@@ -267,6 +271,7 @@ impl MockCmuxBackend {
                 },
                 SurfaceInfo {
                     id: "surf-main-2".to_string(),
+                    surface_uuid: None,
                     surface_type: "terminal".to_string(),
                     title: Some("Claude Code".to_string()),
                     workspace_key: Some("ws-main".to_string()),
@@ -280,6 +285,7 @@ impl MockCmuxBackend {
                 },
                 SurfaceInfo {
                     id: "surf-main-3".to_string(),
+                    surface_uuid: None,
                     surface_type: "terminal".to_string(),
                     title: Some("tests".to_string()),
                     workspace_key: Some("ws-main".to_string()),
@@ -305,6 +311,7 @@ impl MockCmuxBackend {
             surfaces: vec![
                 SurfaceInfo {
                     id: "surf-android-1".to_string(),
+                    surface_uuid: None,
                     surface_type: "terminal".to_string(),
                     title: Some("gradle build".to_string()),
                     workspace_key: Some("ws-android".to_string()),
@@ -318,6 +325,7 @@ impl MockCmuxBackend {
                 },
                 SurfaceInfo {
                     id: "surf-android-2".to_string(),
+                    surface_uuid: None,
                     surface_type: "terminal".to_string(),
                     title: Some("logcat".to_string()),
                     workspace_key: Some("ws-android".to_string()),
@@ -342,6 +350,7 @@ impl MockCmuxBackend {
             cwd: None,
             surfaces: vec![SurfaceInfo {
                 id: "surf-exp-1".to_string(),
+                surface_uuid: None,
                 surface_type: "terminal".to_string(),
                 title: Some("Codex MCP".to_string()),
                 workspace_key: Some("ws-exp".to_string()),
@@ -377,6 +386,27 @@ impl MockCmuxBackend {
             viewport_reports: Arc::new(Mutex::new(HashMap::new())),
             viewport_report_calls: Arc::new(AtomicU64::new(0)),
             viewport_supported: Arc::new(AtomicBool::new(true)),
+            agent_lifecycles: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    /// Replaces the confirmed agent lifecycle snapshot returned to callers.
+    ///
+    /// Fixtures carry no durable surface UUID by default, so a test that wants
+    /// merged state must also set one with [`Self::set_surface_uuid`].
+    pub fn set_agent_lifecycles(&self, states: Vec<SurfaceAgentLifecycle>) {
+        *self.agent_lifecycles.lock() = states;
+    }
+
+    /// Assigns the durable surface UUID cmux reports for a fixture surface.
+    pub fn set_surface_uuid(&self, surface_id: &str, uuid: &str) {
+        let mut workspaces = self.workspaces.lock();
+        for workspace in workspaces.iter_mut() {
+            for surface in workspace.surfaces.iter_mut() {
+                if surface.id == surface_id {
+                    surface.surface_uuid = Some(uuid.to_string());
+                }
+            }
         }
     }
 
@@ -481,8 +511,17 @@ impl CmuxBackend for MockCmuxBackend {
         if self.is_offline() {
             return Err(CmuxError::unavailable("Socket not found"));
         }
-        let ws = self.workspaces.lock().clone();
-        Ok(ws)
+        let mut workspaces = self.workspaces.lock().clone();
+        let states = self.agent_lifecycles.lock().clone();
+        apply_agent_lifecycles(&mut workspaces, &states);
+        Ok(workspaces)
+    }
+
+    async fn list_agent_lifecycles(&self) -> Result<Vec<SurfaceAgentLifecycle>, CmuxError> {
+        if self.is_offline() {
+            return Err(CmuxError::unavailable("Socket not found"));
+        }
+        Ok(self.agent_lifecycles.lock().clone())
     }
 
     async fn create_workspace(&self, name: &str) -> Result<WorkspaceInfo, CmuxError> {
@@ -581,6 +620,7 @@ impl CmuxBackend for MockCmuxBackend {
 
         let new_surf = SurfaceInfo {
             id: surf_id.clone(),
+            surface_uuid: None,
             surface_type: surface_type_str,
             title: Some(final_title.clone()),
             workspace_key: Some(ws.id.clone()),

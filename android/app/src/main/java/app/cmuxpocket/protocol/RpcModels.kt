@@ -111,7 +111,9 @@ data class AgentSessionCompleted(
     @SerialName("workspace_id") val workspaceId: String? = null,
     @SerialName("surface_id") val surfaceId: String,
     @SerialName("agent_kind") val agentKind: String? = null,
-    @SerialName("category") val category: String = "turn-complete"
+    @SerialName("category") val category: String = "turn-complete",
+    @SerialName("body") val body: String? = null,
+    @SerialName("content_update") val contentUpdate: Boolean = false
 )
 
 @Serializable

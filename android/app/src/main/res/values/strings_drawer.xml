@@ -15,4 +15,6 @@
     <string name="drawer_state_working">Working</string>
     <string name="drawer_state_dead">Dead</string>
     <string name="drawer_state_idle">Idle</string>
+    <string name="drawer_state_needs_input">Needs input</string>
+    <string name="drawer_state_unknown">—</string>
 </resources>

@@ -12,6 +12,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import android.util.Rational
 import android.view.inputmethod.InputMethodManager
@@ -46,6 +47,15 @@ class MainActivity : ComponentActivity() {
     private val viewModel: TerminalViewModel by viewModels()
     private val settingsManager by lazy { SettingsManager(this) }
     private var inPictureInPicture by mutableStateOf(false)
+    /**
+     * True only while this activity is the ordinary full-screen foreground app.
+     *
+     * Picture-in-picture and multi-window stay STARTED while the user is in
+     * another app, so they must not suppress the completion notification.
+     */
+    private var normalForeground by mutableStateOf(false)
+    /** Set when a completion needed a system notification but could not post one. */
+    private var notificationBlock by mutableStateOf<NotificationDelivery?>(null)
     private var floatingWindowEnabled = false
     private var floatingWindowAutoEnter = true
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -74,12 +84,17 @@ class MainActivity : ComponentActivity() {
                 viewModel.agentSessionCompletions.collect { completion ->
                     // The foreground UI answers completions with a haptic pulse or an in-app
                     // capsule; a system notification on top of that would double the alert.
-                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@collect
-                    AgentCompletionNotifications.show(
+                    // Picture-in-picture and multi-window stay STARTED while the user is
+                    // elsewhere, so they take the system notification path too.
+                    if (normalForeground) return@collect
+                    val delivery = AgentCompletionNotifications.show(
                         this@MainActivity,
                         completion,
                         sessionNotificationLabel(completion, viewModel.workspaces.value)
                     )
+                    if (delivery != NotificationDelivery.DELIVERED) {
+                        notificationBlock = delivery
+                    }
                 }
             }
         }
@@ -100,8 +115,12 @@ class MainActivity : ComponentActivity() {
             CmuxAppRoot(
                 viewModel = viewModel,
                 isInPictureInPicture = inPictureInPicture,
+                isNormalForeground = normalForeground,
+                notificationBlock = notificationBlock,
                 onEnterFloatingWindow = ::enterFloatingWindow,
-                onFloatingWindowSettingsChanged = ::onFloatingWindowSettingsChanged
+                onFloatingWindowSettingsChanged = ::onFloatingWindowSettingsChanged,
+                onOpenNotificationSettings = ::openNotificationSettings,
+                onDismissNotificationBlock = { notificationBlock = null }
             )
         }
     }
@@ -110,6 +129,50 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         syncFloatingWindowSettings()
         updatePictureInPictureParams()
+        refreshForegroundMode()
+        clearResolvedNotificationBlock()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        refreshForegroundMode()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        refreshForegroundMode()
+    }
+
+    override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
+        refreshForegroundMode()
+    }
+
+    /**
+     * Recomputes the routing flag shared by both completion paths: only the
+     * ordinary full-screen foreground keeps the in-app feedback.
+     */
+    private fun refreshForegroundMode() {
+        normalForeground = usesInAppCompletionFeedback(
+            isStarted = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED),
+            isInPictureInPicture = isInPictureInPictureMode,
+            isInMultiWindow = isInMultiWindowMode,
+        )
+    }
+
+    /** Drops a stale "notifications blocked" banner once delivery works again. */
+    private fun clearResolvedNotificationBlock() {
+        if (notificationBlock != null && AgentCompletionNotifications.blockedReason(this) == null) {
+            notificationBlock = null
+        }
+    }
+
+    private fun openNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { startActivity(intent) }
+            .onFailure { Log.w("MainActivity", "Unable to open notification settings", it) }
     }
 
     override fun onUserLeaveHint() {
@@ -125,8 +188,14 @@ class MainActivity : ComponentActivity() {
         isInPictureInPictureMode: Boolean,
         newConfig: Configuration
     ) {
+        val recoverConnection = shouldRecoverConnectionOnPictureInPictureExit(
+            wasInPictureInPicture = inPictureInPicture,
+            isInPictureInPicture = isInPictureInPictureMode,
+        )
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         inPictureInPicture = isInPictureInPictureMode
+        refreshForegroundMode()
+        if (recoverConnection) viewModel.onAppForegrounded()
     }
 
     private fun syncFloatingWindowSettings() {
@@ -191,6 +260,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         viewModel.releaseAllPhoneWidths()
         super.onStop()
+        refreshForegroundMode()
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -223,8 +293,12 @@ class MainActivity : ComponentActivity() {
 fun CmuxAppRoot(
     viewModel: TerminalViewModel,
     isInPictureInPicture: Boolean,
+    isNormalForeground: Boolean,
+    notificationBlock: NotificationDelivery?,
     onEnterFloatingWindow: () -> Unit,
-    onFloatingWindowSettingsChanged: () -> Unit
+    onFloatingWindowSettingsChanged: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
+    onDismissNotificationBlock: () -> Unit
 ) {
     val context = LocalContext.current
     val settingsManager = remember { CmuxPocketApp.settingsManager }
@@ -284,11 +358,15 @@ fun CmuxAppRoot(
                 selectedThemeHex = selectedThemeHex,
                 themeMode = themeMode,
                 floatingWindowEnabled = floatingWindowEnabled,
+                isNormalForeground = isNormalForeground,
+                notificationBlock = notificationBlock,
                 onEnterFloatingWindow = onEnterFloatingWindow,
                 onFloatingWindowSettingsChanged = {
                     floatingWindowEnabled = settingsManager.floatingWindowEnabled
                     onFloatingWindowSettingsChanged()
                 },
+                onOpenNotificationSettings = onOpenNotificationSettings,
+                onDismissNotificationBlock = onDismissNotificationBlock,
                 onScanQrClick = { showQrScanner = true },
                 onOpenOnboarding = { showOnboarding = true },
 
@@ -385,8 +463,12 @@ fun CmuxApp(
     selectedThemeHex: String,
     themeMode: ThemeMode,
     floatingWindowEnabled: Boolean,
+    isNormalForeground: Boolean,
+    notificationBlock: NotificationDelivery?,
     onEnterFloatingWindow: () -> Unit,
     onFloatingWindowSettingsChanged: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
+    onDismissNotificationBlock: () -> Unit,
 
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
@@ -460,7 +542,7 @@ fun CmuxApp(
     fun requestCloseSurface(surfaceId: String) {
         val surface = activeSurfaces.firstOrNull { it.id == surfaceId } ?: return
         val isActive = surface.id == selectedSurfaceId
-        val isRunning = surface.agentState == "working" || surface.agentState == "needs_input"
+        val isRunning = surface.agentStatus().isBusy
         if (isActive || isRunning) {
             pendingCloseSurface = surface
         } else {
@@ -505,11 +587,16 @@ fun CmuxApp(
     val currentSurfaces by rememberUpdatedState(activeSurfaces)
     val currentWorkspaces by rememberUpdatedState(workspaces)
     val currentSelectedSurfaceId by rememberUpdatedState(selectedSurfaceId)
+    val currentNormalForeground by rememberUpdatedState(isNormalForeground)
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
             viewModel.agentSessionCompletions.collect { completion ->
+                // Picture-in-picture and multi-window are still STARTED, but the
+                // system notification is the alert there; keep the capsule for
+                // the ordinary foreground so one event never alerts twice.
+                if (!currentNormalForeground) return@collect
                 if (isCurrentSession(completion, currentSelectedSurfaceId, currentSurfaces)) {
-                    if (settingsManager.vibrateOnSessionComplete) {
+                    if (settingsManager.vibrateOnSessionComplete && !completion.contentUpdate) {
                         SessionCompletionFeedback.vibrate(context)
                     }
                 } else {
@@ -595,15 +682,19 @@ fun CmuxApp(
         { expanded -> isPhraseBarExpanded = expanded }
     }
 
-    // Auto connect on launch with saved configuration
+    // Auto connect once per target. Re-entering this page (picture-in-picture exit, activity
+    // recreation) must not tear down a socket the ViewModel is already keeping.
     LaunchedEffect(Unit) {
-        viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
+        viewModel.ensureConnected(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
     }
 
-    LaunchedEffect(status) {
-        if (status == ConnectionStatus.ERROR) {
-            Toast.makeText(context, context.getString(R.string.main_connection_error), Toast.LENGTH_SHORT).show()
-        }
+    val connectionFailure by viewModel.connectionFailureNotice.collectAsState()
+    LaunchedEffect(connectionFailure) {
+        val notice = connectionFailure ?: return@LaunchedEffect
+        if (notice.epoch <= viewModel.acknowledgedConnectionFailureEpoch) return@LaunchedEffect
+        val text = notice.message ?: notice.messageRes?.let { context.getString(it) } ?: return@LaunchedEffect
+        Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+        viewModel.acknowledgeConnectionFailure(notice.epoch)
     }
 
     // Orientation is derived from the real window size rather than LocalConfiguration: the
@@ -700,6 +791,16 @@ fun CmuxApp(
                                 .statusBarsPadding()
                                 .padding(top = 52.dp)
                         )
+
+                        NotificationBlockedBanner(
+                            delivery = notificationBlock,
+                            onOpenSettings = onOpenNotificationSettings,
+                            onDismiss = onDismissNotificationBlock,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .statusBarsPadding()
+                                .padding(top = 100.dp)
+                        )
                     }
 
                     AccessoryKeyboardBar(
@@ -787,6 +888,16 @@ fun CmuxApp(
                             .statusBarsPadding()
                             .padding(top = 52.dp)
                     )
+
+                    NotificationBlockedBanner(
+                        delivery = notificationBlock,
+                        onOpenSettings = onOpenNotificationSettings,
+                        onDismiss = onDismissNotificationBlock,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 100.dp)
+                    )
                 }
             }
         }
@@ -869,7 +980,7 @@ fun CmuxApp(
 
 
         pendingCloseSurface?.let { surface ->
-            val running = surface.agentState == "working" || surface.agentState == "needs_input"
+            val running = surface.agentStatus().isBusy
             AlertDialog(
                 onDismissRequest = { pendingCloseSurface = null },
                 title = { Text(stringResource(R.string.main_close_tab_title)) },

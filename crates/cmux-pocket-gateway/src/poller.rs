@@ -11,6 +11,7 @@ use tokio::time::sleep;
 use tracing::{debug, warn};
 
 use crate::health::HealthTracker;
+use crate::identity::SurfaceIdentityMap;
 use crate::session::ClientSession;
 use crate::surface_locks::SurfaceLockManager;
 
@@ -122,22 +123,38 @@ impl ScreenPoller {
     }
 }
 
+/// How often the tree and agent lifecycle snapshot are refreshed.
+///
+/// Agent turn state changes are user-visible (a working surface must stop
+/// showing idle within a couple of seconds), so the combined poll runs faster
+/// than the previous structural-only cadence. Broadcasts still happen only when
+/// the signature changes.
+const TREE_POLL_INTERVAL: Duration = Duration::from_secs(2);
+
 pub struct TreePoller;
 
 impl TreePoller {
-    pub async fn run<F, Fut>(backend: Arc<dyn CmuxBackend>, health: HealthTracker, broadcast_fn: F)
-    where
+    pub async fn run<F, Fut>(
+        backend: Arc<dyn CmuxBackend>,
+        health: HealthTracker,
+        identity: SurfaceIdentityMap,
+        broadcast_fn: F,
+    ) where
         F: Fn(&'static str, Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         let mut last_tree_sig: Option<String> = None;
 
         loop {
-            sleep(Duration::from_secs(5)).await;
+            sleep(TREE_POLL_INTERVAL).await;
 
             match backend.list_workspaces().await {
                 Ok(workspaces) => {
                     health.mark_healthy();
+                    // Refresh the UUID -> ref map on every poll, not only when
+                    // the broadcast signature changes: completion events are
+                    // translated through it and must not depend on a rename.
+                    identity.update(&workspaces);
                     let sig = workspace_tree_signature(&workspaces);
                     if last_tree_sig.as_deref() != Some(&sig) {
                         last_tree_sig = Some(sig);

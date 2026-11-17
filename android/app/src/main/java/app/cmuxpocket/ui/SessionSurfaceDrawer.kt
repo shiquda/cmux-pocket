@@ -271,9 +271,7 @@ private fun SurfaceCard(
     modifier: Modifier = Modifier
 ) {
     val theme = CmuxTheme.colors
-    val isWorking = surface.agentState.equals("working", ignoreCase = true) ||
-        surface.agentState.equals("busy", ignoreCase = true) ||
-        surface.attention
+    val agentStatus = surface.agentStatus()
 
     val cardBg = if (isSelected) theme.primary.copy(alpha = 0.15f) else theme.cardBg
     val cardBorder = if (isSelected) theme.primary else theme.cardBorder
@@ -307,7 +305,7 @@ private fun SurfaceCard(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                 // Agent status badge
-                if (isWorking) {
+                if (agentStatus == SurfaceAgentStatus.WORKING) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -321,7 +319,21 @@ private fun SurfaceCard(
                             color = theme.accentOrangeInk
                         )
                     }
-                } else if (surface.dead) {
+                } else if (agentStatus == SurfaceAgentStatus.NEEDS_INPUT) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(theme.accentBlue.copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.drawer_state_needs_input),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = theme.accentBlueInk
+                        )
+                    }
+                } else if (agentStatus == SurfaceAgentStatus.DEAD) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -343,7 +355,13 @@ private fun SurfaceCard(
                             .padding(horizontal = 6.dp, vertical = 1.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.drawer_state_idle),
+                            text = stringResource(
+                                if (agentStatus == SurfaceAgentStatus.IDLE) {
+                                    R.string.drawer_state_idle
+                                } else {
+                                    R.string.drawer_state_unknown
+                                }
+                            ),
                             fontSize = 10.sp,
                             color = theme.onContainerMuted
                         )
