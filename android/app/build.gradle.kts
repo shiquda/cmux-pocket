@@ -9,6 +9,9 @@ val releaseStoreFile = providers.gradleProperty("releaseStoreFile").orNull
 val releaseStorePassword = providers.gradleProperty("releaseStorePassword").orNull
 val releaseKeyAlias = providers.gradleProperty("releaseKeyAlias").orNull
 val releaseKeyPassword = providers.gradleProperty("releaseKeyPassword").orNull
+// Acceptance builds pass this so the APK installs over the published versionCode.
+// The release workflow leaves it unset, so a real release stays at the default.
+val acceptanceVersionCode = providers.gradleProperty("acceptanceVersionCode").orNull?.toInt()
 val hasReleaseSigning = listOf(
     releaseStoreFile,
     releaseStorePassword,
@@ -24,7 +27,7 @@ android {
         applicationId = "app.cmuxpocket"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
+        versionCode = acceptanceVersionCode ?: 6
         versionName = "0.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
