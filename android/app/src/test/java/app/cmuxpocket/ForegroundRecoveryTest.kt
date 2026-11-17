@@ -24,6 +24,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -59,6 +60,7 @@ class ForegroundRecoveryTest {
         onBootstrapComplete: () -> Unit = {},
         answerRpc: () -> Boolean = { true },
         onOpenSocket: (WebSocket) -> Unit = {},
+        onRpc: (method: String, params: kotlinx.serialization.json.JsonObject) -> Unit = { _, _ -> },
     ): MockResponse {
         var sawWorkspaceList = false
         return MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
@@ -74,8 +76,10 @@ class ForegroundRecoveryTest {
                     return
                 }
                 val id = request["id"] ?: return
-                if (!answerRpc()) return
                 val method = request["method"]?.jsonPrimitive?.content
+                val params = request["params"]?.jsonObject ?: buildJsonObject { }
+                if (method != null) onRpc(method, params)
+                if (!answerRpc()) return
                 val result = when (method) {
                     "mobile.host.status" -> buildJsonObject {
                         put("mac_display_name", "cmux Host")
@@ -208,4 +212,161 @@ class ForegroundRecoveryTest {
             model.viewModelScope.cancel()
         }
     }
+
+    @Test
+    fun reenteringTheSameTargetDoesNotOpenAnotherConnection() = runBlocking {
+        server.enqueue(gatewaySocket())
+        server.enqueue(gatewaySocket())
+        server.start()
+        val model = TerminalViewModel()
+        try {
+            model.connectToServer()
+            withTimeout(8_000) { model.connectionStatus.first { it == ConnectionStatus.CONNECTED } }
+            withTimeout(8_000) { model.workspaces.first { it.isNotEmpty() } }
+
+            model.ensureConnected("127.0.0.1", server.port, "test-only-token")
+            delay(400)
+
+            assertEquals(1, connections.get())
+            assertEquals(ConnectionStatus.CONNECTED, model.connectionStatus.value)
+        } finally {
+            model.disconnect()
+            model.viewModelScope.cancel()
+        }
+    }
+
+    @Test
+    fun manualReconnectStillReplacesTheSocket() = runBlocking {
+        server.enqueue(gatewaySocket())
+        server.enqueue(gatewaySocket())
+        server.start()
+        val model = TerminalViewModel()
+        try {
+            model.connectToServer()
+            withTimeout(8_000) { model.connectionStatus.first { it == ConnectionStatus.CONNECTED } }
+            model.connect("127.0.0.1", server.port, "test-only-token")
+            withTimeout(8_000) {
+                while (connections.get() < 2) delay(50)
+            }
+            assertEquals(2, connections.get())
+        } finally {
+            model.disconnect()
+            model.viewModelScope.cancel()
+        }
+    }
+
+    @Test
+    fun recoveredBackgroundDisconnectDoesNotLeaveAFailureNotice() = runBlocking {
+        var activeSocket: WebSocket? = null
+        server.enqueue(gatewaySocket(onOpenSocket = { activeSocket = it }))
+        server.enqueue(gatewaySocket())
+        server.start()
+        val model = TerminalViewModel()
+        try {
+            model.connectToServer()
+            withTimeout(8_000) { model.workspaces.first { it.isNotEmpty() } }
+            activeSocket?.close(1000, "gateway stopping")
+            withTimeout(8_000) { model.connectionStatus.first { it != ConnectionStatus.CONNECTED } }
+            model.onAppForegrounded()
+            withTimeout(8_000) { model.connectionStatus.first { it == ConnectionStatus.CONNECTED } }
+            withTimeout(8_000) { model.workspaces.first { it.isNotEmpty() } }
+            delay(200)
+            assertNull(model.connectionFailureNotice.value)
+        } finally {
+            model.disconnect()
+            model.viewModelScope.cancel()
+        }
+    }
+
+    @Test
+    fun authenticationFailureNamesTheAuthReason() = runBlocking {
+        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
+                connections.incrementAndGet()
+                webSocket.send("""{"type":"auth_error","message":"rejected"}""")
+                webSocket.close(1008, "rejected")
+            }
+        }))
+        server.start()
+        val model = TerminalViewModel()
+        try {
+            model.connectToServer()
+            val notice = withTimeout(8_000) {
+                model.connectionFailureNotice.first { it?.messageRes == R.string.conn_err_auth_rejected }
+            }
+            assertEquals(R.string.conn_err_auth_rejected, notice?.messageRes)
+            assertEquals(1, connections.get())
+        } finally {
+            model.disconnect()
+            model.viewModelScope.cancel()
+        }
+    }
+
+    @Test
+    fun replacingTheSocketDoesNotLetTheOldProbeOpenAThirdConnection() = runBlocking {
+        var bootstrapped = false
+        val probeSeen = java.util.concurrent.atomic.AtomicBoolean(false)
+        server.enqueue(
+            gatewaySocket(
+                onBootstrapComplete = { bootstrapped = true },
+                answerRpc = { !bootstrapped },
+                onRpc = { method, _ ->
+                    if (bootstrapped && method == "mobile.host.status") probeSeen.set(true)
+                },
+            )
+        )
+        server.enqueue(gatewaySocket())
+        server.enqueue(gatewaySocket())
+        server.start()
+        val model = TerminalViewModel()
+        try {
+            model.connectToServer()
+            withTimeout(8_000) { model.workspaces.first { it.isNotEmpty() } }
+            model.onAppForegrounded()
+            withTimeout(8_000) {
+                while (!probeSeen.get()) delay(20)
+            }
+            model.connect("127.0.0.1", server.port, "test-only-token")
+            withTimeout(8_000) { model.connectionStatus.first { it == ConnectionStatus.CONNECTED } }
+            delay(400)
+            assertEquals(2, connections.get())
+        } finally {
+            model.disconnect()
+            model.viewModelScope.cancel()
+        }
+    }
+
+    @Test
+    fun notificationTargetIsFocusedAgainAfterRecovery() = runBlocking {
+        var activeSocket: WebSocket? = null
+        val recoveryCalls = java.util.Collections.synchronizedList(mutableListOf<String>())
+        server.enqueue(gatewaySocket(onOpenSocket = { activeSocket = it }))
+        server.enqueue(gatewaySocket(onRpc = { method, params ->
+            val surfaceId = params["surface_id"]?.jsonPrimitive?.content
+            if (surfaceId != null) recoveryCalls.add("$method:$surfaceId")
+        }))
+        server.start()
+        val model = TerminalViewModel()
+        try {
+            model.connectToServer()
+            withTimeout(8_000) { model.workspaces.first { it.isNotEmpty() } }
+            activeSocket?.close(1000, "gateway stopping")
+            withTimeout(8_000) { model.connectionStatus.first { it != ConnectionStatus.CONNECTED } }
+            model.navigateToSurface("ws-main", "surf-1")
+            model.onAppForegrounded()
+            withTimeout(8_000) {
+                while (
+                    !recoveryCalls.contains("mobile.surface.focus:surf-1") ||
+                    !recoveryCalls.contains("mobile.terminal.replay:surf-1")
+                ) {
+                    delay(50)
+                }
+            }
+            assertEquals("surf-1", model.selectedSurfaceId.value)
+        } finally {
+            model.disconnect()
+            model.viewModelScope.cancel()
+        }
+    }
+
 }

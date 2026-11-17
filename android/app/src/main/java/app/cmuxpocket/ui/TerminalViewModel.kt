@@ -73,6 +73,14 @@ class TerminalViewModel : ViewModel() {
     private val _connectionReadiness = MutableStateFlow(ConnectionReadiness())
     val connectionReadiness: StateFlow<ConnectionReadiness> = _connectionReadiness.asStateFlow()
 
+    private val _connectionFailureNotice = MutableStateFlow<ConnectionFailureNotice?>(null)
+    val connectionFailureNotice: StateFlow<ConnectionFailureNotice?> = _connectionFailureNotice.asStateFlow()
+    var acknowledgedConnectionFailureEpoch: Long = 0L
+        private set
+    private var failureNoticeEpoch = 0L
+    private var announcedFailureRes: Int? = null
+    private var reachedConnected = false
+
     private val _wakeState = MutableStateFlow(CmuxWakeState.IDLE)
     val wakeState: StateFlow<CmuxWakeState> = _wakeState.asStateFlow()
 
@@ -260,6 +268,9 @@ class TerminalViewModel : ViewModel() {
                         _statusMessage.value = "Authenticating..."
                     }
                     ConnectionStatus.CONNECTED -> {
+                        reachedConnected = true
+                        announcedFailureRes = null
+                        clearConnectionFailureNotice()
                         reconnectAttempt = 0
                         reconnectJob?.cancel()
                         reconnectJob = null
@@ -299,6 +310,10 @@ class TerminalViewModel : ViewModel() {
                         awaitingReplaySurfaces.clear()
                         mutationTracker.clear()
                         handleConnectionLost()
+                        val failureRes = _connectionReadiness.value.problemRes ?: R.string.conn_err_unreachable
+                        if (authFailed || !reachedConnected) {
+                            publishConnectionFailure(failureRes)
+                        }
                         scheduleReconnect()
                     }
                     ConnectionStatus.DISCONNECTED -> {
@@ -354,11 +369,25 @@ class TerminalViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Auto-connect entry. Re-entering the terminal page with the same target must not tear down
+     * a live socket or a retry that is already in flight. [connect] remains the manual reconnect
+     * and the config-switch path.
+     */
+    fun ensureConnected(host: String = "127.0.0.1", port: Int = 8088, token: String = "") {
+        val target = ConnectionTarget(host, port, token)
+        if (lastConnectionTarget == target && retainsCurrentAttempt()) return
+        connect(host, port, token)
+    }
+
     fun connect(host: String = "127.0.0.1", port: Int = 8088, token: String = "") {
+        abandonForegroundProbe()
         manualDisconnect = true
         connectionValidationError = null
         reconnectJob?.cancel()
         reconnectJob = null
+        announcedFailureRes = null
+        clearConnectionFailureNotice()
         wsClient.disconnect()
         _connectionReadiness.value = ConnectionReadiness()
         _wakeState.value = CmuxWakeState.IDLE
@@ -367,6 +396,16 @@ class TerminalViewModel : ViewModel() {
         reconnectAttempt = 0
         manualDisconnect = false
         connectTarget(lastConnectionTarget!!)
+    }
+
+    private fun retainsCurrentAttempt(): Boolean {
+        return when (wsClient.statusFlow.value) {
+            ConnectionStatus.CONNECTED,
+            ConnectionStatus.CONNECTING,
+            ConnectionStatus.AUTHENTICATING -> true
+            ConnectionStatus.ERROR,
+            ConnectionStatus.DISCONNECTED -> reconnectJob?.isActive == true && !manualDisconnect
+        }
     }
 
     private fun connectTarget(target: ConnectionTarget) {
@@ -381,6 +420,7 @@ class TerminalViewModel : ViewModel() {
             _syncPhase.value = AppSyncPhase.DISCONNECTED
             _statusMessage.value = connectionValidationError!!
             _connectionReadiness.value = ConnectionReadiness(started = true, problem = connectionValidationError)
+            publishConnectionFailure(message = connectionValidationError!!)
         }
     }
 
@@ -389,15 +429,22 @@ class TerminalViewModel : ViewModel() {
         if (manualDisconnect || reconnectJob?.isActive == true) return
         if (reconnectAttempt >= ReconnectPolicy.maxAttempts) {
             _statusMessage.value = "Reconnect paused; tap Reconnect to retry"
+            publishConnectionFailure(
+                _connectionReadiness.value.problemRes ?: R.string.conn_err_unreachable,
+            )
             return
         }
 
         val attempt = reconnectAttempt++
         val delayMs = ReconnectPolicy.delayMillis(attempt)
+        val generation = connectionGeneration
         _statusMessage.value = "Disconnected. Retrying in ${delayMs / 1_000}s..."
         reconnectJob = viewModelScope.launch {
             delay(delayMs)
-            if (!manualDisconnect && lastConnectionTarget == target) {
+            if (!manualDisconnect &&
+                lastConnectionTarget == target &&
+                connectionGeneration == generation
+            ) {
                 _statusMessage.value = "Retrying connection (${attempt + 1}/${ReconnectPolicy.maxAttempts})..."
                 connectTarget(target)
             }
@@ -423,6 +470,7 @@ class TerminalViewModel : ViewModel() {
 
     private fun verifyConnectionAfterForeground(target: ConnectionTarget) {
         if (foregroundProbeJob?.isActive == true) return
+        val generation = connectionGeneration
         foregroundProbeJob = viewModelScope.launch {
             try {
                 wsClient.callRpc("mobile.host.status")
@@ -430,9 +478,13 @@ class TerminalViewModel : ViewModel() {
                 throw e
             } catch (e: Exception) {
                 Log.i(tag, "Foreground liveness probe failed; reconnecting", e)
-                if (!manualDisconnect &&
-                    lastConnectionTarget == target &&
-                    wsClient.statusFlow.value == ConnectionStatus.CONNECTED
+                if (probeFailureShouldReconnect(
+                        probeGeneration = generation,
+                        currentGeneration = connectionGeneration,
+                        manualDisconnect = manualDisconnect,
+                        sameTarget = lastConnectionTarget == target,
+                        status = wsClient.statusFlow.value,
+                    )
                 ) {
                     reconnectNow(target)
                 }
@@ -442,6 +494,8 @@ class TerminalViewModel : ViewModel() {
 
     /** Replaces a stale attempt with a fresh connection now, instead of waiting out a backoff. */
     private fun reconnectNow(target: ConnectionTarget) {
+        connectionGeneration++
+        abandonForegroundProbe()
         reconnectJob?.cancel()
         reconnectJob = null
         reconnectAttempt = 0
@@ -449,6 +503,12 @@ class TerminalViewModel : ViewModel() {
         wsClient.discardSocket()
         connectTarget(target)
     }
+
+    private fun abandonForegroundProbe() {
+        foregroundProbeJob?.cancel()
+        foregroundProbeJob = null
+    }
+
 
     fun scrollTerminal(deltaLines: Double) {
         val surfaceId = _selectedSurfaceId.value ?: return
@@ -535,6 +595,7 @@ class TerminalViewModel : ViewModel() {
     }
 
     fun disconnect() {
+        abandonForegroundProbe()
         manualDisconnect = true
         connectionValidationError = null
         lastConnectionTarget = null
@@ -543,6 +604,7 @@ class TerminalViewModel : ViewModel() {
         reconnectJob = null
         wakeTimeoutJob?.cancel()
         _wakeState.value = CmuxWakeState.IDLE
+        clearConnectionFailureNotice()
         wsClient.disconnect()
         awaitingReplaySurfaces.clear()
         mutationTracker.clear()
@@ -1331,6 +1393,29 @@ class TerminalViewModel : ViewModel() {
         _phoneWidthStates.value = next
     }
 
+    fun acknowledgeConnectionFailure(epoch: Long) {
+        if (epoch > acknowledgedConnectionFailureEpoch) {
+            acknowledgedConnectionFailureEpoch = epoch
+        }
+    }
+
+    private fun clearConnectionFailureNotice() {
+        _connectionFailureNotice.value = null
+    }
+
+    private fun publishConnectionFailure(messageRes: Int) {
+        if (announcedFailureRes == messageRes && _connectionFailureNotice.value?.messageRes == messageRes) return
+        announcedFailureRes = messageRes
+        failureNoticeEpoch++
+        _connectionFailureNotice.value = ConnectionFailureNotice(epoch = failureNoticeEpoch, messageRes = messageRes)
+    }
+
+    private fun publishConnectionFailure(message: String) {
+        announcedFailureRes = null
+        failureNoticeEpoch++
+        _connectionFailureNotice.value = ConnectionFailureNotice(epoch = failureNoticeEpoch, message = message)
+    }
+
     private companion object {
         const val PHONE_WIDTH_DEBOUNCE_MS = 300L
         const val PHONE_WIDTH_CONFIRM_GRACE_MS = 1_200L
@@ -1338,6 +1423,13 @@ class TerminalViewModel : ViewModel() {
         const val PHONE_WIDTH_RENEW_INTERVAL_MS = 1_500L
     }
 }
+
+/** A connection failure the user should see once. Cleared when the socket recovers. */
+data class ConnectionFailureNotice(
+    val epoch: Long,
+    val messageRes: Int? = null,
+    val message: String? = null,
+)
 
 /** How long the wake card waits for the Gateway's `workspace.tree` sync. */
 private const val WAKE_TIMEOUT_MS = 15_000L

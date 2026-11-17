@@ -57,7 +57,7 @@ jobs:
           ORG_GRADLE_PROJECT_releaseStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ORG_GRADLE_PROJECT_releaseKeyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
           ORG_GRADLE_PROJECT_releaseKeyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ORG_GRADLE_PROJECT_acceptanceVersionCode: "8"
+          ORG_GRADLE_PROJECT_acceptanceVersionCode: "9"
         run: |
           set -euo pipefail
           ./gradlew assembleRelease --no-daemon

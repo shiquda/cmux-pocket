@@ -188,9 +188,14 @@ class MainActivity : ComponentActivity() {
         isInPictureInPictureMode: Boolean,
         newConfig: Configuration
     ) {
+        val recoverConnection = shouldRecoverConnectionOnPictureInPictureExit(
+            wasInPictureInPicture = inPictureInPicture,
+            isInPictureInPicture = isInPictureInPictureMode,
+        )
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         inPictureInPicture = isInPictureInPictureMode
         refreshForegroundMode()
+        if (recoverConnection) viewModel.onAppForegrounded()
     }
 
     private fun syncFloatingWindowSettings() {
@@ -677,15 +682,19 @@ fun CmuxApp(
         { expanded -> isPhraseBarExpanded = expanded }
     }
 
-    // Auto connect on launch with saved configuration
+    // Auto connect once per target. Re-entering this page (picture-in-picture exit, activity
+    // recreation) must not tear down a socket the ViewModel is already keeping.
     LaunchedEffect(Unit) {
-        viewModel.connect(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
+        viewModel.ensureConnected(hostInput, portInput.toIntOrNull() ?: 8088, tokenInput)
     }
 
-    LaunchedEffect(status) {
-        if (status == ConnectionStatus.ERROR) {
-            Toast.makeText(context, context.getString(R.string.main_connection_error), Toast.LENGTH_SHORT).show()
-        }
+    val connectionFailure by viewModel.connectionFailureNotice.collectAsState()
+    LaunchedEffect(connectionFailure) {
+        val notice = connectionFailure ?: return@LaunchedEffect
+        if (notice.epoch <= viewModel.acknowledgedConnectionFailureEpoch) return@LaunchedEffect
+        val text = notice.message ?: notice.messageRes?.let { context.getString(it) } ?: return@LaunchedEffect
+        Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+        viewModel.acknowledgeConnectionFailure(notice.epoch)
     }
 
     // Orientation is derived from the real window size rather than LocalConfiguration: the

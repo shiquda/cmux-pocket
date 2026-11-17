@@ -28,6 +28,7 @@ extracts the section for the pushed tag while publishing, and
 - Completion notifications now target the surface the client knows: cmux events carry the durable UUID, and the Gateway translates it to the `surface:N` ref, so tapping a notification opens the right tab.
 - One finished turn no longer produces several completion alerts when cmux publishes the same Stop hook twice or also emits a completion notification.
 - A completion alert now uses the matching notification's reply when that record has one, and keeps the generic completion text only when it does not. A later generic status does not replace the reply or post a second alert.
+- Returning to the terminal no longer drops a healthy Gateway connection, and a stale liveness probe cannot discard the connection that replaced it. A brief background disconnect no longer leaves the "check the IP" toast; a real failure names the network or authentication reason.
 
 ## [0.4.1] - 2026-11-11
 
