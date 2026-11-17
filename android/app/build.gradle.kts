@@ -27,8 +27,8 @@ android {
         applicationId = "app.cmuxpocket"
         minSdk = 26
         targetSdk = 35
-        versionCode = acceptanceVersionCode ?: 6
-        versionName = "0.4.1"
+        versionCode = acceptanceVersionCode ?: 10
+        versionName = "0.4.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

@@ -11,6 +11,12 @@ extracts the section for the pushed tag while publishing, and
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-17
+
+**Real agent lifecycle state, background completion notifications, and connection recovery**
+
+Surfaces now report whether an agent is working, waiting for input, or idle, and a finished turn reaches the phone while the app is in the background, picture-in-picture, or split screen.
+
 ### Added
 
 - Surface agent state now comes from cmux's own lifecycle projection: the Gateway joins `cmux current` (working / needs input / idle, with freshness) onto the tree by durable surface UUID, so a running agent no longer shows as idle. Surfaces whose state cannot be confirmed are reported as unknown instead of idle.
