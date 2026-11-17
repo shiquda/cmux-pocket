@@ -235,6 +235,16 @@ pub trait CmuxBackend: Send + Sync {
     /// Lists compact notification records from cmux.
     async fn list_notifications(&self) -> Result<Vec<String>, CmuxError>;
 
+    /// Lists structured notification records from `cmux list-notifications --json`.
+    ///
+    /// The event stream redacts title, subtitle, and body. This is the structured
+    /// source for a reply that belongs to one notification, not a screen scrape.
+    /// The default is unavailable so older hosts and test doubles keep the compact
+    /// record fallback.
+    async fn list_notification_details(&self) -> Result<Vec<serde_json::Value>, CmuxError> {
+        Err(CmuxError::unavailable("notification details unavailable"))
+    }
+
     /// Whether the connected host advertises real terminal viewport resizing.
     ///
     /// Implementations must probe the host rather than assume the Gateway's own

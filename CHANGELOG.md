@@ -27,6 +27,7 @@ extracts the section for the pushed tag while publishing, and
 - Completions in the background, picture-in-picture and multi-window now post a system notification; only the ordinary full-screen foreground keeps the in-app capsule, so one finished turn never alerts twice.
 - Completion notifications now target the surface the client knows: cmux events carry the durable UUID, and the Gateway translates it to the `surface:N` ref, so tapping a notification opens the right tab.
 - One finished turn no longer produces several completion alerts when cmux publishes the same Stop hook twice or also emits a completion notification.
+- A completion alert now uses the matching notification's reply when that record has one, and keeps the generic completion text only when it does not. A later generic status does not replace the reply or post a second alert.
 
 ## [0.4.1] - 2026-11-11
 

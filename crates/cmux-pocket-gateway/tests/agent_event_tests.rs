@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use cmux_pocket_cmux::error::CmuxError;
 use cmux_pocket_cmux::events::CmuxEventStream;
 use cmux_pocket_cmux::{CmuxBackend, MockCmuxBackend};
-use cmux_pocket_gateway::{CmuxGateway, EventDedup, SurfaceCompletionGate};
+use cmux_pocket_gateway::{CmuxGateway, CompletionForward, EventDedup, SurfaceCompletionGate};
 use cmux_pocket_protocol::{BackendHealth, RenderGridFrame, SurfaceInfo, WorkspaceInfo};
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::Mutex;
@@ -44,10 +44,35 @@ fn test_surface_completion_gate_collapses_one_turn() {
     assert!(gate.accept("surface:1", start + Duration::from_secs(4)));
 }
 
+#[test]
+fn test_reply_replaces_generic_without_a_second_alert() {
+    let mut gate = SurfaceCompletionGate::new();
+    let now = Instant::now();
+    assert_eq!(
+        gate.decide("surface-a", now, false, "evt-generic"),
+        CompletionForward::New
+    );
+    assert_eq!(
+        gate.decide("surface-a", now, true, "evt-reply"),
+        CompletionForward::Replace {
+            event_id: "evt-generic".to_string()
+        }
+    );
+    assert_eq!(
+        gate.decide("surface-a", now, false, "evt-generic-again"),
+        CompletionForward::Drop
+    );
+    assert_eq!(
+        gate.decide("surface-b", now, true, "evt-other"),
+        CompletionForward::New
+    );
+}
+
 struct AgentTestBackend {
     inner: MockCmuxBackend,
     event_rx: Mutex<Option<mpsc::UnboundedReceiver<Value>>>,
     notifications: Vec<String>,
+    details: Vec<Value>,
 }
 
 impl AgentTestBackend {
@@ -56,6 +81,16 @@ impl AgentTestBackend {
             inner: MockCmuxBackend::default(),
             event_rx: Mutex::new(Some(event_rx)),
             notifications,
+            details: Vec::new(),
+        }
+    }
+
+    fn with_details(event_rx: mpsc::UnboundedReceiver<Value>, details: Vec<Value>) -> Self {
+        Self {
+            inner: MockCmuxBackend::default(),
+            event_rx: Mutex::new(Some(event_rx)),
+            notifications: Vec::new(),
+            details,
         }
     }
 }
@@ -112,6 +147,13 @@ impl CmuxBackend for AgentTestBackend {
     }
     async fn list_notifications(&self) -> Result<Vec<String>, CmuxError> {
         Ok(self.notifications.clone())
+    }
+
+    async fn list_notification_details(&self) -> Result<Vec<Value>, CmuxError> {
+        if self.details.is_empty() {
+            return Err(CmuxError::unavailable("notification details unavailable"));
+        }
+        Ok(self.details.clone())
     }
     async fn spawn_events_stream(&self) -> Result<CmuxEventStream, CmuxError> {
         let rx = self.event_rx.lock().take();
@@ -338,6 +380,133 @@ async fn test_completion_event_is_translated_to_surface_ref() {
     let bcast: Value =
         serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
     assert_eq!(bcast["data"]["surface_id"], "UUID-unmapped");
+
+    gateway.stop().await;
+}
+
+#[tokio::test]
+async fn test_completion_uses_matching_reply_and_ignores_other_surfaces() {
+    let (event_tx, event_rx) = mpsc::unbounded_channel();
+    let details = vec![
+        json!({
+            "id": "reply-a",
+            "surface_id": "surface-a",
+            "workspace_id": "ws",
+            "title": "OMP",
+            "subtitle": "Completed in tmp",
+            "body": "Ready. What are we working on?",
+            "created_at": "2026-11-17T04:37:17Z"
+        }),
+        json!({
+            "id": "generic-a",
+            "surface_id": "surface-a",
+            "workspace_id": "ws",
+            "title": "omp",
+            "subtitle": "",
+            "body": "Complete",
+            "created_at": "2026-11-17T04:37:17Z"
+        }),
+        json!({
+            "id": "reply-b",
+            "surface_id": "surface-b",
+            "workspace_id": "ws",
+            "title": "OMP",
+            "subtitle": "Completed in other",
+            "body": "Reply from another surface",
+            "created_at": "2026-11-17T04:37:17Z"
+        }),
+        json!({
+            "id": "waiting-a",
+            "surface_id": "surface-a",
+            "body": "Waiting for input",
+            "subtitle": "",
+            "created_at": "2026-11-17T04:37:17Z"
+        }),
+    ];
+    let backend = Arc::new(AgentTestBackend::with_details(event_rx, details));
+    let token = "test-token-reply";
+    let gateway = Arc::new(CmuxGateway::new("127.0.0.1", 0, token, backend).unwrap());
+    let listener = gateway.start().await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let gw_runner = gateway.clone();
+    tokio::spawn(async move {
+        let _ = gw_runner.run_with_listener(listener).await;
+    });
+
+    let url = format!("ws://127.0.0.1:{port}");
+    let (mut ws, _) = connect_async(&url).await.unwrap();
+    ws.send(Message::Text(
+        json!({"type": "auth", "token": token}).to_string(),
+    ))
+    .await
+    .unwrap();
+    let _ = ws.next().await.unwrap().unwrap();
+    ws.send(Message::Text(
+        json!({
+            "id": "sub",
+            "method": "mobile.events.subscribe",
+            "params": { "topics": ["agent.session.completed"] }
+        })
+        .to_string(),
+    ))
+    .await
+    .unwrap();
+    let _ = ws.next().await.unwrap().unwrap();
+
+    event_tx
+        .send(json!({
+            "type": "event",
+            "id": "stop-a",
+            "name": "agent.hook.Stop",
+            "occurred_at": "2026-11-17T04:37:17.269Z",
+            "workspace_id": "ws",
+            "surface_id": "surface-a",
+            "payload": { "hook_event_name": "Stop", "_source": "omp" }
+        }))
+        .unwrap();
+    event_tx
+        .send(json!({
+            "type": "event",
+            "id": "generic-created",
+            "name": "notification.created",
+            "occurred_at": "2026-11-17T04:37:17.400Z",
+            "workspace_id": "ws",
+            "surface_id": "surface-a",
+            "payload": { "notification_id": "generic-a" }
+        }))
+        .unwrap();
+    event_tx
+        .send(json!({
+            "type": "event",
+            "id": "waiting-created",
+            "name": "notification.created",
+            "surface_id": "surface-a",
+            "payload": { "notification_id": "waiting-a" }
+        }))
+        .unwrap();
+
+    let first: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(first["event"], "agent.session.completed");
+    assert_eq!(first["data"]["surface_id"], "surface-a");
+    assert_eq!(first["data"]["body"], "Ready. What are we working on?");
+    assert!(first["data"].get("content_update").is_none());
+
+    event_tx
+        .send(json!({
+            "type": "event",
+            "id": "stop-b",
+            "name": "agent.hook.Stop",
+            "occurred_at": "2026-11-17T04:37:17.269Z",
+            "workspace_id": "ws",
+            "surface_id": "surface-b",
+            "payload": { "hook_event_name": "Stop", "_source": "omp" }
+        }))
+        .unwrap();
+    let second: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(second["data"]["surface_id"], "surface-b");
+    assert_eq!(second["data"]["body"], "Reply from another surface");
 
     gateway.stop().await;
 }

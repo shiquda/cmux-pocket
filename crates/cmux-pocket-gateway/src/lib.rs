@@ -13,7 +13,7 @@ pub mod session;
 pub mod surface_locks;
 pub mod viewport;
 
-pub use agent::{AgentEventSupervisor, EventDedup, SurfaceCompletionGate};
+pub use agent::{AgentEventSupervisor, CompletionForward, EventDedup, SurfaceCompletionGate};
 pub use auth::{
     build_auth_error_invalid_token, build_auth_error_unauthenticated, build_auth_ok,
     constant_time_token_eq, verify_token, WS_CLOSE_AUTH_FAILED,

@@ -278,6 +278,11 @@ pub fn list_notifications_args() -> Vec<String> {
     vec!["list-notifications".to_string()]
 }
 
+/// Structured notification records. The event stream redacts the body.
+pub fn list_notifications_json_args() -> Vec<String> {
+    vec!["list-notifications".to_string(), "--json".to_string()]
+}
+
 /// Constructs arguments for `cmux events --category agent --category notification --reconnect --no-heartbeat`.
 pub fn events_args() -> Vec<String> {
     vec![

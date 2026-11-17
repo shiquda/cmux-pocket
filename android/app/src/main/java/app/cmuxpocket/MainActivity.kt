@@ -591,7 +591,7 @@ fun CmuxApp(
                 // the ordinary foreground so one event never alerts twice.
                 if (!currentNormalForeground) return@collect
                 if (isCurrentSession(completion, currentSelectedSurfaceId, currentSurfaces)) {
-                    if (settingsManager.vibrateOnSessionComplete) {
+                    if (settingsManager.vibrateOnSessionComplete && !completion.contentUpdate) {
                         SessionCompletionFeedback.vibrate(context)
                     }
                 } else {

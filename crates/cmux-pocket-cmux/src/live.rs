@@ -20,10 +20,10 @@ use tracing::{debug, warn};
 
 use crate::args::{
     capabilities_args, close_surface_args, close_workspace_args, current_args,
-    list_notifications_args, new_surface_args, new_workspace_args, ping_args, read_screen_args,
-    rename_surface_args, rename_workspace_args, rpc_replay_args, rpc_scroll_args,
-    rpc_viewport_clear_args, rpc_viewport_report_args, select_workspace_args, send_input_args,
-    tree_args, tree_args_with_ids,
+    list_notifications_args, list_notifications_json_args, new_surface_args, new_workspace_args,
+    ping_args, read_screen_args, rename_surface_args, rename_workspace_args, rpc_replay_args,
+    rpc_scroll_args, rpc_viewport_clear_args, rpc_viewport_report_args, select_workspace_args,
+    send_input_args, tree_args, tree_args_with_ids,
 };
 use crate::backend::{CmuxBackend, CmuxCapabilities, TerminalInputKind};
 use crate::error::CmuxError;
@@ -573,6 +573,13 @@ impl CmuxBackend for LiveCmuxBackend {
             .map(ToString::to_string)
             .collect();
         Ok(lines)
+    }
+
+    async fn list_notification_details(&self) -> Result<Vec<serde_json::Value>, CmuxError> {
+        let raw = self.run_cmux(&list_notifications_json_args()).await?;
+        let parsed: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|err| CmuxError::parse_error(format!("list-notifications --json: {err}")))?;
+        Ok(parsed.as_array().cloned().unwrap_or_default())
     }
 
     async fn supports_viewport_resize(&self) -> bool {

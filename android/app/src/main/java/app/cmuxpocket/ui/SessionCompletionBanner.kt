@@ -131,11 +131,13 @@ fun SessionCompletionBanner(
         Spacer(modifier = Modifier.width(8.dp))
 
         Text(
-            text = stringResource(R.string.completion_banner_done),
+            text = notice.reply ?: stringResource(R.string.completion_banner_done),
             color = theme.accentGreen,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
         )
 
         if (extraCount > 0) {

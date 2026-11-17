@@ -10,7 +10,9 @@ pub mod workspace;
 
 // Re-export common types at crate root for ergonomic use
 pub use agent::{
-    notification_record_is_completion, parse_agent_completion_event, AgentSessionCompleted,
+    completion_notice_from_json, completion_notice_from_record, notification_record_is_completion,
+    parse_agent_completion_event, select_completion_notice, AgentSessionCompleted,
+    CompletionNotice,
 };
 pub use auth::{
     default_capabilities, AuthError, AuthErrorPayload, AuthOk, AuthOkPayload, AuthRequest,
@@ -24,8 +26,8 @@ pub use mutation::{
     SurfaceCloseParams, SurfaceCloseResponse, SurfaceCreateParams, SurfaceCreateResponse,
     SurfaceFocusParams, SurfaceFocusResponse, TerminalInputParams, TerminalInputResponse,
     TerminalReplayParams, TerminalScrollParams, TerminalScrollResponse, TerminalViewportParams,
-    TerminalViewportResponse, WorkspaceCreateParams, WorkspaceCreateResponse, WorkspaceSelectParams,
-    WorkspaceSelectResponse,
+    TerminalViewportResponse, WorkspaceCreateParams, WorkspaceCreateResponse,
+    WorkspaceSelectParams, WorkspaceSelectResponse,
 };
 pub use render::{
     ansi_lines_to_render_grid, char_cell_width, display_cell_width, normalize_official_replay,
@@ -38,6 +40,6 @@ pub use rpc::{
     CODE_PARSE_ERROR,
 };
 pub use workspace::{
-    agent_lifecycle, agent_state_rank, normalize_agent_state, workspace_tree_signature, SurfaceInfo,
-    WorkspaceInfo, WorkspaceListResponse, WorkspaceTreeEvent,
+    agent_lifecycle, agent_state_rank, normalize_agent_state, workspace_tree_signature,
+    SurfaceInfo, WorkspaceInfo, WorkspaceListResponse, WorkspaceTreeEvent,
 };

@@ -90,12 +90,15 @@ object AgentCompletionNotifications {
         )
         val agentLabel = completion.agentKind?.takeIf { it.isNotBlank() } ?: context.getString(R.string.notif_agent_fallback)
         val completionLine = context.getString(R.string.notif_task_complete, agentLabel)
+        val reply = completion.body?.trim()?.takeIf { it.isNotEmpty() }
         val title = targetLabel ?: completionLine
-        val text = if (targetLabel != null) completionLine else context.getString(R.string.notif_tap_to_open)
+        val text = reply ?: if (targetLabel != null) completionLine else context.getString(R.string.notif_tap_to_open)
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text).setBigContentTitle(title))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
