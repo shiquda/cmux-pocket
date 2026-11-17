@@ -47,9 +47,7 @@ fun FloatingIslandPill(
     val theme = CmuxTheme.colors
 
     val isWorking = connectionStatus == ConnectionStatus.CONNECTED &&
-        (activeSurface?.agentState.equals("working", ignoreCase = true) ||
-            activeSurface?.agentState.equals("busy", ignoreCase = true) ||
-            activeSurface?.attention == true)
+        activeSurface?.agentStatus()?.isBusy == true
 
     // Pulse animation for Agent Working state
     val infiniteTransition = rememberInfiniteTransition(label = "island_pulse")

@@ -78,6 +78,10 @@
     <string name="completion_banner_done">Done</string>
     <string name="completion_banner_more">+%1$d</string>
     <string name="completion_banner_open">Open the session that just finished</string>
+    <string name="notif_blocked_permission">Notifications are blocked, so background completions cannot alert you.</string>
+    <string name="notif_blocked_channel">Completion notifications are turned off for this app.</string>
+    <string name="notif_blocked_open_settings">Settings</string>
+    <string name="notif_blocked_dismiss">Dismiss</string>
     <string name="keepalive_channel_name">Connection</string>
     <string name="keepalive_channel_desc">Keeps the cmux Pocket Gateway connection active in the background.</string>
     <string name="keepalive_title">cmux Pocket connected</string>

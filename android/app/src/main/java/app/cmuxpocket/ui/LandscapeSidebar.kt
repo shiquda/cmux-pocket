@@ -303,11 +303,11 @@ fun LandscapeSidebar(
                                     )
 
                                     // Agent Attention / Activity Dot
-                                    if (surf.attention || surf.agentState != null) {
-                                        val dotColor = when (surf.agentState) {
-                                            "working" -> theme.accentOrange
-                                            "needs_input" -> theme.accentOrange
-                                            "done" -> theme.accentGreen
+                                    val agentStatus = surf.agentStatus()
+                                    if (agentStatus.isBusy || agentStatus == SurfaceAgentStatus.DEAD) {
+                                        val dotColor = when (agentStatus) {
+                                            SurfaceAgentStatus.WORKING -> theme.accentOrange
+                                            SurfaceAgentStatus.NEEDS_INPUT -> theme.accentBlue
                                             else -> theme.accentRed
                                         }
                                         Box(
@@ -389,11 +389,11 @@ fun LandscapeSidebar(
                                         modifier = Modifier.size(22.dp)
                                     )
 
-                                    if (surf.attention || surf.agentState != null) {
-                                        val dotColor = when (surf.agentState) {
-                                            "working" -> theme.accentOrange
-                                            "needs_input" -> theme.accentOrange
-                                            "done" -> theme.accentGreen
+                                    val agentStatus = surf.agentStatus()
+                                    if (agentStatus.isBusy || agentStatus == SurfaceAgentStatus.DEAD) {
+                                        val dotColor = when (agentStatus) {
+                                            SurfaceAgentStatus.WORKING -> theme.accentOrange
+                                            SurfaceAgentStatus.NEEDS_INPUT -> theme.accentBlue
                                             else -> theme.accentRed
                                         }
                                         Box(

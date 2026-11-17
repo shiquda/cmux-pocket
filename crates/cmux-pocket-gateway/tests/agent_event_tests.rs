@@ -2,12 +2,13 @@ use async_trait::async_trait;
 use cmux_pocket_cmux::error::CmuxError;
 use cmux_pocket_cmux::events::CmuxEventStream;
 use cmux_pocket_cmux::{CmuxBackend, MockCmuxBackend};
-use cmux_pocket_gateway::{CmuxGateway, EventDedup};
+use cmux_pocket_gateway::{CmuxGateway, EventDedup, SurfaceCompletionGate};
 use cmux_pocket_protocol::{BackendHealth, RenderGridFrame, SurfaceInfo, WorkspaceInfo};
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
@@ -24,6 +25,23 @@ fn test_agent_event_dedup() {
     assert!(dedup.check_and_record("evt-2"));
     assert!(!dedup.check_and_record("evt-2"));
     assert!(!dedup.check_and_record("evt-1"));
+}
+
+#[test]
+fn test_surface_completion_gate_collapses_one_turn() {
+    let mut gate = SurfaceCompletionGate::new();
+    let start = Instant::now();
+
+    // cmux publishes one Stop hook twice within the same millisecond.
+    assert!(gate.accept("surface:1", start));
+    assert!(!gate.accept("surface:1", start));
+    assert!(!gate.accept("surface:1", start + Duration::from_millis(900)));
+
+    // A different surface is unaffected.
+    assert!(gate.accept("surface:2", start + Duration::from_millis(10)));
+
+    // After the window the same surface may report a new turn.
+    assert!(gate.accept("surface:1", start + Duration::from_secs(4)));
 }
 
 struct AgentTestBackend {
@@ -241,6 +259,85 @@ async fn test_notification_fallback_to_agent_completion() {
     assert_eq!(bcast["event"], "agent.session.completed");
     assert_eq!(bcast["data"]["surface_id"], "surf-main-3");
     assert_eq!(bcast["data"]["category"], "turn-complete");
+
+    gateway.stop().await;
+}
+
+/// cmux events identify a surface by its durable UUID; the client only knows
+/// the short ref. The tree poller seeds the translation, and an unmapped UUID
+/// must pass through untouched rather than be attributed to another surface.
+#[tokio::test]
+async fn test_completion_event_is_translated_to_surface_ref() {
+    let (event_tx, event_rx) = mpsc::unbounded_channel();
+    let backend = Arc::new(AgentTestBackend::new(event_rx, vec![]));
+    backend.inner.set_surface_uuid("surf-main-1", "UUID-1");
+
+    let token = "test-token-translate";
+    let gateway = Arc::new(CmuxGateway::new("127.0.0.1", 0, token, backend).unwrap());
+    let listener = gateway.start().await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let gw_runner = gateway.clone();
+    tokio::spawn(async move {
+        let _ = gw_runner.run_with_listener(listener).await;
+    });
+
+    let url = format!("ws://127.0.0.1:{}", port);
+    let (mut ws, _) = connect_async(&url).await.unwrap();
+    ws.send(Message::Text(
+        json!({"type": "auth", "token": token}).to_string(),
+    ))
+    .await
+    .unwrap();
+    let _ = ws.next().await.unwrap().unwrap();
+
+    ws.send(Message::Text(
+        json!({
+            "id": "req-sub",
+            "method": "mobile.events.subscribe",
+            "params": { "topics": ["workspace.tree", "agent.session.completed"] }
+        })
+        .to_string(),
+    ))
+    .await
+    .unwrap();
+    let _ = ws.next().await.unwrap().unwrap();
+
+    // The first tree sync proves the identity map is populated.
+    let tree_bcast: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(tree_bcast["event"], "workspace.tree");
+
+    event_tx
+        .send(json!({
+            "type": "event",
+            "id": "event-translate-1",
+            "name": "agent.hook.Stop",
+            "workspace_id": "ws-main",
+            "surface_id": "UUID-1",
+            "payload": { "hook_event_name": "Stop", "_source": "omp" }
+        }))
+        .unwrap();
+
+    let bcast: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(bcast["event"], "agent.session.completed");
+    assert_eq!(bcast["data"]["surface_id"], "surf-main-1");
+
+    // An unknown UUID is forwarded unchanged.
+    event_tx
+        .send(json!({
+            "type": "event",
+            "id": "event-translate-2",
+            "name": "agent.hook.Stop",
+            "workspace_id": "ws-main",
+            "surface_id": "UUID-unmapped",
+            "payload": { "hook_event_name": "Stop", "_source": "omp" }
+        }))
+        .unwrap();
+
+    let bcast: Value =
+        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
+    assert_eq!(bcast["data"]["surface_id"], "UUID-unmapped");
 
     gateway.stop().await;
 }

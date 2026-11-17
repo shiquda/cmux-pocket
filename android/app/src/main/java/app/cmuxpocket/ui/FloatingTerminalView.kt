@@ -144,14 +144,20 @@ fun FloatingTerminalView(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            val agentState = surface?.agentState
-            if (agentState == "working" || agentState == "needs_input") {
-                Text(
-                    text = if (agentState == "working") "working" else "input",
+            when (surface?.agentStatus()) {
+                SurfaceAgentStatus.WORKING -> Text(
+                    text = "working",
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (agentState == "working") Color(0xFFFFB300) else Color(0xFF64B5F6)
+                    color = Color(0xFFFFB300)
                 )
+                SurfaceAgentStatus.NEEDS_INPUT -> Text(
+                    text = "input",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF64B5F6)
+                )
+                else -> Unit
             }
         }
 

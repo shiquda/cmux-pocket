@@ -19,14 +19,16 @@ use tokio::time::timeout;
 use tracing::{debug, warn};
 
 use crate::args::{
-    capabilities_args, close_surface_args, close_workspace_args, list_notifications_args,
-    new_surface_args, new_workspace_args, ping_args, read_screen_args, rename_surface_args,
-    rename_workspace_args, rpc_replay_args, rpc_scroll_args, rpc_viewport_clear_args,
-    rpc_viewport_report_args, select_workspace_args, send_input_args, tree_args,
+    capabilities_args, close_surface_args, close_workspace_args, current_args,
+    list_notifications_args, new_surface_args, new_workspace_args, ping_args, read_screen_args,
+    rename_surface_args, rename_workspace_args, rpc_replay_args, rpc_scroll_args,
+    rpc_viewport_clear_args, rpc_viewport_report_args, select_workspace_args, send_input_args,
+    tree_args, tree_args_with_ids,
 };
 use crate::backend::{CmuxBackend, CmuxCapabilities, TerminalInputKind};
 use crate::error::CmuxError;
 use crate::events::CmuxEventStream;
+use crate::lifecycle::{apply_agent_lifecycles, parse_agent_lifecycles, SurfaceAgentLifecycle};
 use crate::tree_parser::{extract_surface_id, parse_workspace_tree};
 
 /// Default timeout for short cmux CLI commands (e.g. ping, tree, send).
@@ -325,8 +327,30 @@ impl CmuxBackend for LiveCmuxBackend {
     }
 
     async fn list_workspaces(&self) -> Result<Vec<WorkspaceInfo>, CmuxError> {
-        let raw = self.run_cmux(&tree_args()).await?;
-        parse_workspace_tree(&raw)
+        // The durable surface UUID is what agent lifecycle facts are keyed by;
+        // builds that reject `--id-format` still answer the plain tree, and the
+        // surfaces then simply keep an unknown agent state.
+        let raw = match self.run_cmux(&tree_args_with_ids()).await {
+            Ok(raw) => raw,
+            Err(CmuxError::NonZeroExit { .. }) => {
+                debug!("cmux tree rejected --id-format; agent lifecycle stays unknown");
+                self.run_cmux(&tree_args()).await?
+            }
+            Err(e) => return Err(e),
+        };
+        let mut workspaces = parse_workspace_tree(&raw)?;
+
+        match self.list_agent_lifecycles().await {
+            Ok(states) => apply_agent_lifecycles(&mut workspaces, &states),
+            Err(e) => debug!("agent lifecycle snapshot unavailable: {e}"),
+        }
+
+        Ok(workspaces)
+    }
+
+    async fn list_agent_lifecycles(&self) -> Result<Vec<SurfaceAgentLifecycle>, CmuxError> {
+        let raw = self.run_cmux(&current_args()).await?;
+        parse_agent_lifecycles(&raw)
     }
 
     async fn create_workspace(&self, name: &str) -> Result<WorkspaceInfo, CmuxError> {
@@ -393,6 +417,7 @@ impl CmuxBackend for LiveCmuxBackend {
 
         Ok(SurfaceInfo {
             id: created_id,
+            surface_uuid: None,
             surface_type: surface_type.unwrap_or("terminal").to_string(),
             title: title
                 .map(ToString::to_string)
@@ -435,6 +460,7 @@ impl CmuxBackend for LiveCmuxBackend {
         }
         Ok(SurfaceInfo {
             id: surface_id.to_string(),
+            surface_uuid: None,
             surface_type: "terminal".to_string(),
             title: Some(title.to_string()),
             workspace_key: workspace_key.map(ToString::to_string),

@@ -75,6 +75,10 @@
     <string name="completion_banner_done">已完成</string>
     <string name="completion_banner_more">+%1$d</string>
     <string name="completion_banner_open">打开刚刚完成的会话</string>
+    <string name="notif_blocked_permission">通知权限未开启，后台完成提醒无法弹出。</string>
+    <string name="notif_blocked_channel">本应用的完成提醒已被关闭。</string>
+    <string name="notif_blocked_open_settings">去设置</string>
+    <string name="notif_blocked_dismiss">忽略</string>
     <string name="keepalive_channel_name">连接状态</string>
     <string name="keepalive_channel_desc">在后台保持 cmux Pocket Gateway 连接活跃。</string>
     <string name="keepalive_title">cmux Pocket 已连接</string>

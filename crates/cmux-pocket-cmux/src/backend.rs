@@ -5,6 +5,7 @@ use cmux_pocket_protocol::{BackendHealth, RenderGridFrame, SurfaceInfo, Workspac
 
 use crate::error::CmuxError;
 use crate::events::CmuxEventStream;
+use crate::lifecycle::SurfaceAgentLifecycle;
 
 /// How a remote client intends cmux to deliver terminal input.
 ///
@@ -140,6 +141,16 @@ pub trait CmuxBackend: Send + Sync {
 
     /// Lists all workspaces and surfaces in cmux.
     async fn list_workspaces(&self) -> Result<Vec<WorkspaceInfo>, CmuxError>;
+
+    /// Reads cmux's confirmed per-surface agent lifecycle.
+    ///
+    /// Backends that cannot answer must fail rather than return an empty list:
+    /// an empty answer means "no agent anywhere", which clients render as idle.
+    async fn list_agent_lifecycles(&self) -> Result<Vec<SurfaceAgentLifecycle>, CmuxError> {
+        Err(CmuxError::unavailable(
+            "agent lifecycle snapshot not supported",
+        ))
+    }
 
     /// Creates a new workspace on the host.
     async fn create_workspace(&self, name: &str) -> Result<WorkspaceInfo, CmuxError>;

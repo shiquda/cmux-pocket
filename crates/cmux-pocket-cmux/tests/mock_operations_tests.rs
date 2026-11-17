@@ -152,3 +152,46 @@ async fn test_mock_notifications() {
     assert_eq!(notes.len(), 1);
     assert_eq!(notes[0], record);
 }
+
+#[tokio::test]
+async fn test_lifecycle_snapshot_merges_into_tree() {
+    use cmux_pocket_cmux::SurfaceAgentLifecycle;
+    use cmux_pocket_protocol::agent_lifecycle;
+
+    let backend = MockCmuxBackend::new();
+    backend.set_surface_uuid("surf-main-1", "UUID-1");
+    backend.set_agent_lifecycles(vec![
+        SurfaceAgentLifecycle {
+            surface_uuid: "UUID-1".to_string(),
+            state: agent_lifecycle::NEEDS_INPUT,
+            agent_kind: Some("omp".to_string()),
+            session_id: Some("sess-1".to_string()),
+        },
+        // Matches no surface in the tree.
+        SurfaceAgentLifecycle {
+            surface_uuid: "UUID-unknown".to_string(),
+            state: agent_lifecycle::WORKING,
+            agent_kind: None,
+            session_id: None,
+        },
+    ]);
+
+    let workspaces = backend.list_workspaces().await.unwrap();
+    let surfaces = &workspaces[0].surfaces;
+
+    let confirmed = surfaces.iter().find(|s| s.id == "surf-main-1").unwrap();
+    assert_eq!(
+        confirmed.agent_state.as_deref(),
+        Some(agent_lifecycle::NEEDS_INPUT)
+    );
+    assert!(confirmed.attention);
+    assert_eq!(
+        confirmed.extra.get("agent_kind").and_then(|v| v.as_str()),
+        Some("omp")
+    );
+
+    // A surface without a durable UUID keeps an unknown state instead of idle.
+    let unmapped = surfaces.iter().find(|s| s.id == "surf-main-3").unwrap();
+    assert_eq!(unmapped.agent_state, None);
+    assert!(!unmapped.attention);
+}

@@ -15,4 +15,6 @@
     <string name="drawer_state_working">运行中</string>
     <string name="drawer_state_dead">已终止</string>
     <string name="drawer_state_idle">空闲</string>
+    <string name="drawer_state_needs_input">等待输入</string>
+    <string name="drawer_state_unknown">—</string>
 </resources>

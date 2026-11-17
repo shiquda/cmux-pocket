@@ -6,13 +6,14 @@ pub mod dispatch;
 pub mod error;
 pub mod health;
 pub mod host;
+pub mod identity;
 pub mod poller;
 pub mod server;
 pub mod session;
 pub mod surface_locks;
 pub mod viewport;
 
-pub use agent::{AgentEventSupervisor, EventDedup};
+pub use agent::{AgentEventSupervisor, EventDedup, SurfaceCompletionGate};
 pub use auth::{
     build_auth_error_invalid_token, build_auth_error_unauthenticated, build_auth_ok,
     constant_time_token_eq, verify_token, WS_CLOSE_AUTH_FAILED,
@@ -24,6 +25,7 @@ pub use host::{
     HostAppStatus, HostController, MacOsHostController, SharedHostController,
     UnsupportedHostController,
 };
+pub use identity::SurfaceIdentityMap;
 pub use poller::{fanout_screen_snapshots, ScreenPoller, TreePoller};
 pub use server::CmuxGateway;
 pub use session::{ClientSession, ControlMessage, RenderSlot, SessionState};

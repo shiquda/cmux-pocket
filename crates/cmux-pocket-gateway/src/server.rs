@@ -25,6 +25,7 @@ use crate::dispatch::{dispatch_rpc, DispatchContext, GatewayCallbacks};
 use crate::error::GatewayError;
 use crate::health::HealthTracker;
 use crate::host::{SharedHostController, UnsupportedHostController};
+use crate::identity::SurfaceIdentityMap;
 use crate::poller::{ScreenPoller, TreePoller};
 use crate::session::ClientSession;
 use crate::surface_locks::SurfaceLockManager;
@@ -47,6 +48,7 @@ pub struct CmuxGateway {
     wake_watch_active: Arc<AtomicBool>,
     pub viewport_leases: ViewportLeaseManager,
     clients: Arc<Mutex<Vec<ClientSession>>>,
+    surface_identity: SurfaceIdentityMap,
     priority_surfaces: Arc<Mutex<HashSet<String>>>,
     refresh_trigger: Arc<Notify>,
     shutdown_notify: Arc<Notify>,
@@ -125,6 +127,7 @@ impl CmuxGateway {
             wake_watch_active: Arc::new(AtomicBool::new(false)),
             viewport_leases,
             clients: Arc::new(Mutex::new(Vec::new())),
+            surface_identity: SurfaceIdentityMap::new(),
             priority_surfaces: Arc::new(Mutex::new(HashSet::new())),
             refresh_trigger: Arc::new(Notify::new()),
             shutdown_notify: Arc::new(Notify::new()),
@@ -417,6 +420,7 @@ impl CmuxGateway {
             TreePoller::run(
                 self_tree.backend.clone(),
                 self_tree.health.clone(),
+                self_tree.surface_identity.clone(),
                 move |event, data| {
                     let self_b = self_tree.clone();
                     async move {
@@ -429,12 +433,16 @@ impl CmuxGateway {
 
         let self_agent = self.clone();
         let agent_handle = tokio::spawn(async move {
-            AgentEventSupervisor::run(self_agent.backend.clone(), move |event, data| {
-                let self_b = self_agent.clone();
-                async move {
-                    self_b.broadcast_event(event, data).await;
-                }
-            })
+            AgentEventSupervisor::run(
+                self_agent.backend.clone(),
+                self_agent.surface_identity.clone(),
+                move |event, data| {
+                    let self_b = self_agent.clone();
+                    async move {
+                        self_b.broadcast_event(event, data).await;
+                    }
+                },
+            )
             .await;
         });
 

@@ -38,5 +38,6 @@ pub use rpc::{
     CODE_PARSE_ERROR,
 };
 pub use workspace::{
-    workspace_tree_signature, SurfaceInfo, WorkspaceInfo, WorkspaceListResponse, WorkspaceTreeEvent,
+    agent_lifecycle, agent_state_rank, normalize_agent_state, workspace_tree_signature, SurfaceInfo,
+    WorkspaceInfo, WorkspaceListResponse, WorkspaceTreeEvent,
 };
